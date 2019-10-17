@@ -3,6 +3,8 @@ from keras.layers import Dense, Dropout, Input #LSTM, Activation
 from keras.optimizers import Adam
 from keras.callbacks import EarlyStopping
 import lossFuncs as funcL
+import tensorflow as tf
+from keras import backend as K
 
 def createModel(data_dim, posterior_dim, weight_of_regularizer):
     hog_input = Input(shape=(data_dim,))

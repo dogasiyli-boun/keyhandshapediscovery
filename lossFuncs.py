@@ -1,6 +1,6 @@
 from keras import backend as K
 
-def neg_l2_reg(activation, weight_of_regularizer):
+def neg_l2_reg(activation):
     return -weight_of_regularizer*K.mean(K.square(activation))
 
 def neg_l2_reg2(activation, weight_of_regularizer):

@@ -3,6 +3,7 @@ import os
 from sklearn.metrics import confusion_matrix
 import numpy as np
 import tensorflow as tf
+from sklearn.metrics import normalized_mutual_info_score as nmi
 
 def getVariableByComputerName(variableName):
     curCompName = socket.gethostname()
@@ -12,6 +13,18 @@ def getVariableByComputerName(variableName):
         else:
             base_dir = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
         retVal = base_dir
+    if variableName=='data_dir':
+        if curCompName == 'doga-MSISSD':
+            data_dir = '/mnt/USB_HDD_1TB/bdData'  # for bogazici kasa
+        else:
+            data_dir = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
+        retVal = data_dir
+    if variableName=='results_dir':
+        if curCompName == 'doga-MSISSD':
+            results_dir = '/mnt/USB_HDD_1TB/bdResults'  # for bogazici kasa
+        else:
+            results_dir = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
+        retVal = results_dir
     return retVal
 
 def createDirIfNotExist(dir2create):
