@@ -1,0 +1,6 @@
+#model = Sequential()
+#model.add(Dense(posterior_dim, input_shape=(data_dim,),name='encoder_layer'))
+#model.add(Dropout(0.5))
+#model.add(Dense(posterior_dim,activity_regularizer=neg_l2_reg,activation='softmax',trainable=False,kernel_initializer='Identity',name='cluster_layer'))
+#model.add(Dense(data_dim,use_bias=False, name='decoder_layer'))
+
