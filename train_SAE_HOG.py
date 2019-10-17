@@ -38,8 +38,15 @@ funcH.createDirIfNotExist(os.path.join(results_dir, 'epochs'))
 funcH.createDirIfNotExist(os.path.join(results_dir, 'models'))
 funcH.createDirIfNotExist(outdir)
 
-feat_set, labels_all, detailed_labels_all = funcD.loadData_hog(data_dir, loadHogIfExist=True, hogFeatsFileName='hog_set.npy', labelsFileName='labels.npy', detailedLabelsFileName='detailed_labels.npy')
-feat_set_pca = funcD.applyPCA2Data(feat_set, data_dir, data_dim, loadIfExist=True, pcaFeatsFileName='feat_set_pca.npy')
+skipLoadOfOriginalData = True
+if not skipLoadOfOriginalData:
+    feat_set, labels_all, detailed_labels_all = funcD.loadData_hog(data_dir, loadHogIfExist=True, hogFeatsFileName='hog_set.npy', labelsFileName='labels.npy', detailedLabelsFileName='detailed_labels.npy')
+else:
+    feat_set = np.array([])
+    labels_all = np.array([])
+    detailed_labels_all = np.array([])
+
+feat_set_pca, labels_all = funcD.applyPCA2Data(feat_set, labels_all, data_dir, data_dim, loadIfExist=True, pcaFeatsFileName='feat_set_pca.npy', labelsFileName='labels.npy')
 non_zero_labels = labels_all[np.where(labels_all)]
 non_zero_detailed_labels = detailed_labels_all[np.where(labels_all), :]
 

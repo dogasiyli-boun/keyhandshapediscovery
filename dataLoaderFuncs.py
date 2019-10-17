@@ -98,8 +98,12 @@ def loopTroughFeatureSet(base_dir, featType=True):
     x = 4
     return x
 
-def applyPCA2Data(feat_set, base_dir, data_dim, loadIfExist = True, pcaFeatsFileName = 'feat_set_pca.npy'):
+def applyPCA2Data(feat_set, labels_all, base_dir, data_dim, loadIfExist = True, pcaFeatsFileName = 'feat_set_pca.npy', labelsFileName='labels.npy'):
     pcaFeatsFileNameFull = base_dir + os.sep + pcaFeatsFileName
+    labelsFileNameFull = base_dir + os.sep + labelsFileName
+
+    if labels_all.size==0:
+        labels_all = np.load(labelsFileNameFull)
     if loadIfExist and os.path.isfile(pcaFeatsFileNameFull):
         print('loading feat_set_pca from(', pcaFeatsFileNameFull, ')')
         feat_set_pca = np.load(pcaFeatsFileNameFull)
@@ -109,4 +113,4 @@ def applyPCA2Data(feat_set, base_dir, data_dim, loadIfExist = True, pcaFeatsFile
         pca = PCA(n_components=data_dim)
         feat_set_pca = pca.fit_transform(feat_set)
         np.save(pcaFeatsFileNameFull, feat_set_pca)
-    return feat_set_pca
+    return feat_set_pca, labels_all
