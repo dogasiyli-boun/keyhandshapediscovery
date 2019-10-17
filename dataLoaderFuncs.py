@@ -4,6 +4,7 @@ from skimage import data
 from skimage.feature import hog
 from sklearn.decomposition import PCA
 import glob
+import helperFuncs as funcH
 
 def loadData_hog(base_dir, loadHogIfExist=True, hogFeatsFileName='hog_set.npy', labelsFileName='labels.npy', detailedLabelsFileName='detailed_labels.npy'):
     hogFeatsFileNameFull = base_dir + os.sep + hogFeatsFileName
@@ -94,9 +95,78 @@ def loadData_hog(base_dir, loadHogIfExist=True, hogFeatsFileName='hog_set.npy', 
         np.save(detailedLabelsFileNameFull, detailedLabels_all)
     return feat_set, labels_all, detailedLabels_all
 
-def loopTroughFeatureSet(base_dir, featType=True):
-    x = 4
-    return x
+
+def loopTroughFeatureSet(base_dir, data_dir, featType='sn'):
+    base_dir_nn = os.path.join(base_dir, 'neuralNetHandVideos')
+
+    detailedLabelsFileNameFull = data_dir + os.sep + 'detailed_labels.npy'
+    detailedLabels_all = np.load(detailedLabelsFileNameFull)
+
+    print(detailedLabels_all.shape)
+
+    signNames = os.listdir(base_dir_nn)
+    signID = 0
+    corrFramesAll = np.array([])
+    for signCur in signNames:
+        corrFramesSign = np.array([])
+        sign_folder = os.path.join(base_dir_nn, signCur)
+        if not os.path.isdir(sign_folder):
+            continue
+        signID = signID + 1
+        videos = os.listdir(sign_folder)
+        vidCnt = len(videos)
+        detailedLabels_all_sign_rows = np.argwhere(detailedLabels_all[:, 0] == signID).flatten()
+
+        corrFramesSignFileName = sign_folder + os.sep + 'corrFrames_' + str(signID) + '.npy'
+        if os.path.isfile(corrFramesSignFileName):
+            corrFramesSign = np.load(corrFramesSignFileName)
+            print('loaded corrFramesSign of shape ', corrFramesSign.shape)
+        else:
+            for v1 in range(0, vidCnt):
+                print('s_', signCur, ', v(', videos[v1], ' to vCnt-', vidCnt-v1)
+                for v2 in range(v1 + 1, vidCnt):
+                    video_folder_1 = os.path.join(sign_folder, videos[v1])
+                    video_folder_2 = os.path.join(sign_folder, videos[v2])
+                    #frameList_v1 = os.path.join(sign_folder, videos[v1]) + os.sep + '*.png'
+                    #frameList_v1 = glob.glob(frameList_v1)
+                    #frameList_v2 = os.path.join(sign_folder, videos[v2]) + os.sep + '*.png'
+                    #frameList_v2 = glob.glob(frameList_v2)
+                    #frCnt_1 = len(np.sort(frameList_v1))
+                    #frCnt_2 = len(np.sort(frameList_v2))
+
+                    hog_v1 = video_folder_1 + os.sep + 'hog_set.npz'
+                    npzfile = np.load(hog_v1)
+                    feat_set_v1 = npzfile['feat_set_video']
+                    #labels_v1 = npzfile['labels']
+                    detailedLabels_cur_vid_rows_rel = np.argwhere(detailedLabels_all[detailedLabels_all_sign_rows, 1] == v1+1).flatten()
+                    frIDs_v1 = detailedLabels_all_sign_rows[detailedLabels_cur_vid_rows_rel]
+
+                    hog_v2 = video_folder_2 + os.sep + 'hog_set.npz'
+                    npzfile = np.load(hog_v2)
+                    feat_set_v2 = npzfile['feat_set_video']
+                    #labels_v2 = npzfile['labels']
+                    detailedLabels_cur_vid_rows_rel = np.argwhere(detailedLabels_all[detailedLabels_all_sign_rows, 1] == v2+1).flatten()
+                    frIDs_v2 = detailedLabels_all_sign_rows[detailedLabels_cur_vid_rows_rel]
+
+                    corrPath = funcH.getCorrPath(feat_set_v1, feat_set_v2, frIDs_v1, frIDs_v2, metric='euclidean')
+                    if corrFramesSign.size == 0:
+                        corrFramesSign = corrPath
+                    else:
+                        corrFramesSign = np.hstack((corrFramesSign, corrPath))
+                    #print('s_', signCur, ', v(', videos[v1], '-', frCnt_1, ') vs v(', videos[v2], '-', frCnt_2, ')')
+                    # print(corrPath)
+                    # I need to load the features for v1 and v2 here
+                    # and get dtw of them
+                    # then assign for all frames their correspondant frame from the other video
+                    # featSet_v1 = np.random.rand(14,50)
+                    # featSet_v2 = np.random.rand(22,50)
+            np.save(corrFramesSignFileName, corrFramesSign)
+            print('saved corrFramesSign of shape ', corrFramesSign.shape)
+        if corrFramesAll.size == 0:
+            corrFramesAll = corrFramesSign
+        else:
+            corrFramesAll = np.hstack((corrFramesAll, corrFramesSign))
+    return corrFramesAll, detailedLabels_all
 
 def applyPCA2Data(feat_set, labels_all, base_dir, data_dim, loadIfExist = True, pcaFeatsFileName = 'feat_set_pca.npy', labelsFileName='labels.npy'):
     pcaFeatsFileNameFull = base_dir + os.sep + pcaFeatsFileName

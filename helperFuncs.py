@@ -4,6 +4,7 @@ from sklearn.metrics import confusion_matrix
 import numpy as np
 import tensorflow as tf
 from sklearn.metrics import normalized_mutual_info_score as nmi
+from scipy.spatial.distance import cdist
 
 def getVariableByComputerName(variableName):
     curCompName = socket.gethostname()
@@ -99,3 +100,52 @@ def get_NMI_Acc(non_zero_labels, non_zero_predictions):
     nmi_cur = nmi(non_zero_labels, non_zero_predictions, average_method='geometric')
     acc_cur = getAccFromConf(non_zero_labels, non_zero_predictions)
     return nmi_cur, acc_cur
+
+def backtrack(D, max_x, max_y):
+    #https://github.com/gulzi/DTWpy/blob/master/dtwpy.py
+    path = []
+    i, j = max_x, max_y
+    path.append((i, j))
+    while i > 0 or j > 0:
+        diag_cost = float('inf')
+        left_cost = float('inf')
+        down_cost = float('inf')
+
+        if (i > 0) and (j > 0):
+            diag_cost = D[i - 1][j - 1]
+        if i > 0:
+            left_cost = D[i - 1][j]
+        if j > 0:
+            down_cost = D[i][j - 1]
+
+        if (diag_cost <= left_cost and diag_cost <= down_cost):
+            i, j = i - 1, j - 1
+        elif (left_cost < diag_cost and left_cost < down_cost):
+            i = i - 1
+        elif (down_cost < diag_cost and down_cost < left_cost):
+            j = j - 1
+        elif i <= j:
+            j = j - 1
+        else:
+            i = i - 1
+        path.append((i, j))
+    path.reverse()
+    return path
+
+def calcDTWpath(a, b, metric='euclidean'):
+    #print(a.shape)
+    #print(b.shape)
+    dm = cdist(a, b, metric=metric)
+    mx, my = dm.shape
+    path = backtrack(dm, mx - 1, my - 1)
+    path_np = np.asarray(path)
+    pathOf_a = path_np[:, 1]
+    pathOf_b = path_np[:, 0]
+    #print('path of a = ', pathOf_a)
+    #print('path of b = ', pathOf_b)
+    return pathOf_a, pathOf_b
+
+def getCorrPath(a, b, a_frame_ids, b_frame_ids, metric='euclidean'):
+    pa, pb = calcDTWpath(a, b, metric=metric)
+    corrPath = np.vstack((a_frame_ids[pb].reshape(1,-1), b_frame_ids[pa].reshape(1,-1)))
+    return corrPath

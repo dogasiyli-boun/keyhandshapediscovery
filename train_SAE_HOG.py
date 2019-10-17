@@ -28,8 +28,9 @@ results_dir = funcH.getVariableByComputerName('results_dir')
 
 posterior_dim = int(argv[1])# K number of clusters
 weight_of_regularizer = float(argv[2]) # sparsity parametresi (a trade-off between reconstruction vs clustering)
+applyCorr = True
 data_dim = 256  #PCA sonrası LBP dimension
-exp_name = 'sae_p' + str(posterior_dim) + '_wr'+str(weight_of_regularizer)
+exp_name = 'sae_p' + str(posterior_dim) + '_wr'+str(weight_of_regularizer)+ '_cor'+str(applyCorr)
 
 csv_name = os.path.join(results_dir, 'epochs') + os.sep + exp_name + '.csv'
 model_name = os.path.join(results_dir, 'models') + os.sep + exp_name + '.h5'
@@ -48,7 +49,6 @@ else:
 
 feat_set_pca, labels_all = funcD.applyPCA2Data(feat_set, labels_all, data_dir, data_dim, loadIfExist=True, pcaFeatsFileName='feat_set_pca.npy', labelsFileName='labels.npy')
 non_zero_labels = labels_all[np.where(labels_all)]
-non_zero_detailed_labels = detailed_labels_all[np.where(labels_all), :]
 
 #%%
 batch_size = 16
@@ -66,8 +66,21 @@ callbacks=[csv_logger,ES,checkpointer]
 nmi_and_acc_file_name = outdir + os.sep + exp_name + '_nmi_acc.txt'
 print('started training')
 
+if applyCorr:
+    neuralNetHandVideosFolder = os.path.join(base_dir, 'neuralNetHandVideos')
+    corrFramesSignFileName = neuralNetHandVideosFolder + os.sep + 'corrFrames_All.npy'
+    corrFramesAll = np.load(corrFramesSignFileName)
+    inFeats = feat_set_pca[corrFramesAll[0, :], :]
+    outFeats = feat_set_pca[corrFramesAll[1, :], :]
+    #detailedLabelsFileNameFull = data_dir + os.sep + 'detailed_labels.npy'
+    #detailedLabels_all = np.load(detailedLabelsFileNameFull)
+    #non_zero_detailed_labels = detailed_labels_all[np.where(labels_all), :]
+else:
+    inFeats = feat_set_pca
+    outFeats = feat_set_pca
+
 for i in range(100):
-    model.fit([feat_set_pca],[feat_set_pca],batch_size=batch_size,callbacks=[csv_logger,checkpointer],epochs=epochs,validation_split=0.0,shuffle=True,verbose=0)
+    model.fit([inFeats],[outFeats],batch_size=batch_size,callbacks=[csv_logger,checkpointer],epochs=epochs,validation_split=0.0,shuffle=True,verbose=0)
     modelTest.load_weights(model_name, by_name=True)
     cluster_posteriors = np.transpose(modelTest.predict(feat_set_pca))
     predicted_labels = np.argmax(cluster_posteriors,axis=0)
