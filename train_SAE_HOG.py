@@ -90,7 +90,7 @@ for i in range(50):
     t = time.time()
     if corrMode:
         if corr_randMode:
-            a_inds = np.random.randint(2, size=len(labels_all))
+            a_inds = np.random.randint(2, size=len(corrFramesAll))
             inFeats = feat_set_pca[corrFramesAll[a_inds, col_idx], :]
             outFeats = feat_set_pca[corrFramesAll[1-a_inds, col_idx], :]
             corr_indis_a = a_inds[0:5]
