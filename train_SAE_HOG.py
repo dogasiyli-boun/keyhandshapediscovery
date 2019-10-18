@@ -29,9 +29,10 @@ results_dir = funcH.getVariableByComputerName('results_dir')
 
 posterior_dim = int(argv[1])# K number of clusters
 weight_of_regularizer = float(argv[2]) # sparsity parametresi (a trade-off between reconstruction vs clustering)
-applyCorr = 5
+applyCorr = float(argv[3])
+corr_randMode = bool(int(argv[4]))
 data_dim = 256  #PCA sonrası LBP dimension
-exp_name = 'sae_p' + str(posterior_dim) + '_wr'+str(weight_of_regularizer)+ '_cor'+str(applyCorr)
+exp_name = 'sae_p' + str(posterior_dim) + '_wr' + str(weight_of_regularizer) + '_cor' + str(applyCorr) + '_corrRandMode' + str(corr_randMode)
 
 csv_name = os.path.join(results_dir, 'epochs') + os.sep + exp_name + '.csv'
 model_name = os.path.join(results_dir, 'models') + os.sep + exp_name + '.h5'
@@ -68,12 +69,15 @@ nmi_and_acc_file_name = outdir + os.sep + exp_name + '_nmi_acc.txt'
 print('started training')
 
 corrMode = False
+corr_indis_a = 0
+#corr_randMode = False #if true select randomly from a and b for in and out feats
 if applyCorr>=2:
     neuralNetHandVideosFolder = os.path.join(base_dir, 'neuralNetHandVideos')
     corrFramesSignFileName = neuralNetHandVideosFolder + os.sep + 'corrFrames_All.npy'
     corrFramesAll = np.load(corrFramesSignFileName)
-    inFeats = feat_set_pca[corrFramesAll[0, :], :]
-    outFeats = feat_set_pca[corrFramesAll[1, :], :]
+    inFeats = feat_set_pca[corrFramesAll[corr_indis_a, :], :]
+    outFeats = feat_set_pca[corrFramesAll[1-corr_indis_a, :], :]
+    col_idx = np.arange(len(labels_all))
     #detailedLabelsFileNameFull = data_dir + os.sep + 'detailed_labels.npy'
     #detailedLabels_all = np.load(detailedLabelsFileNameFull)
     #non_zero_detailed_labels = detailed_labels_all[np.where(labels_all), :]
@@ -81,13 +85,23 @@ else:
     inFeats = feat_set_pca
     outFeats = feat_set_pca
 
-for i in range(100):
-    corrMode = applyCorr >= 2 and np.mod(i, applyCorr) == 0
+for i in range(50):
+    corrMode = applyCorr >= 2 and np.mod(i+1, applyCorr) == 0
     t = time.time()
     if corrMode:
-        print('corrMode on')
+        if corr_randMode:
+            a_inds = np.random.randint(2, size=len(labels_all))
+            inFeats = feat_set_pca[corrFramesAll[a_inds, col_idx], :]
+            outFeats = feat_set_pca[corrFramesAll[1-a_inds, col_idx], :]
+            corr_indis_a = a_inds[0:5]
+        else:
+            corr_indis_a = np.mod(corr_indis_a+1,2)#switches betwee 0 and 1
+            inFeats = feat_set_pca[corrFramesAll[corr_indis_a, :], :]
+            outFeats = feat_set_pca[corrFramesAll[1 - corr_indis_a, :], :]
+        print('corrMode on, a_ind(',  corr_indis_a, '), b_ind(', 1 - corr_indis_a, ')')
         model.fit([inFeats],[outFeats],batch_size=batch_size,callbacks=[csv_logger,checkpointer],epochs=epochs,validation_split=0.0,shuffle=True,verbose=0)
     else:
+        print('corrMode off')
         model.fit([feat_set_pca],[feat_set_pca],batch_size=batch_size,callbacks=[csv_logger,checkpointer],epochs=epochs,validation_split=0.0,shuffle=True,verbose=0)
 
     modelTest.load_weights(model_name, by_name=True)
@@ -100,19 +114,10 @@ for i in range(100):
     nmi_cur, acc_cur = funcH.get_NMI_Acc(non_zero_labels, non_zero_predictions)
 
     f = open(nmi_and_acc_file_name, 'a+')
-    f.write(' i =' + str(i) + ' NMI = ' + str(nmi_cur) + ' ACC= ' + str(acc_cur)+'\n')
+    f.write('i=' + str(i) + ' NMI=' + str(nmi_cur) + ' ACC=' + str(acc_cur)+'\n')
     f.close()
     print(' i =', i, ' NMI = ', nmi_cur, ' ACC= ', acc_cur, '\n')
 
     elapsed_2 = time.time() - t
 
     print('elapsed_1(', elapsed_1, '), elapsed_2(', elapsed_2, ')')
-
-#%%
-
-
-
-
-
-
-
