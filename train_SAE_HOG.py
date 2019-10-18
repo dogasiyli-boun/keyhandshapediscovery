@@ -11,6 +11,7 @@ import tensorflow as tf
 import modelFuncs as funcM
 import dataLoaderFuncs as funcD
 import helperFuncs as funcH
+import time
 
 ## extra imports to set GPU options
 ################################### # TensorFlow wizardry 
@@ -28,7 +29,7 @@ results_dir = funcH.getVariableByComputerName('results_dir')
 
 posterior_dim = int(argv[1])# K number of clusters
 weight_of_regularizer = float(argv[2]) # sparsity parametresi (a trade-off between reconstruction vs clustering)
-applyCorr = True
+applyCorr = 5
 data_dim = 256  #PCA sonrası LBP dimension
 exp_name = 'sae_p' + str(posterior_dim) + '_wr'+str(weight_of_regularizer)+ '_cor'+str(applyCorr)
 
@@ -66,7 +67,8 @@ callbacks=[csv_logger,ES,checkpointer]
 nmi_and_acc_file_name = outdir + os.sep + exp_name + '_nmi_acc.txt'
 print('started training')
 
-if applyCorr:
+corrMode = False
+if applyCorr>=2:
     neuralNetHandVideosFolder = os.path.join(base_dir, 'neuralNetHandVideos')
     corrFramesSignFileName = neuralNetHandVideosFolder + os.sep + 'corrFrames_All.npy'
     corrFramesAll = np.load(corrFramesSignFileName)
@@ -80,13 +82,21 @@ else:
     outFeats = feat_set_pca
 
 for i in range(100):
-    model.fit([inFeats],[outFeats],batch_size=batch_size,callbacks=[csv_logger,checkpointer],epochs=epochs,validation_split=0.0,shuffle=True,verbose=0)
+    corrMode = applyCorr >= 2 and np.mod(i, applyCorr) == 0
+    t = time.time()
+    if corrMode:
+        print('corrMode on')
+        model.fit([inFeats],[outFeats],batch_size=batch_size,callbacks=[csv_logger,checkpointer],epochs=epochs,validation_split=0.0,shuffle=True,verbose=0)
+    else:
+        model.fit([feat_set_pca],[feat_set_pca],batch_size=batch_size,callbacks=[csv_logger,checkpointer],epochs=epochs,validation_split=0.0,shuffle=True,verbose=0)
+
     modelTest.load_weights(model_name, by_name=True)
     cluster_posteriors = np.transpose(modelTest.predict(feat_set_pca))
     predicted_labels = np.argmax(cluster_posteriors,axis=0)
     non_zero_predictions=predicted_labels[np.where(labels_all)]
     #nmi_cur = nmi(non_zero_labels,non_zero_predictions,average_method='geometric')
     #acc_cur = getAccFromConf(non_zero_labels, non_zero_predictions)
+    elapsed_1 = time.time() - t
     nmi_cur, acc_cur = funcH.get_NMI_Acc(non_zero_labels, non_zero_predictions)
 
     f = open(nmi_and_acc_file_name, 'a+')
@@ -94,6 +104,9 @@ for i in range(100):
     f.close()
     print(' i =', i, ' NMI = ', nmi_cur, ' ACC= ', acc_cur, '\n')
 
+    elapsed_2 = time.time() - t
+
+    print('elapsed_1(', elapsed_1, '), elapsed_2(', elapsed_2, ')')
 
 #%%
 
