@@ -95,7 +95,6 @@ def loadData_hog(base_dir, loadHogIfExist=True, hogFeatsFileName='hog_set.npy', 
         np.save(detailedLabelsFileNameFull, detailedLabels_all)
     return feat_set, labels_all, detailedLabels_all
 
-
 def loopTroughFeatureSet(base_dir, data_dir, featType='sn'):
     base_dir_nn = os.path.join(base_dir, 'neuralNetHandVideos')
 
@@ -168,9 +167,9 @@ def loopTroughFeatureSet(base_dir, data_dir, featType='sn'):
             corrFramesAll = np.hstack((corrFramesAll, corrFramesSign))
     return corrFramesAll, detailedLabels_all
 
-def applyPCA2Data(feat_set, labels_all, base_dir, data_dim, loadIfExist = True, pcaFeatsFileName = 'feat_set_pca.npy', labelsFileName='labels.npy'):
-    pcaFeatsFileNameFull = base_dir + os.sep + pcaFeatsFileName
-    labelsFileNameFull = base_dir + os.sep + labelsFileName
+def applyPCA2Data(feat_set, labels_all, data_dir, data_dim, loadIfExist = True, pcaFeatsFileName = 'feat_set_pca.npy', labelsFileName='labels.npy'):
+    pcaFeatsFileNameFull = data_dir + os.sep + pcaFeatsFileName
+    labelsFileNameFull = data_dir + os.sep + labelsFileName
 
     if labels_all.size==0:
         labels_all = np.load(labelsFileNameFull)

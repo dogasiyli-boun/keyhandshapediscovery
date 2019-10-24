@@ -1,12 +1,14 @@
 ''' Code for Keyframe Detection,
 	Authors : Doga Siyli and Batuhan Gundogdu
 '''
+# -*- coding: iso-8859-15 -*-
+
 from sys import argv
 import numpy as np
 import os
+import tensorflow as tf
 from keras.callbacks import CSVLogger, ModelCheckpoint
 from keras import backend as K
-import tensorflow as tf
 #%%
 import modelFuncs as funcM
 import dataLoaderFuncs as funcD
@@ -31,8 +33,9 @@ posterior_dim = int(argv[1])# K number of clusters
 weight_of_regularizer = float(argv[2]) # sparsity parametresi (a trade-off between reconstruction vs clustering)
 applyCorr = float(argv[3])
 corr_randMode = bool(int(argv[4]))
-data_dim = 256  #PCA sonrası LBP dimension
-exp_name = 'sae_p' + str(posterior_dim) + '_wr' + str(weight_of_regularizer) + '_cor' + str(applyCorr) + '_corrRandMode' + str(corr_randMode)
+dataToUse = argv[5]
+data_dim = 256  #PCA sonrasi LBP dimension
+exp_name = 'sae_p' + str(posterior_dim) + '_wr' + str(weight_of_regularizer) + '_cor' + str(applyCorr) + '_corrRandMode' + str(corr_randMode) + "_" + str(dataToUse)
 
 csv_name = os.path.join(results_dir, 'epochs') + os.sep + exp_name + '.csv'
 model_name = os.path.join(results_dir, 'models') + os.sep + exp_name + '.h5'
@@ -40,6 +43,8 @@ outdir = os.path.join(results_dir, 'results', exp_name)
 funcH.createDirIfNotExist(os.path.join(results_dir, 'epochs'))
 funcH.createDirIfNotExist(os.path.join(results_dir, 'models'))
 funcH.createDirIfNotExist(outdir)
+
+pcaFeatsFileName = "feat_set_pca_"+ dataToUse +".npy" #dataToUse = {'hog','resnet18','sn256'}
 
 skipLoadOfOriginalData = True
 if not skipLoadOfOriginalData:
@@ -49,13 +54,13 @@ else:
     labels_all = np.array([])
     detailed_labels_all = np.array([])
 
-feat_set_pca, labels_all = funcD.applyPCA2Data(feat_set, labels_all, data_dir, data_dim, loadIfExist=True, pcaFeatsFileName='feat_set_pca.npy', labelsFileName='labels.npy')
+feat_set_pca, labels_all = funcD.applyPCA2Data(feat_set, labels_all, data_dir, data_dim, loadIfExist=True, pcaFeatsFileName=pcaFeatsFileName, labelsFileName='labels.npy')
 non_zero_labels = labels_all[np.where(labels_all)]
 
 #%%
 batch_size = 16
 epochs = 10 
-embedding_dim = 128# deep model yapacaksak bunu kullanacağız
+embedding_dim = 128# deep model yapacaksak bunu kullanacagiz
 
 model, ES = funcM.createModel(data_dim, posterior_dim, weight_of_regularizer)
 modelTest = funcM.createPredictModel(data_dim, posterior_dim)
@@ -72,7 +77,7 @@ corrMode = False
 corr_indis_a = 0
 #corr_randMode = False #if true select randomly from a and b for in and out feats
 if applyCorr>=2:
-    neuralNetHandVideosFolder = os.path.join(base_dir, 'neuralNetHandVideos')
+    neuralNetHandVideosFolder = os.path.join(data_dir, 'neuralNetHandVideos')
     corrFramesSignFileName = neuralNetHandVideosFolder + os.sep + 'corrFrames_All.npy'
     corrFramesAll = np.load(corrFramesSignFileName)
     inFeats = feat_set_pca[corrFramesAll[corr_indis_a, :], :]
@@ -90,7 +95,8 @@ for i in range(50):
     t = time.time()
     if corrMode:
         if corr_randMode:
-            a_inds = np.random.randint(2, size=len(corrFramesAll))
+            a_inds = np.random.randint(2, size=np.size(corrFramesAll, 1))
+            col_idx = np.arange(np.size(corrFramesAll, 1))
             inFeats = feat_set_pca[corrFramesAll[a_inds, col_idx], :]
             outFeats = feat_set_pca[corrFramesAll[1-a_inds, col_idx], :]
             corr_indis_a = a_inds[0:5]

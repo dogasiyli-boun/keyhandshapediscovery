@@ -11,18 +11,24 @@ def getVariableByComputerName(variableName):
     if variableName=='base_dir':
         if curCompName == 'doga-MSISSD':
             base_dir = '/mnt/USB_HDD_1TB'  # for bogazici kasa
+        elif curCompName == 'WsUbuntu05':
+            base_dir = '/home/dg/DataPath'  # for WS Doga DHO
         else:
             base_dir = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
         retVal = base_dir
     if variableName=='data_dir':
         if curCompName == 'doga-MSISSD':
             data_dir = '/mnt/USB_HDD_1TB/bdData'  # for bogazici kasa
+        elif curCompName == 'WsUbuntu05':
+            data_dir = '/home/dg/DataPath/bdData'  # for WS Doga DHO
         else:
             data_dir = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
         retVal = data_dir
     if variableName=='results_dir':
         if curCompName == 'doga-MSISSD':
             results_dir = '/mnt/USB_HDD_1TB/bdResults'  # for bogazici kasa
+        elif curCompName == 'WsUbuntu05':
+            results_dir = '/home/dg/DataPath/bdResults'  # for WS Doga DHO
         else:
             results_dir = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
         retVal = results_dir
