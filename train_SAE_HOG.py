@@ -113,6 +113,10 @@ for i in range(50):
     modelTest.load_weights(model_name, by_name=True)
     cluster_posteriors = np.transpose(modelTest.predict(feat_set_pca))
     predicted_labels = np.argmax(cluster_posteriors,axis=0)
+
+    predictedFileSaveAt = results_dir + os.sep + exp_name + os.sep + 'predicted_labels' + str(i).zfill(3) + '.npy'
+    np.save(predictedFileSaveAt, predicted_labels)
+
     non_zero_predictions=predicted_labels[np.where(labels_all)]
     #nmi_cur = nmi(non_zero_labels,non_zero_predictions,average_method='geometric')
     #acc_cur = getAccFromConf(non_zero_labels, non_zero_predictions)
