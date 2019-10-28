@@ -183,3 +183,27 @@ def applyPCA2Data(feat_set, labels_all, data_dir, data_dim, loadIfExist = True, 
         feat_set_pca = pca.fit_transform(feat_set)
         np.save(pcaFeatsFileNameFull, feat_set_pca)
     return feat_set_pca, labels_all
+
+def loadPCAData(dataToUse, data_dir, data_dim, skipLoadOfOriginalData):
+    pcaFeatsFileName = "feat_set_pca_" + dataToUse + ".npy"
+
+    if not skipLoadOfOriginalData:
+        feat_set, labels_all, detailed_labels_all = loadData_hog(data_dir, loadHogIfExist=True,
+                                                                       hogFeatsFileName='hog_set.npy',
+                                                                       labelsFileName='labels.npy',
+                                                                       detailedLabelsFileName='detailed_labels.npy')
+    else:
+        feat_set = np.array([])
+        labels_all = np.array([])
+        detailed_labels_all = np.array([])
+
+    feat_set_pca, labels_all = applyPCA2Data(feat_set, labels_all, data_dir, data_dim, loadIfExist=True,
+                                                   pcaFeatsFileName=pcaFeatsFileName, labelsFileName='labels.npy')
+    return feat_set_pca, labels_all, detailed_labels_all
+
+def create_dataset(dataset, look_back=100):
+    dataX= []
+    for i in range(int(len(dataset)/look_back)):
+        a = dataset[i*look_back:((i+1)*look_back), :]
+        dataX.append(a)
+    return np.array(dataX)

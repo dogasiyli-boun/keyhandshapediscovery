@@ -11,8 +11,9 @@ from keras.callbacks import CSVLogger, ModelCheckpoint
 from keras import backend as K
 #%%
 import modelFuncs as funcM
-import dataLoaderFuncs as funcD
 import helperFuncs as funcH
+import dataLoaderFuncs as funcD
+
 import time
 
 ## extra imports to set GPU options
@@ -30,40 +31,47 @@ data_dir = funcH.getVariableByComputerName('data_dir')
 results_dir = funcH.getVariableByComputerName('results_dir')
 
 posterior_dim = int(argv[1])# K number of clusters
-weight_of_regularizer = float(argv[2]) # sparsity parametresi (a trade-off between reconstruction vs clustering)
-applyCorr = float(argv[3])
+weight_of_regularizer = float(argv[2]) #sparsity parametresi (a trade-off between reconstruction vs clustering)
+trainMode = str(argv[3]) #trainMode = {'sae','cosae','corsa'}
 corr_randMode = bool(int(argv[4]))
-dataToUse = argv[5]
+dataToUse = argv[5] #dataToUse = {'hog','resnet18','sn256'}
+
+if trainMode=="sae":
+    applyCorr = 0.0
+elif trainMode == "cosae":
+    applyCorr = 2.0
+elif trainMode=="corsa":
+    applyCorr = 0.0
+
 data_dim = 256  #PCA sonrasi LBP dimension
-exp_name = 'sae_p' + str(posterior_dim) + '_wr' + str(weight_of_regularizer) + '_cor' + str(applyCorr) + '_corrRandMode' + str(corr_randMode) + "_" + str(dataToUse)
+exp_name = 'sae_p' + str(posterior_dim) + '_wr' + str(weight_of_regularizer) + '_' + str(trainMode) + '_corrRandMode' + str(corr_randMode) + "_" + str(dataToUse)
 
 csv_name = os.path.join(results_dir, 'epochs') + os.sep + exp_name + '.csv'
 model_name = os.path.join(results_dir, 'models') + os.sep + exp_name + '.h5'
 outdir = os.path.join(results_dir, 'results', exp_name)
+
 funcH.createDirIfNotExist(os.path.join(results_dir, 'epochs'))
 funcH.createDirIfNotExist(os.path.join(results_dir, 'models'))
 funcH.createDirIfNotExist(outdir)
 
-pcaFeatsFileName = "feat_set_pca_"+ dataToUse +".npy" #dataToUse = {'hog','resnet18','sn256'}
-
-skipLoadOfOriginalData = True
-if not skipLoadOfOriginalData:
-    feat_set, labels_all, detailed_labels_all = funcD.loadData_hog(data_dir, loadHogIfExist=True, hogFeatsFileName='hog_set.npy', labelsFileName='labels.npy', detailedLabelsFileName='detailed_labels.npy')
-else:
-    feat_set = np.array([])
-    labels_all = np.array([])
-    detailed_labels_all = np.array([])
-
-feat_set_pca, labels_all = funcD.applyPCA2Data(feat_set, labels_all, data_dir, data_dim, loadIfExist=True, pcaFeatsFileName=pcaFeatsFileName, labelsFileName='labels.npy')
+feat_set_pca, labels_all, detailed_labels_all = funcD.loadPCAData(dataToUse, data_dir, data_dim, skipLoadOfOriginalData=True)
 non_zero_labels = labels_all[np.where(labels_all)]
 
 #%%
-batch_size = 16
-epochs = 10 
-embedding_dim = 128# deep model yapacaksak bunu kullanacagiz
-
-model, ES = funcM.createModel(data_dim, posterior_dim, weight_of_regularizer)
-modelTest = funcM.createPredictModel(data_dim, posterior_dim)
+epochs = 50
+if trainMode=="sae" or trainMode == "cosae":
+    batch_size = 16
+    embedding_dim = 128
+    subEpochs = 5
+    model, ES = funcM.createModel(data_dim, posterior_dim, weight_of_regularizer)
+    modelTest = funcM.createPredictModel(data_dim, posterior_dim)
+elif trainMode=="corsa":
+    batch_size = 16
+    timesteps = 1
+    subEpochs = 1
+    model, ES = funcM.createRNNModel(data_dim, posterior_dim, weight_of_regularizer, timesteps=timesteps)
+    modelTest = funcM.createRNNPredictModel(data_dim, posterior_dim, timesteps=timesteps)
+    feat_set_pca = funcD.create_dataset(feat_set_pca, timesteps)
 
 checkpointer = ModelCheckpoint(filepath=model_name,verbose=0,save_best_only=False,period=1)
 csv_logger = CSVLogger(csv_name,append=True, separator=';')
@@ -83,14 +91,11 @@ if applyCorr>=2:
     inFeats = feat_set_pca[corrFramesAll[corr_indis_a, :], :]
     outFeats = feat_set_pca[corrFramesAll[1-corr_indis_a, :], :]
     col_idx = np.arange(len(labels_all))
-    #detailedLabelsFileNameFull = data_dir + os.sep + 'detailed_labels.npy'
-    #detailedLabels_all = np.load(detailedLabelsFileNameFull)
-    #non_zero_detailed_labels = detailed_labels_all[np.where(labels_all), :]
 else:
     inFeats = feat_set_pca
     outFeats = feat_set_pca
 
-for i in range(50):
+for i in range(epochs):
     corrMode = applyCorr >= 2 and np.mod(i+1, applyCorr) == 0
     t = time.time()
     if corrMode:
@@ -105,14 +110,14 @@ for i in range(50):
             inFeats = feat_set_pca[corrFramesAll[corr_indis_a, :], :]
             outFeats = feat_set_pca[corrFramesAll[1 - corr_indis_a, :], :]
         print('corrMode on, a_ind(',  corr_indis_a, '), b_ind(', 1 - corr_indis_a, ')')
-        model.fit([inFeats],[outFeats],batch_size=batch_size,callbacks=[csv_logger,checkpointer],epochs=epochs,validation_split=0.0,shuffle=True,verbose=0)
+        model.fit([inFeats],[outFeats],batch_size=batch_size,callbacks=[csv_logger,checkpointer],epochs=subEpochs,validation_split=0.0,shuffle=True,verbose=0)
     else:
         print('corrMode off')
-        model.fit([feat_set_pca],[feat_set_pca],batch_size=batch_size,callbacks=[csv_logger,checkpointer],epochs=epochs,validation_split=0.0,shuffle=True,verbose=0)
+        model.fit([feat_set_pca],[feat_set_pca],batch_size=batch_size,callbacks=[csv_logger,checkpointer],epochs=subEpochs,validation_split=0.0,shuffle=True,verbose=0)
 
     modelTest.load_weights(model_name, by_name=True)
     cluster_posteriors = np.transpose(modelTest.predict(feat_set_pca))
-    predicted_labels = np.argmax(cluster_posteriors,axis=0)
+    predicted_labels = np.argmax(cluster_posteriors,axis=0).T.squeeze()
 
     predictedFileSaveAt = results_dir + os.sep + 'results' + os.sep + exp_name + os.sep + 'predicted_labels' + str(i).zfill(3) + '.npy'
     np.save(predictedFileSaveAt, predicted_labels)
