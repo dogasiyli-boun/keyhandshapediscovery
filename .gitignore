@@ -2,3 +2,9 @@
 venv/
 
 .idea/
+
+*.pyc
+
+*.h5
+
+*.json
