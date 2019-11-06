@@ -195,15 +195,120 @@ def loadPCAData(dataToUse, data_dir, data_dim, skipLoadOfOriginalData):
     else:
         feat_set = np.array([])
         labels_all = np.array([])
-        detailed_labels_all = np.array([])
+        detailedLabelsFileNameFull = data_dir + os.sep + 'detailed_labels.npy'
+        if os.path.isfile(detailedLabelsFileNameFull):
+            detailed_labels_all = np.load(detailedLabelsFileNameFull)
+        else:
+            detailed_labels_all = np.array([])
 
     feat_set_pca, labels_all = applyPCA2Data(feat_set, labels_all, data_dir, data_dim, loadIfExist=True,
                                                    pcaFeatsFileName=pcaFeatsFileName, labelsFileName='labels.npy')
     return feat_set_pca, labels_all, detailed_labels_all
 
-def create_dataset(dataset, look_back=100):
-    dataX= []
-    for i in range(int(len(dataset)/look_back)):
-        a = dataset[i*look_back:((i+1)*look_back), :]
-        dataX.append(a)
-    return np.array(dataX)
+def rnnGetDataByTimeSteps(X_in, frameIDs, timesteps):
+    actualFrCnt, dimOfFeat = X_in.shape
+    X_out = X_in[frameIDs, :].reshape(-1, timesteps, dimOfFeat)
+    return X_out
+
+def rnnPredictOverlappingDS(timesteps, detailed_labels_all, verbose=0):
+    rnnPredictIDs = []
+    rnnFrameIDsForLabelAcc = []
+    fIDBase = 0
+    validIDBase = 0
+    uniqueSigns = np.unique(detailed_labels_all[:, 0])
+    for s in uniqueSigns:
+        signRows = np.argwhere(detailed_labels_all[:, 0] == s).squeeze()
+        signLabs = detailed_labels_all[signRows, 1:]
+        videoList = np.unique(signLabs[:, 0])
+        for v in videoList:
+            frameCnt = len(np.argwhere(signLabs[:, 0] == v).squeeze())
+
+            vidIDsValid, frameIDsForLabelAcc = funcH.rnn_getValidIDs(frameCnt, timesteps, verbose=verbose)
+
+            vidIDsValid += fIDBase
+            frameIDsForLabelAcc += validIDBase
+
+            rnnPredictIDs.append(vidIDsValid)
+            rnnFrameIDsForLabelAcc.append(frameIDsForLabelAcc)
+
+            fIDBase += frameCnt
+            validIDBase += len(vidIDsValid)
+
+    predictIDs = np.concatenate(rnnPredictIDs, axis=0)
+    frameIDsForLabelAcc = np.concatenate(rnnFrameIDsForLabelAcc, axis=0)
+
+    return predictIDs, frameIDsForLabelAcc
+
+def getRNNTrainLabels_frameOverlap(timesteps, frameOverlap, detailed_labels_all, verbose=0):
+    rnnTrainIDs = []
+    uniqueSigns = np.unique(detailed_labels_all[:, 0])
+    fIDBase = 0
+    for s in uniqueSigns:
+        signRows = np.argwhere(detailed_labels_all[:, 0] == s).squeeze()
+        signLabs = detailed_labels_all[signRows, 1:]
+        videoList = np.unique(signLabs[:, 0])
+        for v in videoList:
+            frameCnt = len(np.argwhere(signLabs[:, 0] == v).squeeze())
+
+            vidIDsTrain, _ = funcH.rnn_getTrainIDs(frameCnt, timesteps, frameOverlap, verbose=verbose)
+            vidIDsTrain += fIDBase
+            rnnTrainIDs.append(vidIDsTrain)
+            fIDBase += frameCnt
+
+    rnnTrainIDs = np.concatenate(rnnTrainIDs, axis=0)
+
+    return rnnTrainIDs
+
+def getRNNTrainLabels_patchPerVideos(timesteps, patchFromEachVideo, detailed_labels_all, verbose=0):
+    labels = []
+    labels_detailed = []
+    wCols = []
+    fIDBase = 0
+    uniqueSigns = np.unique(detailed_labels_all[:, 0])
+    for s in uniqueSigns:
+        signRows = np.argwhere(detailed_labels_all[:, 0] == s).squeeze()
+        signLabs = detailed_labels_all[signRows, 1:]
+        videoList = np.unique(signLabs[:, 0])
+        for v in videoList:
+            videoRows = np.argwhere(signLabs[:, 0] == v).squeeze()
+            frameCnt = len(videoRows)
+
+            toFrCnt = np.linspace(timesteps, frameCnt, num=patchFromEachVideo).astype(int)
+            frFrCnt = toFrCnt-timesteps
+
+            for p in range(patchFromEachVideo):
+                fr = frFrCnt[p] + fIDBase
+                to = toFrCnt[p] + fIDBase
+
+                labs = np.array(detailed_labels_all[fr:to, 3])
+                detailedLabels = np.array([s, v, p, fr, to])
+
+                labels.append(labs)
+                labels_detailed.append(detailedLabels)
+                wCols.append(np.arange(fr, to))#actual ids e.g. 25023
+
+            fIDBase += frameCnt
+
+    labels = np.array(labels)
+    labels_detailed = np.array(labels_detailed)
+    trainIDs = np.concatenate(wCols, axis=0)
+    return trainIDs, labels, labels_detailed
+
+def getRNNTrainLabels_lookBack(look_back, dataSetLen):
+    trainIDs = []
+    blockCnt = int(dataSetLen/look_back)
+    for i in range(blockCnt):
+        fr = i*look_back
+        to = (i+1)*look_back
+        trainIDs.append(np.arange(fr, to))
+    trainIDs = np.concatenate(trainIDs, axis=0)
+    return trainIDs
+
+def applyCorrespondance(feat_set_pca, corrFramesAll, corr_indis_a, applyCorr):
+    if applyCorr >= 2:
+        inFeats = feat_set_pca[corrFramesAll[corr_indis_a, :], :]
+        outFeats = feat_set_pca[corrFramesAll[1 - corr_indis_a, :], :]
+    else:
+        inFeats = feat_set_pca
+        outFeats = feat_set_pca
+    return inFeats, outFeats
