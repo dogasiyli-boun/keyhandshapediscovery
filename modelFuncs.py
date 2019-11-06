@@ -65,7 +65,7 @@ def getModels(data_dim, modelParams, rnnParams):
     if modelParams["trainMode"] == "sae" or modelParams["trainMode"] == "cosae":
         model, ES = createModel(data_dim, modelParams=modelParams)
         modelTest = createPredictModel(data_dim, posterior_dim=modelParams["posterior_dim"])
-    elif modelParams["trainMode"] == "rsa":
+    elif modelParams["trainMode"] == "rsa" or modelParams["trainMode"] == "corsa":
         model, ES = createRNNModel(data_dim, modelParams=modelParams, rnnParams=rnnParams)
         modelTest = createRNNPredictModel(data_dim, modelParams=modelParams, rnnParams=rnnParams)
     return model, modelTest, ES
@@ -105,4 +105,8 @@ def initialize_RNN_Parameters(valuesParamsCur, dvSetParamsCur):
         valuesParamsCur["rnnTimesteps"] = rnnTimesteps
         valuesParamsCur["rnnPatchFromEachVideo"] = rnnPatchFromEachVideo
         valuesParamsCur["rnnFrameOverlap"] = rnnFrameOverlap
+    elif valuesParamsCur["trainMode"] == 'corsa':
+        rnnDataMode = valuesParamsCur["rnnDataMode"]
+        assert (rnnDataMode != 0, "rnnDataMode(" + str(rnnDataMode) + ") must be 0")
+
     return valuesParamsCur, dvSetParamsCur

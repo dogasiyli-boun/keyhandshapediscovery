@@ -13,13 +13,13 @@ def updateNMIACCFile(epochID, nmi_cur, acc_cur, nmi_and_acc_file_name):
     f = open(nmi_and_acc_file_name, 'a+')
     f.write(str(epochID) + ' * ' + str(nmi_cur) + ' * ' + str(acc_cur) + '\n')
     f.close()
-    print(' epochID =', epochID, ' NMI = ', nmi_cur, ' ACC= ', acc_cur, '\n')
+    print(' epochID =', epochID, ' NMI = ', nmi_cur, ' ACC= ', acc_cur)
 
 def savePredictedLabels(predictionLabelsDir, predicted_labels, epochID):
     predictedFileSaveAt = predictionLabelsDir + os.sep + 'predicted_labels' + str(epochID).zfill(3) + '.npy'
     np.save(predictedFileSaveAt, predicted_labels)
 
-def getFramewiseDataIDs(sampleCount, trainParams, epochID):
+def getCorrespondanceIDs(sampleCount, trainParams, epochID):
     corr_indis_a = trainParams["corr_indis_a"]
     applyCorr = trainParams["applyCorr"]
 
@@ -56,7 +56,7 @@ def trainFramewise(trainParams, modelParams, model, modelTest, feat_set_pca, lab
         t = time.time()
 
         # Prepare data for training
-        inIdx, outIdx, trainParams = getFramewiseDataIDs(sampleCount, trainParams, epochID)
+        inIdx, outIdx, trainParams = getCorrespondanceIDs(sampleCount, trainParams, epochID)
         inFeats = [feat_set_pca[inIdx, :]]
         outFeats = [feat_set_pca[outIdx, :]]
 
@@ -105,6 +105,7 @@ def trainRNN(trainParams, modelParams, rnnParams, detailed_labels_all, model, mo
     predictionLabelsDir = directoryParams["predictionLabelsDir"]
     rnnDataMode = rnnParams["dataMode"]
     non_zero_labels = labels_all[np.where(labels_all)]
+    sampleCount = feat_set_pca.shape[0]
 
     trainIDs, predictIDs, frameIDsForLabelAcc = getRNNLabels_by_rnnDataMode(rnnDataMode, rnnParams, detailed_labels_all)
 
@@ -112,10 +113,19 @@ def trainRNN(trainParams, modelParams, rnnParams, detailed_labels_all, model, mo
         t = time.time()
 
         # Prepare data for training
-        inFeats = funcD.rnnGetDataByTimeSteps(feat_set_pca, trainIDs, rnnParams["timesteps"])
+        if rnnDataMode==0 and trainParams["applyCorr"] >= 2:
+            inIdx, outIdx, trainParams = getCorrespondanceIDs(sampleCount, trainParams, epochID)
+            corrRNNMap = funcD.getRNNTrainLabels_lookBack(rnnParams["timesteps"], inIdx.shape[0])
+            corr_a_inds = inIdx[corrRNNMap]
+            corr_b_inds = outIdx[corrRNNMap]
+            inFeats = funcD.rnnGetDataByTimeSteps(feat_set_pca, corr_a_inds, rnnParams["timesteps"])
+            outFeats = funcD.rnnGetDataByTimeSteps(feat_set_pca, corr_b_inds, rnnParams["timesteps"])
+        else:
+            inFeats = funcD.rnnGetDataByTimeSteps(feat_set_pca, trainIDs, rnnParams["timesteps"])
+            outFeats = inFeats
 
-        # train
-        model.fit([inFeats], [inFeats], validation_split=0.0, shuffle=True, verbose=0,
+            # train
+        model.fit([inFeats], [outFeats], validation_split=0.0, shuffle=True, verbose=0,
                   batch_size=trainParams["batch_size"], callbacks=modelParams["callbacks"],
                   epochs=trainParams["subEpochs"])
 

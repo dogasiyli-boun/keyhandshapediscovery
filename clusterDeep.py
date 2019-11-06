@@ -193,12 +193,29 @@ def getInitParams(trainParams, modelParams, rnnParams):
         assert(trainParams["applyCorr"] != 0, "applyCorr(" + str(trainParams["applyCorr"]) + ") must be 0")
         trainParams["corr_randMode"] = 0
     if modelParams["trainMode"] == "cosae" and trainParams["applyCorr"] == 0:
-        trainParams["applyCorr"] = 2
+        assert(trainParams["applyCorr"] < 2, "applyCorr(" + str(trainParams["applyCorr"]) + ") must be >= 2")
     elif modelParams["trainMode"] == "rsa":
-        trainParams["applyCorr"] = 0
+        if trainParams["applyCorr"] >= 2:
+            modelParams["trainMode"] = "corsa"
+            assert (rnnParams["dataMode"] != 0, "rnnDataMode(" + str(rnnParams["dataMode"]) + ") must be 0")
         trainParams["corr_randMode"] = 0
+    elif modelParams["trainMode"] == "corsa":
+        assert (rnnParams["dataMode"] != 0, "rnnDataMode(" + str(rnnParams["dataMode"]) + ") must be 0")
+        assert (trainParams["applyCorr"] < 2, "applyCorr(" + str(trainParams["applyCorr"]) + ") must be >= 2")
 
-    if modelParams["trainMode"] == "rsa":
+    if modelParams["trainMode"] == "corsa":
+        exp_name  = str(modelParams["trainMode"]) + \
+                    '_pd' + str(modelParams["posterior_dim"]) + \
+                    '_wr' + str(modelParams["weight_of_regularizer"]) + \
+                    '_dt' + str(modelParams["dataToUse"]) + \
+                    '_bs' + str(trainParams["batch_size"]) + \
+                    '_dM' + str(rnnParams["dataMode"]) + \
+                    '_ts' + str(rnnParams["timesteps"]) + \
+                    '_cp' + str(trainParams["applyCorr"]) + \
+                    '_cRM' + str(trainParams["corr_randMode"])
+        if rnnParams["dropout"] > 0:
+            exp_name += '_do' + str(rnnParams["dropout"])
+    elif modelParams["trainMode"] == "rsa":
         exp_name  = str(modelParams["trainMode"]) + \
                     '_pd' + str(modelParams["posterior_dim"]) + \
                     '_wr' + str(modelParams["weight_of_regularizer"]) + \
@@ -301,7 +318,7 @@ directoryParams = {
     "nmi_and_acc_file_name": outdir + os.sep + exp_name + '_nmi_acc.txt'
 }
 
-if modelParams["trainMode"] == "rsa":
+if modelParams["trainMode"] == "rsa" or modelParams["trainMode"] == "corsa":
     funcTL.trainRNN(trainParams, modelParams, rnnParams, detailed_labels_all, model, modelTest, feat_set_pca, labels_all, directoryParams)
 else:
     funcTL.trainFramewise(trainParams, modelParams, model, modelTest, feat_set_pca, labels_all, directoryParams)
