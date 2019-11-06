@@ -19,12 +19,12 @@ import sys
 import getopt
 
 def parseArgs(argv):
-    #clusterDeep.py --trainMode corsa
+    #clusterDeep.py --trainMode rsa
     # --trainMode sae --posterior_dim 64
     # --trainMode cosae --posterior_dim 128
-    # --trainMode corsa --posterior_dim 256
-    param01 = {"paramName": "trainMode", "possibleValues": "{'sae','cosae','corsa'}",
-               "vs": "-mt", "defaultVal": "corsa", "dvSet": True, "paramType": "str"}
+    # --trainMode rsa --posterior_dim 256
+    param01 = {"paramName": "trainMode", "possibleValues": "{'sae','cosae','rsa'}",
+               "vs": "-mt", "defaultVal": "rsa", "dvSet": True, "paramType": "str"}
     param02 = {"paramName": "posterior_dim", "possibleValues": "{32,64,128,256}",
                "vs": "-pd", "defaultVal": 256, "dvSet": True, "paramType": "int"}
     param03 = {"paramName": "weight_of_regularizer", "possibleValues": "{0.2,0.5,1.0}",
@@ -35,9 +35,9 @@ def parseArgs(argv):
     params_model_data = [param01, param02, param03, param04]
 
     # train parameters
-    # --epochs 50 --batch_size 64 --applyCorr 0 --corr_randMode 0
-    # --epochs 50 --batch_size 64 --applyCorr 2 --corr_randMode 0
-    # --epochs 50 --batch_size 64 --applyCorr 2 --corr_randMode 1
+    # --epochs 50 --appendEpochBinary 0 --batch_size 64 --applyCorr 0 --corr_randMode 0
+    # --epochs 50 --appendEpochBinary 0 --batch_size 64 --applyCorr 2 --corr_randMode 0
+    # --epochs 50 --appendEpochBinary 0 --batch_size 64 --applyCorr 2 --corr_randMode 1
     param05 = {"paramName": "epochs", "possibleValues": "{50,200,500}",
                "vs": "-ep", "defaultVal": 50, "dvSet": True, "paramType": "int"}
     param06 = {"paramName": "corr_randMode", "possibleValues": "{0-False,1-True}",
@@ -46,7 +46,9 @@ def parseArgs(argv):
                "vs": "-bs", "defaultVal": 16, "dvSet": True, "paramType": "int"}
     param12 = {"paramName": "applyCorr", "possibleValues": "{0, 2}",
                "vs": "-wr", "defaultVal": 0, "dvSet": True, "paramType": "int"}
-    paramsTrain = [param05, param06, param11, param12]
+    param13 = {"paramName": "appendEpochBinary", "possibleValues": "{0, 1}",
+               "vs": "-ea", "defaultVal": 0, "dvSet": True, "paramType": "int"}
+    paramsTrain = [param05, param06, param11, param12, param13]
 
     # rnn parameters
     # --rnnDataMode 0 --rnnTimesteps 10
@@ -60,7 +62,9 @@ def parseArgs(argv):
                "vs": "-rpv", "defaultVal": -1, "dvSet": True, "paramType": "int"}
     param10 = {"paramName": "rnnFrameOverlap", "possibleValues": "{1 to F}",
                "vs": "-rfo", "defaultVal": -1, "dvSet": True, "paramType": "int"}
-    paramsRnn = [param07, param08, param09, param10]
+    param14 = {"paramName": "rnnDropout", "possibleValues": "{0.5, 0.7}",
+               "vs": "-rdo", "defaultVal": 0.5, "dvSet": True, "paramType": "float"}
+    paramsRnn = [param07, param08, param09, param10, param14]
 
     paramsAll = params_model_data + paramsTrain + paramsRnn
 
@@ -167,6 +171,7 @@ def parseArgs(argv):
     }
     trainParams = {
         "epochs": valuesParamsCur["epochs"],
+        "appendEpochBinary" : valuesParamsCur["appendEpochBinary"],
         "batch_size": valuesParamsCur["batch_size"],
         "applyCorr": valuesParamsCur["applyCorr"],
         "corr_randMode": valuesParamsCur["corr_randMode"]
@@ -175,7 +180,8 @@ def parseArgs(argv):
         "dataMode": valuesParamsCur["rnnDataMode"],
         "timesteps": valuesParamsCur["rnnTimesteps"],
         "patchFromEachVideo": valuesParamsCur["rnnPatchFromEachVideo"],
-        "frameOverlap": valuesParamsCur["rnnFrameOverlap"]
+        "frameOverlap": valuesParamsCur["rnnFrameOverlap"],
+        "dropout": valuesParamsCur["rnnDropout"]
     }
     return modelParams, trainParams, rnnParams
 
@@ -184,14 +190,15 @@ def getInitParams(trainParams, modelParams, rnnParams):
     subEpochs = 1
 
     if modelParams["trainMode"] == "sae":
+        assert(trainParams["applyCorr"] != 0, "applyCorr(" + str(trainParams["applyCorr"]) + ") must be 0")
+        trainParams["corr_randMode"] = 0
+    if modelParams["trainMode"] == "cosae" and trainParams["applyCorr"] == 0:
+        trainParams["applyCorr"] = 2
+    elif modelParams["trainMode"] == "rsa":
         trainParams["applyCorr"] = 0
-    elif modelParams["trainMode"] == "cosae":
-        if trainParams["applyCorr"] == 0:
-            trainParams["applyCorr"] = 2
-    elif modelParams["trainMode"] == "corsa":
-        trainParams["applyCorr"] = 0
+        trainParams["corr_randMode"] = 0
 
-    if modelParams["trainMode"] == "corsa":
+    if modelParams["trainMode"] == "rsa":
         exp_name  = str(modelParams["trainMode"]) + \
                     '_pd' + str(modelParams["posterior_dim"]) + \
                     '_wr' + str(modelParams["weight_of_regularizer"]) + \
@@ -199,6 +206,8 @@ def getInitParams(trainParams, modelParams, rnnParams):
                     '_bs' + str(trainParams["batch_size"]) + \
                     '_dM' + str(rnnParams["dataMode"]) + \
                     '_ts' + str(rnnParams["timesteps"])
+        if rnnParams["dropout"] > 0:
+            exp_name += '_do' + str(rnnParams["dropout"])
         if rnnParams["dataMode"] == 1:
             exp_name += '_pc' + str(rnnParams["patchFromEachVideo"])
         if rnnParams["dataMode"] == 2:
@@ -229,14 +238,14 @@ def getDirectories(results_dir, exp_name):
     funcH.createDirIfNotExist(outdir)
     return csv_name, model_name, outdir
 
-def initEpochIDsModelParams(trainFromScratch, appendEpochCount, model, model_name, predictionLabelsDir):
+def initEpochIDsModelParams(trainFromScratch, appendEpochBinary, model, model_name, predictionLabelsDir):
     if not trainFromScratch and os.path.isfile(model_name):
         model.load_weights(model_name, by_name=True)
         predictedLabelsFileCount = len([f for f in os.listdir(predictionLabelsDir)
                                         if f.startswith('predicted_labels') and f.endswith('.npy') and os.path.isfile(
                 os.path.join(predictionLabelsDir, f))])
         epochFr = predictedLabelsFileCount
-        epochTo = epochCnt + appendEpochCount*predictedLabelsFileCount
+        epochTo = epochCnt + appendEpochBinary*predictedLabelsFileCount
     else:
         epochFr = 0
         epochTo = epochCnt
@@ -272,7 +281,7 @@ callbacks = [csv_logger, ES, checkpointer]
 trainFromScratch = False
 epochCnt = trainParams["epochs"]
 predictionLabelsDir = results_dir + os.sep + 'results' + os.sep + exp_name
-model, epochFr, epochTo = initEpochIDsModelParams(trainFromScratch, 0, model, model_name, predictionLabelsDir)
+model, epochFr, epochTo = initEpochIDsModelParams(trainFromScratch, trainParams["appendEpochBinary"], model, model_name, predictionLabelsDir)
 
 modelParams["callbacks"] = [csv_logger, checkpointer]
 modelParams["model_name"] = model_name
@@ -292,7 +301,7 @@ directoryParams = {
     "nmi_and_acc_file_name": outdir + os.sep + exp_name + '_nmi_acc.txt'
 }
 
-if modelParams["trainMode"] == "corsa":
+if modelParams["trainMode"] == "rsa":
     funcTL.trainRNN(trainParams, modelParams, rnnParams, detailed_labels_all, model, modelTest, feat_set_pca, labels_all, directoryParams)
 else:
     funcTL.trainFramewise(trainParams, modelParams, model, modelTest, feat_set_pca, labels_all, directoryParams)

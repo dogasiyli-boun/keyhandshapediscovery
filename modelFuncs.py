@@ -36,6 +36,8 @@ def createRNNModel(data_dim, modelParams, rnnParams):
 
     hog_input = Input(shape=(timesteps, data_dim,))
     embedding = GRU(posterior_dim, activation='linear', return_sequences=True, stateful=False, name='first_rnn')(hog_input)
+    if rnnParams["dropout"] > 0:
+        embedding = Dropout(0.5)(embedding)
     clusters = Dense(posterior_dim, trainable=False, kernel_initializer='Identity', activation='softmax', name='cluster_layer')(embedding)
     sparsity_value = funcL.neg_l2_reg2(clusters, weight_of_regularizer)
     decoded = Dense(data_dim, use_bias=False, name='decoder_layer')(clusters)
@@ -63,13 +65,13 @@ def getModels(data_dim, modelParams, rnnParams):
     if modelParams["trainMode"] == "sae" or modelParams["trainMode"] == "cosae":
         model, ES = createModel(data_dim, modelParams=modelParams)
         modelTest = createPredictModel(data_dim, posterior_dim=modelParams["posterior_dim"])
-    elif modelParams["trainMode"] == "corsa":
+    elif modelParams["trainMode"] == "rsa":
         model, ES = createRNNModel(data_dim, modelParams=modelParams, rnnParams=rnnParams)
         modelTest = createRNNPredictModel(data_dim, modelParams=modelParams, rnnParams=rnnParams)
     return model, modelTest, ES
 
 def initialize_RNN_Parameters(valuesParamsCur, dvSetParamsCur):
-    if valuesParamsCur["trainMode"] == 'corsa':
+    if valuesParamsCur["trainMode"] == 'rsa':
         rnnDataMode = valuesParamsCur["rnnDataMode"]
         rnnTimesteps = valuesParamsCur["rnnTimesteps"]
         rnnPatchFromEachVideo = valuesParamsCur["rnnPatchFromEachVideo"]
@@ -82,11 +84,11 @@ def initialize_RNN_Parameters(valuesParamsCur, dvSetParamsCur):
         if rnnDataMode == 1 and rnnPatchFromEachVideo < 0:
             rnnPatchFromEachVideo = 10
             rnnPatchFromEachVideo_dvSet = True
-            print('rnnPatchFromEachVideo will be set to 10 due to trainMode(corsa) and rnnDataMode(1)')
+            print('rnnPatchFromEachVideo will be set to 10 due to trainMode(rsa) and rnnDataMode(1)')
         if rnnDataMode == 2 and rnnFrameOverlap < 0:
             rnnFrameOverlap = 5
             rnnFrameOverlap_dvSet = True
-            print('rnnFrameOverlap will be set to 5 due to trainMode(corsa) and rnnDataMode(2)')
+            print('rnnFrameOverlap will be set to 5 due to trainMode(rsa) and rnnDataMode(2)')
         if rnnTimesteps < 0:
             if rnnDataMode == 0:
                 rnnTimesteps = 1
