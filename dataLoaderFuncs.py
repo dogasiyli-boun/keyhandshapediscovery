@@ -6,11 +6,11 @@ from sklearn.decomposition import PCA
 import glob
 import helperFuncs as funcH
 
-def loadData_hog(base_dir, loadHogIfExist=True, hogFeatsFileName='hog_set.npy', labelsFileName='labels.npy', detailedLabelsFileName='detailed_labels.npy'):
+def loadData_hog(base_dir, loadHogIfExist=True, videosFolderName='neuralNetHandVideos', hogFeatsFileName='hog_set.npy', labelsFileName='labels.npy', detailedLabelsFileName='detailed_labels.npy'):
+    base_dir_train_feat = os.path.join(base_dir, videosFolderName)
     hogFeatsFileNameFull = base_dir + os.sep + hogFeatsFileName
     labelsFileNameFull = base_dir + os.sep + labelsFileName
     detailedLabelsFileNameFull = base_dir + os.sep + detailedLabelsFileName
-    base_dir_train_feat = os.path.join(base_dir, 'neuralNetHandVideos')
     if loadHogIfExist and os.path.isfile(hogFeatsFileNameFull) and os.path.isfile(labelsFileNameFull) and os.path.isfile(detailedLabelsFileNameFull):
         print('loading exported feat_set from(', hogFeatsFileNameFull, ')')
         feat_set = np.load(hogFeatsFileNameFull)
@@ -21,7 +21,7 @@ def loadData_hog(base_dir, loadHogIfExist=True, hogFeatsFileName='hog_set.npy', 
         detailedLabels_all = np.array([0, 0, 0, 0])
         labels_all = np.array([0, 0, 0, 0])
         feat_set = np.array([0, 0, 0, 0])
-        foldernames = os.listdir(base_dir_train_feat)
+        foldernames = np.sort(os.listdir(base_dir_train_feat))
         signID = 0
         frameCount = 0
         for f in foldernames:
@@ -30,7 +30,7 @@ def loadData_hog(base_dir, loadHogIfExist=True, hogFeatsFileName='hog_set.npy', 
                 continue
             signID = signID + 1
             videoID = 0
-            videos = os.listdir(sign_folder)
+            videos = np.sort(os.listdir(sign_folder))
             print(f)
             print('going to create hog from sign folder(', sign_folder, ')')
             for v in videos:
@@ -95,15 +95,15 @@ def loadData_hog(base_dir, loadHogIfExist=True, hogFeatsFileName='hog_set.npy', 
         np.save(detailedLabelsFileNameFull, detailedLabels_all)
     return feat_set, labels_all, detailedLabels_all
 
-def loopTroughFeatureSet(base_dir, data_dir, featType='sn'):
-    base_dir_nn = os.path.join(base_dir, 'neuralNetHandVideos')
+def loopTroughFeatureSet(base_dir, data_dir, hogFeatsFileName='hog_set_41.npy', videosFolderName='neuralNetHandVideos', featType='sn', detailedLabelsFileName='detailed_labels.npy'):
+    base_dir_nn = os.path.join(base_dir, videosFolderName)
 
-    detailedLabelsFileNameFull = data_dir + os.sep + 'detailed_labels.npy'
+    detailedLabelsFileNameFull = base_dir_nn + os.sep + detailedLabelsFileName
     detailedLabels_all = np.load(detailedLabelsFileNameFull)
 
     print(detailedLabels_all.shape)
 
-    signNames = os.listdir(base_dir_nn)
+    signNames = np.sort(os.listdir(base_dir_nn))
     signID = 0
     corrFramesAll = np.array([])
     for signCur in signNames:
@@ -112,11 +112,12 @@ def loopTroughFeatureSet(base_dir, data_dir, featType='sn'):
         if not os.path.isdir(sign_folder):
             continue
         signID = signID + 1
-        videos = os.listdir(sign_folder)
+        videos = [f for f in os.listdir(sign_folder) if os.path.isdir(os.path.join(sign_folder, f))]
+        videos = np.sort(videos)
         vidCnt = len(videos)
         detailedLabels_all_sign_rows = np.argwhere(detailedLabels_all[:, 0] == signID).flatten()
 
-        corrFramesSignFileName = sign_folder + os.sep + 'corrFrames_' + str(signID) + '.npy'
+        corrFramesSignFileName = sign_folder + os.sep + 'corrFrames_' + str(featType) + '_' + str(signID) + '.npy'
         if os.path.isfile(corrFramesSignFileName):
             corrFramesSign = np.load(corrFramesSignFileName)
             print('loaded corrFramesSign of shape ', corrFramesSign.shape)
@@ -133,19 +134,28 @@ def loopTroughFeatureSet(base_dir, data_dir, featType='sn'):
                     #frCnt_1 = len(np.sort(frameList_v1))
                     #frCnt_2 = len(np.sort(frameList_v2))
 
-                    hog_v1 = video_folder_1 + os.sep + 'hog_set.npz'
+                    hog_v1 = video_folder_1 + os.sep + hogFeatsFileName.replace('.npy', '.npz')
                     npzfile = np.load(hog_v1)
                     feat_set_v1 = npzfile['feat_set_video']
                     #labels_v1 = npzfile['labels']
                     detailedLabels_cur_vid_rows_rel = np.argwhere(detailedLabels_all[detailedLabels_all_sign_rows, 1] == v1+1).flatten()
                     frIDs_v1 = detailedLabels_all_sign_rows[detailedLabels_cur_vid_rows_rel]
 
-                    hog_v2 = video_folder_2 + os.sep + 'hog_set.npz'
+                    hog_v2 = video_folder_2 + os.sep + hogFeatsFileName.replace('.npy', '.npz')
                     npzfile = np.load(hog_v2)
                     feat_set_v2 = npzfile['feat_set_video']
                     #labels_v2 = npzfile['labels']
                     detailedLabels_cur_vid_rows_rel = np.argwhere(detailedLabels_all[detailedLabels_all_sign_rows, 1] == v2+1).flatten()
                     frIDs_v2 = detailedLabels_all_sign_rows[detailedLabels_cur_vid_rows_rel]
+
+                    if feat_set_v1.shape[0]!=frIDs_v1.shape[0] or feat_set_v2.shape[0]!=frIDs_v2.shape[0]:
+                        print('s_', signCur, ', v ', videos[v1], ' to vCnt-', vidCnt - v1)
+                        print("feat_set_v1.shape(", feat_set_v1.shape, "), frIDs_v1.shape(", frIDs_v1.shape, ")")
+                        print("feat_set_v2.shape(", feat_set_v2.shape, "), frIDs_v2.shape(", frIDs_v2.shape, ")")
+                        os._exit(3)
+                    #else:
+                    #    print("feat_set_v1.shape(", feat_set_v1.shape, "), frIDs_v1.shape(", frIDs_v1.shape, ")")
+                    #    print("feat_set_v2.shape(", feat_set_v2.shape, "), frIDs_v2.shape(", frIDs_v2.shape, ")")
 
                     corrPath = funcH.getCorrPath(feat_set_v1, feat_set_v2, frIDs_v1, frIDs_v2, metric='euclidean')
                     if corrFramesSign.size == 0:
