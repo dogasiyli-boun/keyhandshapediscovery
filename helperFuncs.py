@@ -327,9 +327,7 @@ def rnn_getValidIDs(frameCnt, timesteps, verbose=0):
         print('frameIDsForLabelAcc = ', frameIDsForLabelAcc)
     return vidIDsValid, frameIDsForLabelAcc
 
-def loadCorrespondantFrames(data_dir):
-    neuralNetHandVideosFolder = os.path.join(data_dir, 'neuralNetHandVideos')
-    corrFramesSignFileName = neuralNetHandVideosFolder + os.sep + 'corrFrames_All.npy'
-    corrFramesAll = np.load(corrFramesSignFileName)
+def loadCorrespondantFrames(corrFramesFileNameFull):
+    corrFramesAll = np.load(corrFramesFileNameFull)
     return corrFramesAll
 

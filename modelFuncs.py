@@ -107,6 +107,6 @@ def initialize_RNN_Parameters(valuesParamsCur, dvSetParamsCur):
         valuesParamsCur["rnnFrameOverlap"] = rnnFrameOverlap
     elif valuesParamsCur["trainMode"] == 'corsa':
         rnnDataMode = valuesParamsCur["rnnDataMode"]
-        assert (rnnDataMode != 0, "rnnDataMode(" + str(rnnDataMode) + ") must be 0")
+        assert (rnnDataMode != 0), "rnnDataMode(" + str(rnnDataMode) + ") must be 0"
 
     return valuesParamsCur, dvSetParamsCur

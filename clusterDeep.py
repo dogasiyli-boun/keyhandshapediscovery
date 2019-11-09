@@ -18,6 +18,8 @@ import trainLoops as funcTL
 import sys
 import getopt
 
+from numpy.random import seed
+
 def parseArgs(argv):
     #clusterDeep.py --trainMode rsa
     # --trainMode sae --posterior_dim 64
@@ -48,7 +50,9 @@ def parseArgs(argv):
                "vs": "-wr", "defaultVal": 0, "dvSet": True, "paramType": "int"}
     param13 = {"paramName": "appendEpochBinary", "possibleValues": "{0, 1}",
                "vs": "-ea", "defaultVal": 0, "dvSet": True, "paramType": "int"}
-    paramsTrain = [param05, param06, param11, param12, param13]
+    param15 = {"paramName": "randomSeed", "possibleValues": "{some integer}",
+               "vs": "-rs", "defaultVal": 1, "dvSet": True, "paramType": "int"}
+    paramsTrain = [param05, param06, param11, param12, param13, param15]
 
     # rnn parameters
     # --rnnDataMode 0 --rnnTimesteps 10
@@ -171,10 +175,11 @@ def parseArgs(argv):
     }
     trainParams = {
         "epochs": valuesParamsCur["epochs"],
-        "appendEpochBinary" : valuesParamsCur["appendEpochBinary"],
+        "appendEpochBinary": valuesParamsCur["appendEpochBinary"],
         "batch_size": valuesParamsCur["batch_size"],
         "applyCorr": valuesParamsCur["applyCorr"],
-        "corr_randMode": valuesParamsCur["corr_randMode"]
+        "corr_randMode": valuesParamsCur["corr_randMode"],
+        "randomSeed": valuesParamsCur["randomSeed"]
     }
     rnnParams = {
         "dataMode": valuesParamsCur["rnnDataMode"],
@@ -190,18 +195,18 @@ def getInitParams(trainParams, modelParams, rnnParams):
     subEpochs = 1
 
     if modelParams["trainMode"] == "sae":
-        assert(trainParams["applyCorr"] != 0, "applyCorr(" + str(trainParams["applyCorr"]) + ") must be 0")
+        assert (trainParams["applyCorr"] == 0), "applyCorr(" + str(trainParams["applyCorr"]) + ") must be 0"
         trainParams["corr_randMode"] = 0
     if modelParams["trainMode"] == "cosae" and trainParams["applyCorr"] == 0:
-        assert(trainParams["applyCorr"] < 2, "applyCorr(" + str(trainParams["applyCorr"]) + ") must be >= 2")
+        assert (trainParams["applyCorr"] >= 2), "applyCorr(" + str(trainParams["applyCorr"]) + ") must be >= 2"
     elif modelParams["trainMode"] == "rsa":
         if trainParams["applyCorr"] >= 2:
             modelParams["trainMode"] = "corsa"
-            assert (rnnParams["dataMode"] != 0, "rnnDataMode(" + str(rnnParams["dataMode"]) + ") must be 0")
+            assert (rnnParams["dataMode"] == 0), "rnnDataMode(" + str(rnnParams["dataMode"]) + ") must be 0"
         trainParams["corr_randMode"] = 0
     elif modelParams["trainMode"] == "corsa":
-        assert (rnnParams["dataMode"] != 0, "rnnDataMode(" + str(rnnParams["dataMode"]) + ") must be 0")
-        assert (trainParams["applyCorr"] < 2, "applyCorr(" + str(trainParams["applyCorr"]) + ") must be >= 2")
+        assert (rnnParams["dataMode"] == 0), "rnnDataMode(" + str(rnnParams["dataMode"]) + ") must be 0"
+        assert (trainParams["applyCorr"] >= 2), "applyCorr(" + str(trainParams["applyCorr"]) + ") must be >= 2"
 
     if modelParams["trainMode"] == "corsa":
         exp_name  = str(modelParams["trainMode"]) + \
@@ -269,6 +274,20 @@ def initEpochIDsModelParams(trainFromScratch, appendEpochBinary, model, model_na
 
     print("model will run epoch from(", str(epochFr), ") to(", str(epochTo), ")")
     return model, epochFr, epochTo
+
+def loadData(modelParams, numOfSigns, data_dir, base_dir, data_dim):
+    fileName_labels = funcD.getFileName(numOfSigns=numOfSigns, expectedFileType='Labels')
+    fileName_detailedLabels = funcD.getFileName(numOfSigns=numOfSigns, expectedFileType='DetailedLabels')
+
+    labels_all = funcD.loadFileIfExist(data_dir, fileName_labels)
+    detailed_labels_all = funcD.loadFileIfExist(data_dir, fileName_detailedLabels)
+
+    feat_set_pca = funcD.loadPCAData(dataToUse=modelParams["dataToUse"], skipLoadOfOriginalData=True,
+                                     numOfSigns=numOfSigns, data_dim=data_dim,
+                                     data_dir=data_dir, base_dir=base_dir)
+    return feat_set_pca, labels_all, detailed_labels_all
+
+
 ## extra imports to set GPU options
 ################################### # TensorFlow wizardry 
 config = tf.ConfigProto()
@@ -284,11 +303,16 @@ data_dir = funcH.getVariableByComputerName('data_dir')
 results_dir = funcH.getVariableByComputerName('results_dir')
 
 modelParams, trainParams, rnnParams = parseArgs(argv)
+
+seed(trainParams["randomSeed"])
+tf.set_random_seed(seed=trainParams["randomSeed"])
+
 exp_name, subEpochs, data_dim, trainParams, rnnParams = getInitParams(trainParams, modelParams, rnnParams)
 csv_name, model_name, outdir = getDirectories(results_dir, exp_name)
 model, modelTest, ES = funcM.getModels(data_dim=data_dim, modelParams=modelParams, rnnParams=rnnParams)
 
-feat_set_pca, labels_all, detailed_labels_all = funcD.loadPCAData(modelParams["dataToUse"], data_dir, data_dim, skipLoadOfOriginalData=True)
+numOfSigns = 41
+feat_set_pca, labels_all, detailed_labels_all = loadData(modelParams, numOfSigns, data_dir, base_dir, data_dim)
 
 checkpointer = ModelCheckpoint(filepath=model_name, verbose=0, save_best_only=False, period=1)
 csv_logger = CSVLogger(csv_name, append=True, separator=';')
@@ -307,7 +331,8 @@ trainParams["epochFr"] = epochFr
 trainParams["epochTo"] = epochTo
 trainParams["corr_indis_a"] = np.mod(epochFr, 2)
 if trainParams["applyCorr"] >= 2:
-    trainParams["corrFramesAll"] = funcH.loadCorrespondantFrames(base_dir)
+    corrFramesSignFileName = funcD.getFileName(dataToUse=modelParams["dataToUse"], numOfSigns=numOfSigns, expectedFileType='CorrespendenceVec')
+    trainParams["corrFramesAll"] = funcH.loadCorrespondantFrames(data_dir + os.sep + corrFramesSignFileName)
 
 print('started training')
 
