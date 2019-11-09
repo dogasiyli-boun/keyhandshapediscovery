@@ -25,7 +25,7 @@ def parseArgs(argv):
     # --trainMode sae --posterior_dim 64
     # --trainMode cosae --posterior_dim 128
     # --trainMode rsa --posterior_dim 256
-    param01 = {"paramName": "trainMode", "possibleValues": "{'sae','cosae','rsa'}",
+    param01 = {"paramName": "trainMode", "possibleValues": "{'sae','cosae','rsa','corsa'}",
                "vs": "-mt", "defaultVal": "rsa", "dvSet": True, "paramType": "str"}
     param02 = {"paramName": "posterior_dim", "possibleValues": "{32,64,128,256}",
                "vs": "-pd", "defaultVal": 256, "dvSet": True, "paramType": "int"}
