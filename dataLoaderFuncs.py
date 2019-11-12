@@ -5,6 +5,7 @@ from skimage.feature import hog
 from sklearn.decomposition import PCA
 import glob
 import helperFuncs as funcH
+import pandas as pd
 
 def loadFileIfExist(directoryOfFile, fileName):
     fileNameFull = directoryOfFile + os.sep + fileName
@@ -31,6 +32,98 @@ def getFileName(dataToUse='hog', numOfSigns=11, expectedFileType='Data'):
         fileName_Corr = dataToUse + '_corrFrames' + '_' + str(numOfSigns) + '.npy'  # 'hog_corrFrames_41.npy' or 'hog_corrFrames_11.npy'
         fileName = fileName_Corr
     return fileName
+
+def loadSkeletonDataFromVideosFolders(base_dir = funcH.getVariableByComputerName('base_dir'),
+                                      data_dir = funcH.getVariableByComputerName('data_dir'),
+                                      loadIfExist=True, numOfSigns=11):
+
+    videosFolderName = 'neuralNetHandVideos_' + str(numOfSigns)
+    base_dir_train_feat = os.path.join(base_dir, videosFolderName)
+
+    # 'skeletonFeats_41.npy' or 'skeletonFeats_11.npy'
+    featsFileName = getFileName(dataToUse='skeleton', numOfSigns=numOfSigns, expectedFileType='Data')
+    featsFileNameFull = data_dir + os.sep + featsFileName
+    labelsFileNameFull = data_dir + os.sep + getFileName(numOfSigns=numOfSigns, expectedFileType='Labels')
+    detailedLabelsFileNameFull = data_dir + os.sep + getFileName(numOfSigns=numOfSigns, expectedFileType='DetailedLabels')
+
+    if loadIfExist and os.path.isfile(featsFileNameFull) and os.path.isfile(labelsFileNameFull) and os.path.isfile(detailedLabelsFileNameFull):
+        print('loading exported feat_set from(', featsFileNameFull, ')')
+        feat_set = np.load(featsFileNameFull)
+        labels_all = np.load(labelsFileNameFull)
+        detailedLabels_all = np.load(detailedLabelsFileNameFull)
+        print('loaded exported feat_set(', feat_set.shape, ') from(', featsFileName, ')')
+    else:
+        detailedLabels_all = np.array([0, 0, 0, 0])
+        labels_all = np.array([0, 0, 0, 0])
+        feat_set = np.array([0, 0, 0, 0])
+        foldernames = np.sort(os.listdir(base_dir_train_feat))
+        signID = 0
+        frameCount = 0
+        for f in foldernames:
+            sign_folder = os.path.join(base_dir_train_feat, str(f).format(':02d'))
+            if not os.path.isdir(sign_folder):
+                continue
+            signID = signID + 1
+            videoID = 0
+            videos = np.sort(os.listdir(sign_folder))
+            print(f)
+            print('going to create hog from sign folder(', sign_folder, ')')
+            for v in videos:
+                video_folder = os.path.join(sign_folder, v)
+                if not os.path.isdir(video_folder):
+                    continue
+                videoID = videoID + 1
+                print('going to create hog from video folder(', video_folder, ')')
+                frames = os.listdir(video_folder)
+                feat_set_video = np.array([0, 0, 0, 0])
+
+                skelFeat_file = [os.path.join(video_folder, f) for f in os.listdir(video_folder) if f.endswith('skel.txt')]
+                featsMat = pd.read_csv(skelFeat_file[0], header=None)
+                frameCntSkel = featsMat.shape[0]
+
+                labels_file = [os.path.join(video_folder, f) for f in os.listdir(video_folder) if f.endswith('labels.txt')]
+                labels = np.loadtxt(os.path.join(video_folder, labels_file[0]))
+                frameCntLabel = len(labels)
+
+                frameList = video_folder + os.sep + '*.png'
+                pngCount = len(glob.glob(frameList))
+
+                assert (pngCount==frameCntLabel & pngCount==frameCntSkel), \
+                    "these three values must be same frameCntSkel(" + str(frameCntSkel) + ")" + \
+                                                    "frameCntLabel(" + str(frameCntLabel) + ")" + \
+                                                    "pngCount(" + str(pngCount) + ")"
+
+
+                fr = frameCount
+                to = frameCount + frameCntLabel
+                frCnt = to - fr
+                frameIDs = np.asarray(range(fr, to)).reshape(frCnt, -1)
+                detailedLabels_video = np.hstack((signID * np.ones([frCnt, 1]), videoID * np.ones([frCnt, 1]), frameIDs, np.asarray(labels).reshape(frCnt, -1)))
+
+                if np.all(feat_set == 0):
+                    feat_set = featsMat
+                else:
+                    feat_set = np.vstack((feat_set, featsMat))
+
+                if np.all(labels_all == 0):
+                    labels_all = labels
+                else:
+                    labels_all = np.hstack((labels_all, labels))
+
+                if np.all(detailedLabels_all == 0):
+                    detailedLabels_all = detailedLabels_video
+                else:
+                    detailedLabels_all = np.vstack((detailedLabels_all, detailedLabels_video))
+                frameCount = len(labels_all)
+
+        print('saving exported feat_set(', feat_set.shape, ') into(', featsFileNameFull, ')')
+        np.save(featsFileNameFull, feat_set)
+        print('saving labels(', labels_all.shape, ') into(', labelsFileNameFull, ')')
+        np.save(labelsFileNameFull, labels_all)
+        print('saving detailedLabels(', detailedLabels_all.shape, ') into(', detailedLabelsFileNameFull, ')')
+        np.save(detailedLabelsFileNameFull, detailedLabels_all)
+
+    return feat_set, labels_all, detailedLabels_all
 
 def loadData_hog(base_dir = funcH.getVariableByComputerName('base_dir'), data_dir = funcH.getVariableByComputerName('data_dir'),
                  loadHogIfExist=True, numOfSigns=11):
