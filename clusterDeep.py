@@ -31,7 +31,7 @@ def parseArgs(argv):
                "vs": "-pd", "defaultVal": 256, "dvSet": True, "paramType": "int"}
     param03 = {"paramName": "weight_of_regularizer", "possibleValues": "{0.2,0.5,1.0}",
                "vs": "-wr", "defaultVal": 1.0, "dvSet": True, "paramType": "float"}
-    param04 = {"paramName": "dataToUse", "possibleValues": "{'hog','resnet18','sn256'}",
+    param04 = {"paramName": "dataToUse", "possibleValues": "{'hog','resnet18','sn256', 'skeleton'}",
                "vs": "-dt", "defaultVal": "hog", "dvSet": True, "paramType": "str"}
     # model and data parameters
     params_model_data = [param01, param02, param03, param04]
@@ -276,8 +276,8 @@ def initEpochIDsModelParams(trainFromScratch, appendEpochBinary, model, model_na
     return model, epochFr, epochTo
 
 def loadData(modelParams, numOfSigns, data_dir, base_dir, data_dim):
-    fileName_labels = funcD.getFileName(numOfSigns=numOfSigns, expectedFileType='Labels')
-    fileName_detailedLabels = funcD.getFileName(numOfSigns=numOfSigns, expectedFileType='DetailedLabels')
+    fileName_labels = funcD.getFileName(dataToUse=modelParams["dataToUse"], numOfSigns=numOfSigns, expectedFileType='Labels')
+    fileName_detailedLabels = funcD.getFileName(dataToUse=modelParams["dataToUse"], numOfSigns=numOfSigns, expectedFileType='DetailedLabels')
 
     labels_all = funcD.loadFileIfExist(data_dir, fileName_labels)
     detailed_labels_all = funcD.loadFileIfExist(data_dir, fileName_detailedLabels)

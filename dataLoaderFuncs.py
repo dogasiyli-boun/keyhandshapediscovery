@@ -15,12 +15,12 @@ def loadFileIfExist(directoryOfFile, fileName):
         X = np.array([])
     return X
 
-def getFileName(dataToUse='hog', numOfSigns=11, expectedFileType='Data'):
+def getFileName(dataToUse, numOfSigns=11, expectedFileType='Data'):
     if expectedFileType=='Data':
-        fileName_Data           = dataToUse + 'Feats' + '_' + str(numOfSigns) + '.npy' # 'hogFeats_41.npy' or 'hogFeats_11.npy'
+        fileName_Data           = dataToUse + 'Feats' + '_' + str(numOfSigns) + '.npy'  # 'hogFeats_41.npy' or 'hogFeats_11.npy' or 'skeletonFeats_11.npy' or 'snFeats_11.npy'
         fileName = fileName_Data
     if expectedFileType=='Labels':
-        fileName_Labels         = 'labels' + '_' + str(numOfSigns) + '.npy' # 'labels_41.npy' or 'labels_11.npy'
+        fileName_Labels         = 'labels' + '_' + str(numOfSigns) + '.npy'  # 'labels_41.npy' or 'labels_11.npy'
         fileName = fileName_Labels
     if expectedFileType=='DetailedLabels':
         fileName_DetailedLabels = 'detailedLabels' + '_' + str(numOfSigns) + '.npy'  # 'detailedLabels_41.npy' or 'detailedLabels_11.npy'
@@ -33,8 +33,8 @@ def getFileName(dataToUse='hog', numOfSigns=11, expectedFileType='Data'):
         fileName = fileName_Corr
     return fileName
 
-def loadSkeletonDataFromVideosFolders(base_dir = funcH.getVariableByComputerName('base_dir'),
-                                      data_dir = funcH.getVariableByComputerName('data_dir'),
+def loadSkeletonDataFromVideosFolders(base_dir=funcH.getVariableByComputerName('base_dir'),
+                                      data_dir=funcH.getVariableByComputerName('data_dir'),
                                       loadIfExist=True, numOfSigns=11):
 
     videosFolderName = 'neuralNetHandVideos_' + str(numOfSigns)
@@ -43,8 +43,8 @@ def loadSkeletonDataFromVideosFolders(base_dir = funcH.getVariableByComputerName
     # 'skeletonFeats_41.npy' or 'skeletonFeats_11.npy'
     featsFileName = getFileName(dataToUse='skeleton', numOfSigns=numOfSigns, expectedFileType='Data')
     featsFileNameFull = data_dir + os.sep + featsFileName
-    labelsFileNameFull = data_dir + os.sep + getFileName(numOfSigns=numOfSigns, expectedFileType='Labels')
-    detailedLabelsFileNameFull = data_dir + os.sep + getFileName(numOfSigns=numOfSigns, expectedFileType='DetailedLabels')
+    labelsFileNameFull = data_dir + os.sep + getFileName(dataToUse='skeleton',numOfSigns=numOfSigns, expectedFileType='Labels')
+    detailedLabelsFileNameFull = data_dir + os.sep + getFileName(dataToUse='skeleton',numOfSigns=numOfSigns, expectedFileType='DetailedLabels')
 
     if loadIfExist and os.path.isfile(featsFileNameFull) and os.path.isfile(labelsFileNameFull) and os.path.isfile(detailedLabelsFileNameFull):
         print('loading exported feat_set from(', featsFileNameFull, ')')
@@ -133,8 +133,8 @@ def loadData_hog(base_dir = funcH.getVariableByComputerName('base_dir'), data_di
 
     hogFeatsFileName = getFileName(dataToUse='hog', numOfSigns=numOfSigns, expectedFileType='Data')
     hogFeatsFileNameFull = data_dir + os.sep + hogFeatsFileName
-    labelsFileNameFull = data_dir + os.sep + getFileName(numOfSigns=numOfSigns, expectedFileType='Labels')
-    detailedLabelsFileNameFull = data_dir + os.sep + getFileName(numOfSigns=numOfSigns, expectedFileType='DetailedLabels')
+    labelsFileNameFull = data_dir + os.sep + getFileName(dataToUse='hog', numOfSigns=numOfSigns, expectedFileType='Labels')
+    detailedLabelsFileNameFull = data_dir + os.sep + getFileName(dataToUse='hog', numOfSigns=numOfSigns, expectedFileType='DetailedLabels')
 
     if loadHogIfExist and os.path.isfile(hogFeatsFileNameFull) and os.path.isfile(labelsFileNameFull) and os.path.isfile(detailedLabelsFileNameFull):
         print('loading exported feat_set from(', hogFeatsFileNameFull, ')')
@@ -197,7 +197,7 @@ def loadData_hog(base_dir = funcH.getVariableByComputerName('base_dir'), data_di
                                 feat_set_video = feat_current
                             else:
                                 feat_set_video = np.vstack((feat_set_video, feat_current))
-                        elif frame.endswith('.txt'):
+                        elif frame.endswith('_labels.txt'):
                             labels = np.loadtxt(os.path.join(video_folder, frame))
                     np.savez(hogFeats_curVideo_FileNameFull, feat_set_video=feat_set_video, labels=labels)
 
@@ -230,17 +230,20 @@ def loadData_hog(base_dir = funcH.getVariableByComputerName('base_dir'), data_di
 
     return feat_set, labels_all, detailedLabels_all
 
-def getCorrespondentFrames(base_dir, data_dir, numOfSigns=11, featType='hog'):
+def getCorrespondentFrames(base_dir, data_dir, featType, numOfSigns=11):
 
     videosFolderName = 'neuralNetHandVideos_' + str(numOfSigns)
-    hogFeatsFileName = getFileName(dataToUse='hog', numOfSigns=numOfSigns, expectedFileType='Data') # 'hogFeats_41.npy'
-    detailedLabelsFileName = getFileName(numOfSigns=numOfSigns, expectedFileType='DetailedLabels') # 'detailedLabels_41.npy'
+    featsFileName = getFileName(dataToUse=featType, numOfSigns=numOfSigns, expectedFileType='Data') # 'hogFeats_41.npy', 'skeletonFeats_41.npy'
+    detailedLabelsFileName = getFileName(dataToUse=featType, numOfSigns=numOfSigns, expectedFileType='DetailedLabels') # 'detailedLabels_41.npy'
 
 
     base_dir_nn = os.path.join(base_dir, videosFolderName)
     detailedLabelsFileNameFull = data_dir + os.sep + detailedLabelsFileName
     detailedLabels_all = np.load(detailedLabelsFileNameFull)
 
+    featSet = np.load(featsFileName)
+
+    print(featSet.shape)
     print(detailedLabels_all.shape)
 
     signNames = np.sort(os.listdir(base_dir_nn))
@@ -274,19 +277,13 @@ def getCorrespondentFrames(base_dir, data_dir, numOfSigns=11, featType='hog'):
                     #frCnt_1 = len(np.sort(frameList_v1))
                     #frCnt_2 = len(np.sort(frameList_v2))
 
-                    hog_v1 = video_folder_1 + os.sep + hogFeatsFileName.replace('.npy', '.npz')
-                    npzfile = np.load(hog_v1)
-                    feat_set_v1 = npzfile['feat_set_video']
-                    #labels_v1 = npzfile['labels']
                     detailedLabels_cur_vid_rows_rel = np.argwhere(detailedLabels_all[detailedLabels_all_sign_rows, 1] == v1+1).flatten()
                     frIDs_v1 = detailedLabels_all_sign_rows[detailedLabels_cur_vid_rows_rel]
+                    feat_set_v1 = featSet[detailedLabels_cur_vid_rows_rel, :]
 
-                    hog_v2 = video_folder_2 + os.sep + hogFeatsFileName.replace('.npy', '.npz')
-                    npzfile = np.load(hog_v2)
-                    feat_set_v2 = npzfile['feat_set_video']
-                    #labels_v2 = npzfile['labels']
                     detailedLabels_cur_vid_rows_rel = np.argwhere(detailedLabels_all[detailedLabels_all_sign_rows, 1] == v2+1).flatten()
                     frIDs_v2 = detailedLabels_all_sign_rows[detailedLabels_cur_vid_rows_rel]
+                    feat_set_v2 = featSet[detailedLabels_cur_vid_rows_rel, :]
 
                     if feat_set_v1.shape[0]!=frIDs_v1.shape[0] or feat_set_v2.shape[0]!=frIDs_v2.shape[0]:
                         print('s_', signCur, ', v ', videos[v1], ' to vCnt-', vidCnt - v1)
@@ -317,7 +314,7 @@ def getCorrespondentFrames(base_dir, data_dir, numOfSigns=11, featType='hog'):
             corrFramesAll = np.hstack((corrFramesAll, corrFramesSign))
     return corrFramesAll, detailedLabels_all
 
-def applyPCA2Data(feat_set, data_dir, data_dim, dataToUse='hog', numOfSigns=11, loadIfExist = True):
+def applyPCA2Data(feat_set, data_dir, data_dim, dataToUse, numOfSigns=11, loadIfExist = True):
     pcaFeatsFileName = getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='PCA')
     hogFeatsFileName = getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='Data')
 

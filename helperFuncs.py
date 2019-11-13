@@ -12,6 +12,7 @@ from scipy.spatial.distance import cdist
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 from pandas import DataFrame
+import scipy.io
 
 def is_number(s):
     try:
@@ -331,3 +332,14 @@ def loadCorrespondantFrames(corrFramesFileNameFull):
     corrFramesAll = np.load(corrFramesFileNameFull)
     return corrFramesAll
 
+#mat = loadMatFile('/mnt/USB_HDD_1TB/neuralNetHandVideos_11/surfImArr_all_pca_256.mat')
+def loadMatFile(matFileNameFull):
+    mat_contents = scipy.io.loadmat(matFileNameFull)
+    print(sorted(mat_contents.keys()))
+    return mat_contents
+
+#features, labels = getFeatsFromMat(mat,'dataCurdim', 'labelVecs_all')
+def getFeatsFromMat(mat, featureStr, labelStr):
+    features = np.asarray(mat[featureStr], dtype=float)
+    labels = np.asarray(mat[labelStr], dtype=int)
+    return features, labels
