@@ -241,7 +241,7 @@ def getCorrespondentFrames(base_dir, data_dir, featType, numOfSigns=11):
     detailedLabelsFileNameFull = data_dir + os.sep + detailedLabelsFileName
     detailedLabels_all = np.load(detailedLabelsFileNameFull)
 
-    featSet = np.load(featsFileName)
+    featSet = np.load(data_dir + os.sep + featsFileName)
 
     print(featSet.shape)
     print(detailedLabels_all.shape)
