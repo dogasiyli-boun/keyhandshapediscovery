@@ -5,6 +5,7 @@ import tensorflow as tf
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import normalized_mutual_info_score as nmi
 from sklearn.cluster import KMeans
+from sklearn.mixture import GaussianMixture
 from sklearn.decomposition import PCA
 from sklearn.metrics.cluster import normalized_mutual_info_score as nmi_sc
 
@@ -165,6 +166,19 @@ def getNonZeroLabels(labVec, predictedKlusters):
     predictedKlusters = predictedKlusters[np.where(labVec)]
     labVec = labVec[np.where(labVec)]
     return labVec, predictedKlusters
+
+def clusterData(featVec, n_clusters, applyNormalization=True, applyPca=True, clusterModel='Kmeans'):
+    featVec = applyMatTransform(np.array(featVec), applyNormalization, applyPca)
+    df = DataFrame(featVec)
+
+    if clusterModel == 'Kmeans':
+        kmeans_result = KMeans(n_clusters=n_clusters).fit(df)
+        predictedKlusters = kmeans_result.labels_.astype(float)
+    elif clusterModel == 'GMM_full':
+        predictedKlusters = GaussianMixture(n_components=n_clusters, covariance_type='full').fit_predict(df)
+    elif clusterModel == 'GMM_diag':
+        predictedKlusters = GaussianMixture(n_components=n_clusters, covariance_type='diag').fit_predict(df)
+    return np.asarray(predictedKlusters, dtype=int)
 
 def get_nmi(featVec, labVec, n_clusters, applyNormalization=True, applyPca=True):
     featVec = applyMatTransform(np.array(featVec), applyNormalization, applyPca)
@@ -334,12 +348,28 @@ def loadCorrespondantFrames(corrFramesFileNameFull):
 
 #mat = loadMatFile('/mnt/USB_HDD_1TB/neuralNetHandVideos_11/surfImArr_all_pca_256.mat')
 def loadMatFile(matFileNameFull):
-    mat_contents = scipy.io.loadmat(matFileNameFull)
-    print(sorted(mat_contents.keys()))
-    return mat_contents
+    mat = scipy.io.loadmat(matFileNameFull)
+    print(sorted(mat.keys()))
+    return mat
 
-#features, labels = getFeatsFromMat(mat,'dataCurdim', 'labelVecs_all')
-def getFeatsFromMat(mat, featureStr, labelStr):
-    features = np.asarray(mat[featureStr], dtype=float)
-    labels = np.asarray(mat[labelStr], dtype=int)
-    return features, labels
+def getMappedKlusters(predictions, Kluster2ClassesK):
+    uniqPredictions = np.unique(predictions)
+    uniqClasses = np.unique(Kluster2ClassesK)
+
+    mappedKlusters = np.copy(predictions)
+    mappedKlustersSampleCnt = np.zeros([len(Kluster2ClassesK), len(uniqClasses)], dtype=int)
+
+    for k in range(len(Kluster2ClassesK)):
+        # cluster(k) will be mapped to Kluster2ClassesK[k]
+        # predictions equal to k, will be mapped to Kluster2ClassesK[k]
+
+        c = Kluster2ClassesK[k]  # the classID that kluster k will be mapped to
+
+        slct = np.argwhere(predictions == k)  # predictions that are equal to k
+
+        mappedKlusters[slct] = c  # map them to real classes
+
+        mappedKlustersSampleCnt[k, c - 1] = len(slct)  # how many k's are mapped to c
+
+    mappedKlustersSampleCnt = mappedKlustersSampleCnt.squeeze()
+    return mappedKlusters, mappedKlustersSampleCnt
