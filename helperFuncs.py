@@ -84,6 +84,10 @@ def normalize(x, axis=0):
     s = np.sum(x, axis=axis, keepdims=True)
     return x / s
 
+def normalize_max(x, axis=0):
+    s = np.max(x, axis=axis, keepdims=True)
+    return x / s
+
 def discretizeW(W, printAssignments=False):
     rows2ColAssignments = np.argmax(W, axis=1) + 1
     if printAssignments:
@@ -140,13 +144,20 @@ def get_NMI_Acc(non_zero_labels, non_zero_predictions):
     acc_cur = getAccFromConf(non_zero_labels, non_zero_predictions)
     return nmi_cur, acc_cur
 
-def applyMatTransform(featVec, applyNormalization=True, applyPca=True, whiten=True):
+def applyMatTransform(featVec, applyNormalization=True, applyPca=True, whiten=True, verbose=0):
+    exp_var_rat = []
     if applyPca:
         pca = PCA(whiten=whiten, svd_solver='full')
         featVec = pca.fit_transform(featVec)
+        exp_var_rat = np.cumsum(pca.explained_variance_ratio_)
+        if verbose > 0:
+            print('Max of featsPCA = ', np.amax(featVec), ', Min of featsPCA = ', np.amin(featVec))
     if applyNormalization:
-        featVec = featVec / np.linalg.norm(featVec)
-    return featVec
+        #featVec = featVec / np.linalg.norm(featVec)
+        featVec = normalize_max(featVec, axis=0)
+        if verbose > 0:
+            print('Max of normedFeats = ', np.amax(featVec), ', Min of normedFeats = ', np.amin(featVec))
+    return featVec, exp_var_rat
     # X = np.array([[3, 5, 7, 9, 11], [4, 6, 15, 228, 245], [28, 19, 225, 149, 81], [18, 9, 125, 49, 2181], [8, 9, 25, 149, 81], [8, 9, 25, 49, 81], [8, 19, 25, 49, 81]])
     # print('input array : \n', X)
     # print('samples-rows : ', X.shape[0], ' / feats-cols : ', X.shape[1])
@@ -168,7 +179,7 @@ def getNonZeroLabels(labVec, predictedKlusters):
     return labVec, predictedKlusters
 
 def clusterData(featVec, n_clusters, applyNormalization=True, applyPca=True, clusterModel='Kmeans'):
-    featVec = applyMatTransform(np.array(featVec), applyNormalization, applyPca)
+    featVec, exp_var_rat = applyMatTransform(np.array(featVec), applyNormalization, applyPca)
     df = DataFrame(featVec)
 
     if clusterModel == 'Kmeans':
@@ -181,7 +192,7 @@ def clusterData(featVec, n_clusters, applyNormalization=True, applyPca=True, clu
     return np.asarray(predictedKlusters, dtype=int)
 
 def get_nmi(featVec, labVec, n_clusters, applyNormalization=True, applyPca=True):
-    featVec = applyMatTransform(np.array(featVec), applyNormalization, applyPca)
+    featVec, exp_var_rat = applyMatTransform(np.array(featVec), applyNormalization, applyPca)
     df = DataFrame(featVec)
 
     kmeans_result = KMeans(n_clusters=n_clusters).fit(df)
@@ -373,3 +384,14 @@ def getMappedKlusters(predictions, Kluster2ClassesK):
 
     mappedKlustersSampleCnt = mappedKlustersSampleCnt.squeeze()
     return mappedKlusters, mappedKlustersSampleCnt
+
+def analyzeClusterDistribution(predictedKlusters, n_clusters, verbose=0):
+    histOfClust, binIDs = np.histogram(predictedKlusters, np.unique(predictedKlusters))
+    numOfBins = len(binIDs)
+    numOf_1_sample_bins = np.sum(histOfClust==1)
+    if verbose>0:
+        print(n_clusters, " expected - ", numOfBins, " bins extracted. ", numOf_1_sample_bins, " of them have 1 sample")
+    histSortedInv = np.sort(histOfClust)[::-1]
+    if verbose>1:
+        print("hist counts ascending = ", histSortedInv[0:10])
+    return numOf_1_sample_bins, histSortedInv
