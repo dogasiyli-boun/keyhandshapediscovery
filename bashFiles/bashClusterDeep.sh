@@ -15,8 +15,9 @@ then
   source activate ${folderVenv}
 elif [ $curHost == "doga-MSISSD" ];
 then
-  fc="??/keyhandshapediscovery/"
-  fv="??/envs/"
+  readonly folderCode="/mnt/USB_HDD_1TB/GitHub/keyhandshapediscovery/"
+  readonly folderVenv="/mnt/USB_HDD_1TB/GitHub/keyhandshapediscovery/venv/bin/activate"
+  source ${folderVenv}
 elif [ $curHost == "doga-msi-ubu" ];
 then
   readonly folderCode="/home/doga/GithUBuntU/keyhandshapediscovery/"
@@ -48,7 +49,7 @@ else
   declare -a pcaCount_array
   declare -a rnnDataMode_array
   applyCorr=0
-  numOfSigns=11
+  numOfSigns=41
   randomSeed=5
   appendEpochBinary=0
   posterior_dim_array=(32 64 128 256)
