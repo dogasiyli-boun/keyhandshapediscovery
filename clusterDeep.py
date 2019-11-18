@@ -260,7 +260,6 @@ exp_name, subEpochs, trainParams, rnnParams = getInitParams(trainParams, modelPa
 csv_name, model_name, outdir = funcPRH.createExperimentDirectories(results_dir, exp_name)
 model, modelTest, ES = funcM.getModels(data_dim=data_dim, modelParams=modelParams, rnnParams=rnnParams)
 
-
 checkpointer = ModelCheckpoint(filepath=model_name, verbose=0, save_best_only=False, period=1)
 csv_logger = CSVLogger(csv_name, append=True, separator=';')
 callbacks = [csv_logger, ES, checkpointer]
@@ -278,7 +277,9 @@ trainParams["epochFr"] = epochFr
 trainParams["epochTo"] = epochTo
 trainParams["corr_indis_a"] = np.mod(epochFr, 2)
 if trainParams["applyCorr"] >= 2:
-    trainParams["corrFramesAll"] = funcD.getCorrespondentFrames(base_dir, data_dir, featType=modelParams["dataToUse"], numOfSigns=numOfSigns, pcaCount=-1, expectedFileType='Data')
+    trainParams["corrFramesAll"] = funcD.getCorrespondentFrames(base_dir, data_dir, featType=modelParams["dataToUse"],
+                                                                numOfSigns=numOfSigns, pcaCount=-1,
+                                                                expectedFileType='Data')
 
 print('started training')
 
