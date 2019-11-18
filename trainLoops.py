@@ -27,15 +27,15 @@ def getCorrespondanceIDs(sampleCount, trainParams, epochID):
     if corrMode:
         corrFramesAll = trainParams["corrFramesAll"]
         if trainParams["corr_randMode"]:
-            a_inds = np.random.randint(2, size=np.size(corrFramesAll, 1))
-            col_idx = np.arange(np.size(corrFramesAll, 1))
-            inIdx = corrFramesAll[a_inds, col_idx]
-            outIdx = corrFramesAll[1 - a_inds, col_idx]
+            a_inds = np.random.randint(2, size=np.size(corrFramesAll[0], 1))
+            col_idx = np.arange(np.size(corrFramesAll[0], 1))
+            inIdx = corrFramesAll[0][a_inds, col_idx]
+            outIdx = corrFramesAll[0][1 - a_inds, col_idx]
             corr_indis_a = a_inds[0:5]
         else:
             corr_indis_a = np.mod(corr_indis_a + 1, 2)  # switches between 0 and 1
-            inIdx = corrFramesAll[corr_indis_a, :]
-            outIdx = corrFramesAll[1 - corr_indis_a, :]
+            inIdx = corrFramesAll[0][corr_indis_a, :]
+            outIdx = corrFramesAll[0][1 - corr_indis_a, :]
             trainParams["corr_indis_a"] = corr_indis_a
         print('corrMode on, a_ind(', corr_indis_a, '), b_ind(', 1 - corr_indis_a, ')')
     else:

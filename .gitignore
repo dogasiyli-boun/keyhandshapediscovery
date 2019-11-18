@@ -8,3 +8,5 @@ venv/
 *.h5
 
 *.json
+
+.ipynb_checkpoints/

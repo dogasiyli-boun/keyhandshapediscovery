@@ -14,6 +14,7 @@ import modelFuncs as funcM
 import helperFuncs as funcH
 import dataLoaderFuncs as funcD
 import trainLoops as funcTL
+import projRelatedHelperFuncs as funcPRH
 
 import sys
 import getopt
@@ -31,10 +32,14 @@ def parseArgs(argv):
                "vs": "-pd", "defaultVal": 256, "dvSet": True, "paramType": "int"}
     param03 = {"paramName": "weight_of_regularizer", "possibleValues": "{0.2,0.5,1.0}",
                "vs": "-wr", "defaultVal": 1.0, "dvSet": True, "paramType": "float"}
-    param04 = {"paramName": "dataToUse", "possibleValues": "{'hog','resnet18','sn256', 'skeleton'}",
+    param04 = {"paramName": "dataToUse", "possibleValues": "{'hog','resnet18','sn', 'skeleton'}",
                "vs": "-dt", "defaultVal": "hog", "dvSet": True, "paramType": "str"}
+    param16 = {"paramName": "pcaCount", "possibleValues": "{-1, 32, 64, 96, 256, 512, 1024}",
+               "vs": "-pc", "defaultVal": -1, "dvSet": True, "paramType": "int"}
+    param17 = {"paramName": "numOfSigns", "possibleValues": "{11, 41}",
+               "vs": "-ns", "defaultVal": 11, "dvSet": True, "paramType": "int"}
     # model and data parameters
-    params_model_data = [param01, param02, param03, param04]
+    params_model_data = [param01, param02, param03, param04, param16, param17]
 
     # train parameters
     # --epochs 50 --appendEpochBinary 0 --batch_size 64 --applyCorr 0 --corr_randMode 0
@@ -171,7 +176,9 @@ def parseArgs(argv):
         "trainMode": valuesParamsCur["trainMode"],
         "posterior_dim": valuesParamsCur["posterior_dim"],
         "weight_of_regularizer": valuesParamsCur["weight_of_regularizer"],
-        "dataToUse": valuesParamsCur["dataToUse"]
+        "dataToUse": valuesParamsCur["dataToUse"],
+        "pcaCount": valuesParamsCur["pcaCount"],
+        "numOfSigns": valuesParamsCur["numOfSigns"]
     }
     trainParams = {
         "epochs": valuesParamsCur["epochs"],
@@ -191,7 +198,6 @@ def parseArgs(argv):
     return modelParams, trainParams, rnnParams
 
 def getInitParams(trainParams, modelParams, rnnParams):
-    data_dim = 256  # PCA sonrasi LBP dimension
     subEpochs = 1
 
     if modelParams["trainMode"] == "sae":
@@ -208,57 +214,9 @@ def getInitParams(trainParams, modelParams, rnnParams):
         assert (rnnParams["dataMode"] == 0), "rnnDataMode(" + str(rnnParams["dataMode"]) + ") must be 0"
         assert (trainParams["applyCorr"] >= 2), "applyCorr(" + str(trainParams["applyCorr"]) + ") must be >= 2"
 
-    if modelParams["trainMode"] == "corsa":
-        exp_name  = str(modelParams["trainMode"]) + \
-                    '_pd' + str(modelParams["posterior_dim"]) + \
-                    '_wr' + str(modelParams["weight_of_regularizer"]) + \
-                    '_dt' + str(modelParams["dataToUse"]) + \
-                    '_bs' + str(trainParams["batch_size"]) + \
-                    '_dM' + str(rnnParams["dataMode"]) + \
-                    '_ts' + str(rnnParams["timesteps"]) + \
-                    '_cp' + str(trainParams["applyCorr"]) + \
-                    '_cRM' + str(trainParams["corr_randMode"])
-        if rnnParams["dropout"] > 0:
-            exp_name += '_do' + str(rnnParams["dropout"])
-    elif modelParams["trainMode"] == "rsa":
-        exp_name  = str(modelParams["trainMode"]) + \
-                    '_pd' + str(modelParams["posterior_dim"]) + \
-                    '_wr' + str(modelParams["weight_of_regularizer"]) + \
-                    '_dt' + str(modelParams["dataToUse"]) + \
-                    '_bs' + str(trainParams["batch_size"]) + \
-                    '_dM' + str(rnnParams["dataMode"]) + \
-                    '_ts' + str(rnnParams["timesteps"])
-        if rnnParams["dropout"] > 0:
-            exp_name += '_do' + str(rnnParams["dropout"])
-        if rnnParams["dataMode"] == 1:
-            exp_name += '_pc' + str(rnnParams["patchFromEachVideo"])
-        if rnnParams["dataMode"] == 2:
-            exp_name += '_fo' + str(rnnParams["frameOverlap"])
-    elif modelParams["trainMode"] == "cosae":
-        exp_name  = str(modelParams["trainMode"]) + \
-                    '_pd' + str(modelParams["posterior_dim"]) + \
-                    '_wr' + str(modelParams["weight_of_regularizer"]) + \
-                    '_dt' + str(modelParams["dataToUse"]) + \
-                    '_bs' + str(trainParams["batch_size"]) + \
-                    '_cp' + str(trainParams["applyCorr"]) + \
-                    '_cRM' + str(trainParams["corr_randMode"])
-    elif modelParams["trainMode"] == "sae":
-        exp_name  = str(modelParams["trainMode"]) + \
-                    '_pd' + str(modelParams["posterior_dim"]) + \
-                    '_wr' + str(modelParams["weight_of_regularizer"]) + \
-                    '_dt' + str(modelParams["dataToUse"]) + \
-                    '_bs' + str(trainParams["batch_size"])
+    exp_name = funcPRH.createExperimentName(trainParams=trainParams, modelParams=modelParams, rnnParams=rnnParams)
 
-    return exp_name, subEpochs, data_dim, trainParams, rnnParams
-
-def getDirectories(results_dir, exp_name):
-    csv_name = os.path.join(results_dir, 'epochs') + os.sep + exp_name + '.csv'
-    model_name = os.path.join(results_dir, 'models') + os.sep + exp_name + '.h5'
-    outdir = os.path.join(results_dir, 'results', exp_name)
-    funcH.createDirIfNotExist(os.path.join(results_dir, 'epochs'))
-    funcH.createDirIfNotExist(os.path.join(results_dir, 'models'))
-    funcH.createDirIfNotExist(outdir)
-    return csv_name, model_name, outdir
+    return exp_name, subEpochs, trainParams, rnnParams
 
 def initEpochIDsModelParams(trainFromScratch, appendEpochBinary, model, model_name, predictionLabelsDir):
     if not trainFromScratch and os.path.isfile(model_name):
@@ -274,19 +232,6 @@ def initEpochIDsModelParams(trainFromScratch, appendEpochBinary, model, model_na
 
     print("model will run epoch from(", str(epochFr), ") to(", str(epochTo), ")")
     return model, epochFr, epochTo
-
-def loadData(modelParams, numOfSigns, data_dir, base_dir, data_dim):
-    fileName_labels = funcD.getFileName(dataToUse=modelParams["dataToUse"], numOfSigns=numOfSigns, expectedFileType='Labels')
-    fileName_detailedLabels = funcD.getFileName(dataToUse=modelParams["dataToUse"], numOfSigns=numOfSigns, expectedFileType='DetailedLabels')
-
-    labels_all = funcD.loadFileIfExist(data_dir, fileName_labels)
-    detailed_labels_all = funcD.loadFileIfExist(data_dir, fileName_detailedLabels)
-
-    feat_set_pca = funcD.loadPCAData(dataToUse=modelParams["dataToUse"], skipLoadOfOriginalData=True,
-                                     numOfSigns=numOfSigns, data_dim=data_dim,
-                                     data_dir=data_dir, base_dir=base_dir)
-    return feat_set_pca, labels_all, detailed_labels_all
-
 
 ## extra imports to set GPU options
 ################################### # TensorFlow wizardry 
@@ -307,12 +252,14 @@ modelParams, trainParams, rnnParams = parseArgs(argv)
 seed(trainParams["randomSeed"])
 tf.set_random_seed(seed=trainParams["randomSeed"])
 
-exp_name, subEpochs, data_dim, trainParams, rnnParams = getInitParams(trainParams, modelParams, rnnParams)
-csv_name, model_name, outdir = getDirectories(results_dir, exp_name)
+numOfSigns = modelParams["numOfSigns"]
+feat_set, labels_all, detailed_labels_all = funcPRH.loadData(modelParams, numOfSigns, data_dir)
+data_dim = feat_set.shape[1]
+
+exp_name, subEpochs, trainParams, rnnParams = getInitParams(trainParams, modelParams, rnnParams)
+csv_name, model_name, outdir = funcPRH.createExperimentDirectories(results_dir, exp_name)
 model, modelTest, ES = funcM.getModels(data_dim=data_dim, modelParams=modelParams, rnnParams=rnnParams)
 
-numOfSigns = 41
-feat_set_pca, labels_all, detailed_labels_all = loadData(modelParams, numOfSigns, data_dir, base_dir, data_dim)
 
 checkpointer = ModelCheckpoint(filepath=model_name, verbose=0, save_best_only=False, period=1)
 csv_logger = CSVLogger(csv_name, append=True, separator=';')
@@ -331,8 +278,7 @@ trainParams["epochFr"] = epochFr
 trainParams["epochTo"] = epochTo
 trainParams["corr_indis_a"] = np.mod(epochFr, 2)
 if trainParams["applyCorr"] >= 2:
-    corrFramesSignFileName = funcD.getFileName(dataToUse=modelParams["dataToUse"], numOfSigns=numOfSigns, expectedFileType='CorrespendenceVec')
-    trainParams["corrFramesAll"] = funcH.loadCorrespondantFrames(data_dir + os.sep + corrFramesSignFileName)
+    trainParams["corrFramesAll"] = funcD.getCorrespondentFrames(base_dir, data_dir, featType=modelParams["dataToUse"], numOfSigns=numOfSigns, pcaCount=-1, expectedFileType='Data')
 
 print('started training')
 
@@ -344,6 +290,6 @@ directoryParams = {
 }
 
 if modelParams["trainMode"] == "rsa" or modelParams["trainMode"] == "corsa":
-    funcTL.trainRNN(trainParams, modelParams, rnnParams, detailed_labels_all, model, modelTest, feat_set_pca, labels_all, directoryParams)
+    funcTL.trainRNN(trainParams, modelParams, rnnParams, detailed_labels_all, model, modelTest, feat_set, labels_all, directoryParams)
 else:
-    funcTL.trainFramewise(trainParams, modelParams, model, modelTest, feat_set_pca, labels_all, directoryParams)
+    funcTL.trainFramewise(trainParams, modelParams, model, modelTest, feat_set, labels_all, directoryParams)

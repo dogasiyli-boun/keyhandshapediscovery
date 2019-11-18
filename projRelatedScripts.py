@@ -62,9 +62,10 @@ def run4All_createData():
         for sign_count in [11, 41]:
             checkCreateData2Use(sign_count=sign_count, dataToUse=dataToUse, recreate=False, recreate_hog=False)
 
-def runForBaseClusterResults():
+def runForBaseClusterResults(randomSeed = 5, clusterModels = ['Kmeans', 'GMM_diag', 'GMM_full', 'Spectral']):
     data_dir = funcH.getVariableByComputerName('data_dir')
     results_dir = funcH.getVariableByComputerName('results_dir')
+
     for dataToUse in ["hog", "skeleton", "sn"]:
         for numOfSigns in [11, 41]:
             if dataToUse == 'sn' or dataToUse == 'hog':
@@ -72,7 +73,12 @@ def runForBaseClusterResults():
             elif dataToUse == 'skeleton':
                 dimArray = [-1, 32, 64, 96]
             for dims in dimArray:
-                funcHP.runClusteringOnFeatSet(data_dir=data_dir, results_dir=results_dir, dataToUse=dataToUse, numOfSigns=numOfSigns, pcaCount=dims, expectedFileType='Data')
+                funcHP.runClusteringOnFeatSet(data_dir=data_dir, results_dir=results_dir, dataToUse=dataToUse,
+                                              numOfSigns=numOfSigns, pcaCount=dims, expectedFileType='Data',
+                                              clusterModels=clusterModels, randomSeed=randomSeed)
 
-#resultDict = funcHP.runClusteringOnFeatSet(data_dir=funcH.getVariableByComputerName('data_dir'), results_dir=funcH.getVariableByComputerName('results_dir'), dataToUse='skeleton', numOfSigns=11, pcaCount=32, expectedFileType='Data')
-#runForBaseClusterResults()
+#resultDict = funcHP.runClusteringOnFeatSet(data_dir=funcH.getVariableByComputerName('data_dir'),
+#                                           results_dir=funcH.getVariableByComputerName('results_dir'),
+#                                           dataToUse='skeleton', numOfSigns=11, pcaCount=32,
+#                                           expectedFileType='Data', clusterModels=['Kmeans', 'GMM_diag'], randomSeed=5)
+#runForBaseClusterResults(randomSeed = 5)

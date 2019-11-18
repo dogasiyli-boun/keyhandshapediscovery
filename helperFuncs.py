@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import normalized_mutual_info_score as nmi
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, SpectralClustering
 from sklearn.mixture import GaussianMixture
 from sklearn.decomposition import PCA
 from sklearn.metrics.cluster import normalized_mutual_info_score as nmi_sc
@@ -48,7 +48,7 @@ def getVariableByComputerName(variableName):
         if curCompName == 'doga-MSISSD':
             base_dir = '/mnt/USB_HDD_1TB'  # for bogazici kasa
         elif curCompName == 'WsUbuntu05':
-            base_dir = '/home/dg/DataPath'  # for WS Doga DHO
+            base_dir = '/media/dg/SSD_Data/DataPath'  # for WS Doga DHO
         elif curCompName == 'doga-msi-ubu':
             base_dir = '/home/doga/DataFolder'  # for laptop
         else:
@@ -58,7 +58,7 @@ def getVariableByComputerName(variableName):
         if curCompName == 'doga-MSISSD':
             data_dir = '/mnt/USB_HDD_1TB/bdData'  # for bogazici kasa
         elif curCompName == 'WsUbuntu05':
-            data_dir = '/home/dg/DataPath/bdData'  # for WS Doga DHO
+            data_dir = '/media/dg/SSD_Data/DataPath/bdData'  # for WS Doga DHO
         elif curCompName == 'doga-msi-ubu':
             data_dir = '/home/doga/DataFolder/bdData'  # for laptop
         else:
@@ -68,7 +68,7 @@ def getVariableByComputerName(variableName):
         if curCompName == 'doga-MSISSD':
             results_dir = '/mnt/USB_HDD_1TB/bdResults'  # for bogazici kasa
         elif curCompName == 'WsUbuntu05':
-            results_dir = '/home/dg/DataPath/bdResults'  # for WS Doga DHO
+            results_dir = '/media/dg/SSD_Data/DataPath/bdResults'  # for WS Doga DHO
         elif curCompName == 'doga-msi-ubu':
             results_dir = '/home/doga/DataFolder/bdResults'  # for laptop
         else:
@@ -189,6 +189,11 @@ def clusterData(featVec, n_clusters, applyNormalization=True, applyPca=True, clu
         predictedKlusters = GaussianMixture(n_components=n_clusters, covariance_type='full').fit_predict(df)
     elif clusterModel == 'GMM_diag':
         predictedKlusters = GaussianMixture(n_components=n_clusters, covariance_type='diag').fit_predict(df)
+    elif clusterModel == 'Spectral':
+        sc = SpectralClustering(n_clusters=n_clusters, affinity='rbf', random_state=0)
+        sc_clustering = sc.fit(featVec)
+        predictedKlusters = sc_clustering.labels_
+
     return np.asarray(predictedKlusters, dtype=int)
 
 def get_nmi(featVec, labVec, n_clusters, applyNormalization=True, applyPca=True):
@@ -352,10 +357,6 @@ def rnn_getValidIDs(frameCnt, timesteps, verbose=0):
         print('vidIDsValid = ', vidIDsValid)
         print('frameIDsForLabelAcc = ', frameIDsForLabelAcc)
     return vidIDsValid, frameIDsForLabelAcc
-
-def loadCorrespondantFrames(corrFramesFileNameFull):
-    corrFramesAll = np.load(corrFramesFileNameFull)
-    return corrFramesAll
 
 #mat = loadMatFile('/mnt/USB_HDD_1TB/neuralNetHandVideos_11/surfImArr_all_pca_256.mat')
 def loadMatFile(matFileNameFull):

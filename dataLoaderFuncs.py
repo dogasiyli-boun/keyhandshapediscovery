@@ -252,8 +252,7 @@ def getCorrespondentFrames(base_dir, data_dir, featType, numOfSigns=11, pcaCount
 
     featSet = np.load(data_dir + os.sep + featsFileName)
 
-    print(featSet.shape)
-    print(detailedLabels_all.shape)
+    print('within getCorrespondentFrames func: featSet.shape(', featSet.shape, '), detailedLabels_all.shape(', detailedLabels_all.shape, ')')
 
     if os.path.isfile(corrFramesFileName):
         corrFramesAll = np.load(corrFramesFileName)

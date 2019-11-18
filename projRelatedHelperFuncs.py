@@ -2,6 +2,65 @@ import helperFuncs as funcH
 import dataLoaderFuncs as funcD
 import numpy as np
 import os
+from numpy.random import seed
+import tensorflow as tf
+import pandas as pd
+import matplotlib as plt
+
+def createExperimentName(trainParams, modelParams, rnnParams):
+
+    pcaCountStr = str(modelParams["pcaCount"]) if modelParams["pcaCount"] > 0 else "Feats"
+
+    if modelParams["trainMode"] == "corsa":
+        exp_name  = str(modelParams["trainMode"]) + \
+                    '_pd' + str(modelParams["posterior_dim"]) + \
+                    '_wr' + str(modelParams["weight_of_regularizer"]) + \
+                    '_' + str(modelParams["dataToUse"]) + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
+                    '_bs' + str(trainParams["batch_size"]) + \
+                    '_dM' + str(rnnParams["dataMode"]) + \
+                    '_ts' + str(rnnParams["timesteps"]) + \
+                    '_cp' + str(trainParams["applyCorr"]) + \
+                    '_cRM' + str(trainParams["corr_randMode"])
+        if rnnParams["dropout"] > 0:
+            exp_name += '_do' + str(rnnParams["dropout"])
+    elif modelParams["trainMode"] == "rsa":
+        exp_name  = str(modelParams["trainMode"]) + \
+                    '_pd' + str(modelParams["posterior_dim"]) + \
+                    '_wr' + str(modelParams["weight_of_regularizer"]) + \
+                    '_' + str(modelParams["dataToUse"]) + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
+                    '_bs' + str(trainParams["batch_size"]) + \
+                    '_dM' + str(rnnParams["dataMode"]) + \
+                    '_ts' + str(rnnParams["timesteps"])
+        if rnnParams["dropout"] > 0:
+            exp_name += '_do' + str(rnnParams["dropout"])
+        if rnnParams["dataMode"] == 1:
+            exp_name += '_pc' + str(rnnParams["patchFromEachVideo"])
+        if rnnParams["dataMode"] == 2:
+            exp_name += '_fo' + str(rnnParams["frameOverlap"])
+    elif modelParams["trainMode"] == "cosae":
+        exp_name  = str(modelParams["trainMode"]) + \
+                    '_pd' + str(modelParams["posterior_dim"]) + \
+                    '_wr' + str(modelParams["weight_of_regularizer"]) + \
+                    '_' + str(modelParams["dataToUse"]) + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
+                    '_bs' + str(trainParams["batch_size"]) + \
+                    '_cp' + str(trainParams["applyCorr"]) + \
+                    '_cRM' + str(trainParams["corr_randMode"])
+    elif modelParams["trainMode"] == "sae":
+        exp_name  = str(modelParams["trainMode"]) + \
+                    '_pd' + str(modelParams["posterior_dim"]) + \
+                    '_wr' + str(modelParams["weight_of_regularizer"]) + \
+                    '_' + str(modelParams["dataToUse"]) + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
+                    '_bs' + str(trainParams["batch_size"])
+    return exp_name
+
+def createExperimentDirectories(results_dir, exp_name):
+    csv_name = os.path.join(results_dir, 'epochs', exp_name + '.csv')
+    model_name = os.path.join(results_dir, 'models', exp_name + '.h5')
+    outdir = os.path.join(results_dir, 'results', exp_name)
+    funcH.createDirIfNotExist(os.path.join(results_dir, 'epochs'))
+    funcH.createDirIfNotExist(os.path.join(results_dir, 'models'))
+    funcH.createDirIfNotExist(outdir)
+    return csv_name, model_name, outdir
 
 #features, labels = getFeatsFromMat(mat,'dataCurdim', 'labelVecs_all')
 def getFeatsFromMat(mat, featureStr, labelStr):
@@ -83,7 +142,12 @@ def createPCADimsOfData(data_dir, data2use, sign_count, dimArray = [256, 512, 10
             print('saving pca sn features at : ', npy_PCAFileName)
             np.save(npy_PCAFileName, featsToSave)
 
-def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, pcaCount, expectedFileType):
+def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, pcaCount, expectedFileType, clusterModels = ['Kmeans', 'GMM_diag', 'GMM_full', 'Spectral'], randomSeed=5):
+    seed(randomSeed)
+    tf.set_random_seed(seed=randomSeed)
+    prevPrintOpts = np.get_printoptions()
+    np.set_printoptions(precision=4, suppress=True)
+
     featsFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType=expectedFileType, pcaCount=pcaCount) # 'hogFeats_41.npy', 'skeletonFeats_41.npy'
     detailedLabelsFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='DetailedLabels', pcaCount=pcaCount) # 'detailedLabels_41.npy'
     detailedLabelsFileNameFull = data_dir + os.sep + detailedLabelsFileName
@@ -99,21 +163,34 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, pcaCoun
     labels_all = np.load(labelsFileNameFull)
     non_zero_labels = labels_all[np.where(labels_all)]
 
-    print('running for : ', featsFileName)
+    print('*-*-*-*-*-*-*running for : ', featsFileName, '*-*-*-*-*-*-*')
     print('featSet(', featSet.shape, '), detailedLabels(', detailedLabels_all.shape, '), labels_All(', labels_all.shape, '), labels_nonzero(', non_zero_labels.shape, ')')
 
     clustCntVec = [32, 64, 128, 256]
-    clusterModelsAll = ['Kmeans', 'GMM_full', 'GMM_diag']
     if os.path.isfile(baseResultFileNameFull):
         print('resultDict will be loaded from(', baseResultFileNameFull, ')')
-        resultDict = np.load(baseResultFileNameFull)
-        for resultList in resultDict:
-            print('clusterModel(', resultList[1], '), clusterCount(', resultList[2], '), resultList=', resultList[3][0:5], ', histCnt=', resultList[3][5][0:10])
+        resultDict = list(np.load(baseResultFileNameFull, allow_pickle=True))
     else:
         resultDict = []
-        for clusterModel in clusterModelsAll:
-            for curClustCnt in clustCntVec:
-                print('clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ')')
+
+    headerStrFormat = "+++frmfile(%15s) clusterModel(%8s), clusCnt(%4s)"
+    valuesStrFormat = "nmiAll(%.2f) * accAll(%.2f) * nmiNoz(%.2f) * accNoz(%.2f) * emptyClusters(%d)"
+
+    for clusterModel in clusterModels:
+        for curClustCnt in clustCntVec:
+            foundResult = False
+            for resultList in resultDict:
+                if resultList[1] == clusterModel and resultList[2] == curClustCnt:
+                    str2disp = headerStrFormat + "=" + valuesStrFormat
+                    data2disp = (baseResultFileName, resultList[1], resultList[2],
+                                 resultList[3][0], resultList[3][1], resultList[3][2], resultList[3][3], resultList[3][4])
+                    #histCnt=', resultList[3][5][0:10])
+                    print(str2disp % data2disp)
+                    foundResult = True
+                if foundResult:
+                    break
+            if not foundResult:
+                print(featsFileName, 'clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ') running')
                 predClusters = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, applyNormalization=False, applyPca=False, clusterModel=clusterModel)
 
                 nmi_cur, acc_cur = funcH.get_NMI_Acc(labels_all, predClusters)
@@ -125,8 +202,97 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, pcaCoun
 
                 resultList = [featsFileName.replace('.npy', ''), clusterModel, curClustCnt, [nmi_cur, acc_cur, nmi_cur_nz, acc_cur_nz, numOf_1_sample_bins, histSortedInv]]
                 resultDict.append(resultList)
-                print(resultList[3][0:5], resultList[3][5][0:10])
-        np.save(baseResultFileNameFull, resultDict)
+
+                print(valuesStrFormat % (nmi_cur, acc_cur, nmi_cur_nz, acc_cur_nz, numOf_1_sample_bins))
+                print(resultList[3][5][0:10])
+                np.save(baseResultFileNameFull, resultDict, allow_pickle=True)
+
+    np.set_printoptions(prevPrintOpts)
     return resultDict
 
+def loadData(model_params, numOfSigns, data_dir):
+    featsFileName = funcD.getFileName(dataToUse=model_params["dataToUse"], numOfSigns=numOfSigns,
+                                      expectedFileType='Data', pcaCount=model_params["pcaCount"])
+    fileName_detailedLabels = funcD.getFileName(dataToUse=model_params["dataToUse"], numOfSigns=numOfSigns,
+                                                expectedFileType='DetailedLabels', pcaCount=model_params["pcaCount"])
+    fileName_labels = funcD.getFileName(dataToUse=model_params["dataToUse"], numOfSigns=numOfSigns,
+                                        expectedFileType='Labels', pcaCount=model_params["pcaCount"])
 
+    feat_set = funcD.loadFileIfExist(data_dir, featsFileName)
+    detailed_labels_all = funcD.loadFileIfExist(data_dir, fileName_detailedLabels)
+    labels_all = funcD.loadFileIfExist(data_dir, fileName_labels)
+
+    return feat_set, labels_all, detailed_labels_all
+
+def displayDataResults(method, dataToUse, posteriorDim, pcaCount, numOfSigns, weightReg = 1.0, batchSize = 16):
+    results_dir = funcH.getVariableByComputerName('results_dir')  # '/media/dg/SSD_Data/DataPath/bdResults'
+    baseLineResultFolder = os.path.join(results_dir, 'baseResults')  # '/media/dg/SSD_Data/DataPath/bdResults/baseResults'
+    baseResultFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns,
+                                           expectedFileType='BaseResultName', pcaCount=pcaCount)
+    baseResultFileNameFull = os.path.join(baseLineResultFolder, baseResultFileName)
+
+    resultDict = np.load(baseResultFileNameFull, allow_pickle=True)
+    headerStrFormatBase = "%15s * %10s * %9s "
+    headerStrFormat = headerStrFormatBase + "* %6s * %6s * %6s * %6s * %6s"
+    #valuesStrFormat = headerStrFormatBase + "* nmiAll(%6.2f) * accAll(%6.2f) * nmiNoz(%6.2f) * accNoz(%6.2f) * emptyClusters(%6d)"
+    valuesStrFormat2= headerStrFormatBase + "* %6.2f * %6.2f * %6.2f * %6.2f * %6d"
+
+    print(headerStrFormat % ("npyFileName", "clusModel", "clusCnt", "nmiAll", "accAll", "nmiNoz", "accNoz", "emptyK"))
+    baseResults = {}
+    baseResultsLab = []
+    baseResultsVal = []
+    for resultList in resultDict:
+        clusterModel = resultList[1]
+        clusterCount = resultList[2]
+        nmiAll = resultList[3][0]
+        accAll = resultList[3][1]
+        nmiNoz = resultList[3][2]
+        accNoz = resultList[3][3]
+        emptyK = resultList[3][4]
+        # , '*histCnt=', resultList[3][5][0:10]
+        baseResultsLab.append([str(clusterModel)+str(clusterCount)])
+        baseResultsVal.append(nmiNoz)
+        baseResults[str(clusterModel)+str(clusterCount)] = [nmiNoz]
+        print(valuesStrFormat2 %
+        (baseResultFileName.replace('.npy', '').replace('_baseResults', ''), clusterModel, clusterCount, nmiAll, accAll, nmiNoz, accNoz, emptyK))
+
+    modelParams = {
+        "trainMode": method,
+        "posterior_dim": posteriorDim,
+        "weight_of_regularizer": weightReg,
+        "dataToUse": dataToUse,
+        "pcaCount": pcaCount,
+        "numOfSigns": numOfSigns
+    }
+    trainParams = {
+        "epochs": 0, "appendEpochBinary": 0, "applyCorr": 0, "corr_randMode": 0, "randomSeed": 5,
+        "batch_size": batchSize
+    }
+
+    exp_name = createExperimentName(trainParams=trainParams, modelParams=modelParams, rnnParams={})
+    csv_name, model_name, outdir = createExperimentDirectories(results_dir, exp_name)
+    nmi_acc_file2load = outdir + os.sep + exp_name + '_nmi_acc.txt'
+
+    epochIDs, nmiVals, accVals = np.loadtxt(nmi_acc_file2load, comments='#', delimiter="*", skiprows=1, unpack=True)
+
+    _, lossVec, loss1Vec, mseVec = np.loadtxt(csv_name, comments='#', delimiter=";", skiprows=1, unpack=True)
+
+    combinedResults = {
+        'nmi': nmiVals,
+        'acc': accVals,
+        'loss': lossVec,
+        'loss1': -100 * loss1Vec,
+        'mse': mseVec
+    }
+
+    df = pd.DataFrame(combinedResults, index=[epochIDs])
+    df.plot.line(title=exp_name)
+    plt.pyplot.show()
+
+
+    df = pd.DataFrame({'lab':baseResultsLab, 'val':baseResultsVal})
+    ax = df.plot.bar(x='lab', y='val', rot=45)
+    plt.pyplot.show()
+
+
+#displayDataResults(method='sae', dataToUse='skeleton', posteriorDim=256, pcaCount=32, numOfSigns=11, weightReg = 1.0, batchSize = 16)
