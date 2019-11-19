@@ -189,7 +189,12 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, pcaCoun
                     foundResult = True
                 if foundResult:
                     break
-            if not foundResult:
+            predictionFileName = baseResultFileName.replace("_baseResults.npy","") + "_" + clusterModel + "_" + str(curClustCnt) + ".npz"
+            predictionFileNameFull = os.path.join(results_dir, 'baseResults', predictionFileName)
+            predictionFileExist = os.path.isfile(predictionFileNameFull)
+            if not foundResult or not predictionFileExist:
+                if foundResult and not predictionFileExist:
+                    print('running again for saving predictions')
                 print(featsFileName, 'clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ') running')
                 predClusters = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, applyNormalization=False, applyPca=False, clusterModel=clusterModel)
 
@@ -206,6 +211,7 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, pcaCoun
                 print(valuesStrFormat % (nmi_cur, acc_cur, nmi_cur_nz, acc_cur_nz, numOf_1_sample_bins))
                 print(resultList[3][5][0:10])
                 np.save(baseResultFileNameFull, resultDict, allow_pickle=True)
+                np.savez(predictionFileNameFull, labels_all, predClusters)
 
     np.set_printoptions(prevPrintOpts)
     return resultDict
