@@ -49,7 +49,6 @@ then
   }
 elif [ $curHost == "doga-MSISSD" ];
 then
-else
   declare -i i=0
   declare -a posterior_dim_array
   declare -a pcaCount_array
