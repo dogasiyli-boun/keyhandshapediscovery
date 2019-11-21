@@ -62,16 +62,16 @@ def run4All_createData():
         for sign_count in [11, 41]:
             checkCreateData2Use(sign_count=sign_count, dataToUse=dataToUse, recreate=False, recreate_hog=False)
 
-def runForBaseClusterResults(randomSeed = 5, clusterModels = ['Kmeans', 'GMM_diag', 'GMM_full', 'Spectral']):
+def runForBaseClusterResults(randomSeed = 5, clusterModels = ['Kmeans', 'GMM_diag', 'Spectral']):
     data_dir = funcH.getVariableByComputerName('data_dir')
     results_dir = funcH.getVariableByComputerName('results_dir')
 
     for dataToUse in ["hog", "skeleton", "sn"]:
         for numOfSigns in [11, 41]:
             if dataToUse == 'sn' or dataToUse == 'hog':
-                dimArray = [-1, 256, 512, 1024]
+                dimArray = [256, 512]
             elif dataToUse == 'skeleton':
-                dimArray = [-1, 32, 64, 96]
+                dimArray = [32, 64, 96]
             for dims in dimArray:
                 funcHP.runClusteringOnFeatSet(data_dir=data_dir, results_dir=results_dir, dataToUse=dataToUse,
                                               numOfSigns=numOfSigns, pcaCount=dims, expectedFileType='Data',

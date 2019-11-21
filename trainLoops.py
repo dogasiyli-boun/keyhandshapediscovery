@@ -1,4 +1,4 @@
-import time
+import time, datetime
 import os
 import numpy as np
 import helperFuncs as funcH
@@ -83,6 +83,7 @@ def trainFramewise(trainParams, modelParams, model, modelTest, feat_set_pca, lab
         savePredictedLabels(predictionLabelsDir, predicted_labels, epochID)
         updateNMIACCFile(epochID, nmi_cur, acc_cur, directoryParams["nmi_and_acc_file_name"])
 
+        print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         print('elapsedTime(', elapsed, ')')
 
 def getRNNLabels_by_rnnDataMode(rnnDataMode, rnnParams, detailed_labels_all):
@@ -152,4 +153,5 @@ def trainRNN(trainParams, modelParams, rnnParams, detailed_labels_all, model, mo
         savePredictedLabels(predictionLabelsDir, predicted_labels, epochID)
         updateNMIACCFile(epochID, nmi_cur, acc_cur, directoryParams["nmi_and_acc_file_name"])
 
+        print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         print('elapsedTime(', elapsed, ')')
