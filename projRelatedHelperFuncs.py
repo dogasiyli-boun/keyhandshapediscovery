@@ -6,6 +6,8 @@ from numpy.random import seed
 import tensorflow as tf
 import pandas as pd
 import matplotlib as plt
+import time
+import datetime
 
 def createExperimentName(trainParams, modelParams, rnnParams):
 
@@ -166,7 +168,7 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, pcaCoun
     print('*-*-*-*-*-*-*running for : ', featsFileName, '*-*-*-*-*-*-*')
     print('featSet(', featSet.shape, '), detailedLabels(', detailedLabels_all.shape, '), labels_All(', labels_all.shape, '), labels_nonzero(', non_zero_labels.shape, ')')
 
-    clustCntVec = [32, 64, 128, 256]
+    clustCntVec = [32, 64, 128, 256, 512]
     if os.path.isfile(baseResultFileNameFull):
         print('resultDict will be loaded from(', baseResultFileNameFull, ')')
         resultDict = list(np.load(baseResultFileNameFull, allow_pickle=True))
@@ -195,8 +197,11 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, pcaCoun
             if not foundResult or not predictionFileExist:
                 if foundResult and not predictionFileExist:
                     print('running again for saving predictions')
-                print(featsFileName, 'clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ') running')
+                t = time.time()
+                print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                print(featsFileName, 'clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ') running.')
                 predClusters = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, applyNormalization=False, applyPca=False, clusterModel=clusterModel)
+                print('elapsedTime(', time.time() - t, ')')
 
                 nmi_cur, acc_cur = funcH.get_NMI_Acc(labels_all, predClusters)
 

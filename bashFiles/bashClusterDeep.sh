@@ -35,7 +35,7 @@ cd $folderCode
 echo "current directory = " pwd
 echo "funcNameToRun=" "$funcNameToRun" ",epochCountToRun=" "$epochCountToRun"
 
-if [ "0" == "0" ];
+if [ "$funcNameToRun" == "runForBaseClusterResults" ];
 then
   chmod +x clusterDeep.py
   [ "$funcNameToRun" == "runForBaseClusterResults" ] &&
@@ -68,10 +68,10 @@ else
       do
         [ "$dataToUse" == "skeleton" ] &&
         {
-          pcaCount_array=(-1 32) #64 96
+          pcaCount_array=(32 64 96) #64 96
         } ||
         {
-          pcaCount_array=(-1 256) #512 1024
+          pcaCount_array=(256 512) #512 1024
         }
         for pcaCount in ${pcaCount_array[@]}
         do
@@ -86,7 +86,7 @@ else
               for rnnDataMode in ${rnnDataMode_array[@]}
               do
                 echo $i $trainMode $dataToUse $pcaCount $posterior_dim $applyCorr $rnnDataMode $numOfSigns
-                python ./clusterDeep.py --trainMode $trainMode --rnnDataMode $rnnDataMode --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
+                python ./clusterDeep.py --trainMode $trainMode --rnnDataMode $rnnDataMode --rnnTimesteps 1 --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
               done
             }
             i=$((i+1))
