@@ -61,6 +61,7 @@ def trainFramewise(trainParams, modelParams, model, modelTest, feat_set_pca, lab
         outFeats = [feat_set_pca[outIdx, :]]
 
         # train
+        print('*+*+*+* model fit started', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ', inFeats.shape', inFeats.shape, ', outFeats.shape', outFeats.shape)
         model.fit(inFeats, outFeats, validation_split=0.0, shuffle=True, verbose=0,
                   batch_size=trainParams["batch_size"], callbacks=modelParams["callbacks"],
                   epochs=trainParams["subEpochs"])
@@ -83,8 +84,7 @@ def trainFramewise(trainParams, modelParams, model, modelTest, feat_set_pca, lab
         savePredictedLabels(predictionLabelsDir, predicted_labels, epochID)
         updateNMIACCFile(epochID, nmi_cur, acc_cur, directoryParams["nmi_and_acc_file_name"])
 
-        print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        print('elapsedTime(', elapsed, ')')
+        print('elapsedTime(', elapsed, '), ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
 def getRNNLabels_by_rnnDataMode(rnnDataMode, rnnParams, detailed_labels_all):
     if rnnDataMode==0:
@@ -126,6 +126,7 @@ def trainRNN(trainParams, modelParams, rnnParams, detailed_labels_all, model, mo
             outFeats = inFeats
 
             # train
+        print('*+*+*+* model fit started', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ', inFeats.shape', inFeats.shape, ', outFeats.shape', outFeats.shape)
         model.fit([inFeats], [outFeats], validation_split=0.0, shuffle=True, verbose=0,
                   batch_size=trainParams["batch_size"], callbacks=modelParams["callbacks"],
                   epochs=trainParams["subEpochs"])
@@ -153,5 +154,4 @@ def trainRNN(trainParams, modelParams, rnnParams, detailed_labels_all, model, mo
         savePredictedLabels(predictionLabelsDir, predicted_labels, epochID)
         updateNMIACCFile(epochID, nmi_cur, acc_cur, directoryParams["nmi_and_acc_file_name"])
 
-        print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        print('elapsedTime(', elapsed, ')')
+        print('elapsedTime(', elapsed, '), ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
