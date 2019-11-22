@@ -41,12 +41,16 @@ then
   [ "$funcNameToRun" == "runForBaseClusterResults" ] &&
   {
     echo here111
-    python -c"import projRelatedScripts as funcPRS; funcPRS.runForBaseClusterResults(randomSeed = 5, clusterModels = ['Kmeans', 'GMM_diag', 'GMM_full', 'Spectral'])"
+    python -c"import projRelatedScripts as funcPRS; funcPRS.runForBaseClusterResults(randomSeed = 5, clusterModels = ['Kmeans', 'GMM_diag'])"
   } ||
   {
     echo here222
     python ./clusterDeep.py --trainMode cosae --posterior_dim 32 --dataToUse skeleton --applyCorr 2 --pcaCount 64 --numOfSigns 11 --epochs 100 --appendEpochBinary 1 --randomSeed 5
   }
+elif [ "$funcNameToRun" == "runForBaseClusterResults_OPTICS" ];
+then
+    echo here333
+    python -c"import projRelatedScripts as funcPRS; funcPRS.runForBaseClusterResults_OPTICS(randomSeed = 5, clustCntVec = [32, 64])"
 elif [ $curHost == "doga-MSISSD" ];
 then
   declare -i i=0
@@ -81,13 +85,13 @@ then
             [ "$trainMode" == "cosae" ] &&
             {
               echo $i $trainMode $dataToUse $pcaCount $posterior_dim $applyCorr $numOfSigns
-              python ./clusterDeep.py --trainMode $trainMode --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
+              #python ./clusterDeep.py --trainMode $trainMode --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
             } ||
             {
               for rnnDataMode in ${rnnDataMode_array[@]}
               do
                 echo $i $trainMode $dataToUse $pcaCount $posterior_dim $applyCorr $rnnDataMode $numOfSigns
-                python ./clusterDeep.py --trainMode $trainMode --rnnDataMode $rnnDataMode --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
+                #python ./clusterDeep.py --trainMode $trainMode --rnnDataMode $rnnDataMode --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
               done
             }
             i=$((i+1))

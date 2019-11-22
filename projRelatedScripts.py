@@ -77,8 +77,24 @@ def runForBaseClusterResults(randomSeed = 5, clusterModels = ['Kmeans', 'GMM_dia
                                               numOfSigns=numOfSigns, pcaCount=dims, expectedFileType='Data',
                                               clusterModels=clusterModels, randomSeed=randomSeed)
 
+#
+def runForBaseClusterResults_OPTICS(randomSeed = 5, clustCntVec = [32, 64, 128, 256, 512]):
+    data_dir = funcH.getVariableByComputerName('data_dir')
+    results_dir = funcH.getVariableByComputerName('results_dir')
+    for dataToUse in ["hog", "skeleton", "sn"]:
+        for numOfSigns in [11, 41]:
+            if dataToUse == 'sn' or dataToUse == 'hog':
+                dimArray = [256, 512]
+            elif dataToUse == 'skeleton':
+                dimArray = [32, 64, 96]
+            for dims in dimArray:
+                funcHP.runOPTICSClusteringOnFeatSet(data_dir=data_dir, results_dir=results_dir, dataToUse=dataToUse,
+                                              numOfSigns=numOfSigns, pcaCount=dims, expectedFileType='Data',
+                                              clustCntVec=clustCntVec, randomSeed=randomSeed)
+
 #resultDict = funcHP.runClusteringOnFeatSet(data_dir=funcH.getVariableByComputerName('data_dir'),
 #                                           results_dir=funcH.getVariableByComputerName('results_dir'),
 #                                           dataToUse='skeleton', numOfSigns=11, pcaCount=32,
 #                                           expectedFileType='Data', clusterModels=['Kmeans', 'GMM_diag'], randomSeed=5)
 #runForBaseClusterResults(randomSeed = 5)
+#runForBaseClusterResults_OPTICS(randomSeed = 5, clustCntVec = [32, 64])

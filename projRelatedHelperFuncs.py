@@ -221,6 +221,103 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, pcaCoun
     np.set_printoptions(prevPrintOpts)
     return resultDict
 
+def runOPTICSClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, pcaCount, expectedFileType, clustCntVec = [32, 64, 128, 256, 512], randomSeed=5, updateResultBaseFile=False):
+    seed(randomSeed)
+    tf.set_random_seed(seed=randomSeed)
+    prevPrintOpts = np.get_printoptions()
+    np.set_printoptions(precision=4, suppress=True)
+
+    featsFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType=expectedFileType, pcaCount=pcaCount) # 'hogFeats_41.npy', 'skeletonFeats_41.npy'
+    detailedLabelsFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='DetailedLabels', pcaCount=pcaCount) # 'detailedLabels_41.npy'
+    detailedLabelsFileNameFull = data_dir + os.sep + detailedLabelsFileName
+    labelsFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='Labels', pcaCount=pcaCount) # 'labels_41.npy'
+    labelsFileNameFull = data_dir + os.sep + labelsFileName
+
+    baseResultFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='BaseResultName', pcaCount=pcaCount)
+    funcH.createDirIfNotExist(os.path.join(results_dir, 'baseResults'))
+    baseResultFileNameFull = os.path.join(results_dir, 'baseResults', baseResultFileName)
+
+    featSet = np.load(data_dir + os.sep + featsFileName)
+    detailedLabels_all = np.load(detailedLabelsFileNameFull)
+    labels_all = np.load(labelsFileNameFull)
+    non_zero_labels = labels_all[np.where(labels_all)]
+
+    print('*-*-*-*-*-*-*running for : ', featsFileName, '*-*-*-*-*-*-*')
+    print('featSet(', featSet.shape, '), detailedLabels(', detailedLabels_all.shape, '), labels_All(', labels_all.shape, '), labels_nonzero(', non_zero_labels.shape, ')')
+
+    if os.path.isfile(baseResultFileNameFull):
+        print('resultDict will be loaded from(', baseResultFileNameFull, ')')
+        resultDict = list(np.load(baseResultFileNameFull, allow_pickle=True))
+    else:
+        resultDict = []
+
+    headerStrFormat = "+++frmfile(%15s) clusterModel(%8s), clusCnt(%4s)"
+    valuesStrFormat = "nmiAll(%.2f) * accAll(%.2f) * nmiNoz(%.2f) * accNoz(%.2f) * emptyClusters(%d)"
+
+    clusterModels = []  # pars = clusterModel.split('_')  # 'OPTICS_hamming_dbscan', 'OPTICS_russellrao_xi'
+    metricsAvail = np.sort(
+        ['braycurtis', 'canberra', 'chebyshev', 'correlation', 'dice', 'hamming', 'jaccard', 'kulsinski',
+         'mahalanobis', 'minkowski', 'rogerstanimoto', 'russellrao', 'seuclidean', 'sokalmichener',
+         'sokalsneath', 'sqeuclidean', 'yule',
+         'cityblock', 'cosine', 'euclidean', 'l1', 'l2', 'manhattan'])
+    cluster_methods_avail = ['xi', 'dbscan']
+    for metric in metricsAvail:
+        for cm in cluster_methods_avail:
+            clusterModels.append('OPTICS_' + metric + '_' + cm)
+
+    for clusterModel in clusterModels:
+        for curClustCnt in clustCntVec:
+            foundResult = False
+            for resultList in resultDict:
+                if resultList[1] == clusterModel and resultList[2] == curClustCnt:
+                    str2disp = headerStrFormat + "=" + valuesStrFormat
+                    data2disp = (baseResultFileName, resultList[1], resultList[2],
+                                 resultList[3][0], resultList[3][1], resultList[3][2], resultList[3][3], resultList[3][4])
+                    #histCnt=', resultList[3][5][0:10])
+                    print(str2disp % data2disp)
+                    foundResult = True
+                if foundResult:
+                    break
+            predictionFileName = baseResultFileName.replace("_baseResults.npy", "") + "_" + clusterModel + "_" + str(curClustCnt) + ".npz"
+            predictionFileNameFull = os.path.join(results_dir, 'baseResults', predictionFileName)
+            predictionFileExist = os.path.isfile(predictionFileNameFull)
+            if not predictionFileExist:  # not foundResult or
+                #if foundResult and not predictionFileExist:
+                #    print('running again for saving predictions')
+                t = time.time()
+                print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                print(featsFileName, 'clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ') running.')
+                predClusters = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, applyNormalization=False, applyPca=False, clusterModel=clusterModel)
+                print('elapsedTime(', time.time() - t, ')')
+                np.savez(predictionFileNameFull, labels_all, predClusters)
+            else:
+                npz = np.load(predictionFileNameFull)
+                if 'arr_0' in npz.files:
+                    predClusters = npz['arr_1']
+                    np.savez(predictionFileNameFull, labels_all=npz['arr_0'], predClusters=npz['arr_1'])
+                    npz = np.load(predictionFileNameFull)
+                predClusters = npz['predClusters']
+
+            if not foundResult:
+                nmi_cur, acc_cur = funcH.get_NMI_Acc(labels_all, predClusters)
+
+                non_zero_preds = predClusters[np.where(labels_all)]
+                nmi_cur_nz, acc_cur_nz = funcH.get_NMI_Acc(non_zero_labels, non_zero_preds)
+
+                numOf_1_sample_bins, histSortedInv = funcH.analyzeClusterDistribution(predClusters, curClustCnt, verbose=2)
+
+                resultList = [featsFileName.replace('.npy', ''), clusterModel, curClustCnt, [nmi_cur, acc_cur, nmi_cur_nz, acc_cur_nz, numOf_1_sample_bins, histSortedInv]]
+                resultDict.append(resultList)
+
+                print(valuesStrFormat % (nmi_cur, acc_cur, nmi_cur_nz, acc_cur_nz, numOf_1_sample_bins))
+                print(resultList[3][5][0:10])
+                if updateResultBaseFile:
+                    np.save(baseResultFileNameFull, resultDict, allow_pickle=True)
+
+
+    np.set_printoptions(prevPrintOpts)
+    return resultDict
+
 def loadData(model_params, numOfSigns, data_dir):
     featsFileName = funcD.getFileName(dataToUse=model_params["dataToUse"], numOfSigns=numOfSigns,
                                       expectedFileType='Data', pcaCount=model_params["pcaCount"])

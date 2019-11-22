@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import normalized_mutual_info_score as nmi
-from sklearn.cluster import KMeans, SpectralClustering
+from sklearn.cluster import KMeans, SpectralClustering, OPTICS as ClusterOPT, cluster_optics_dbscan
 from sklearn.mixture import GaussianMixture
 from sklearn.decomposition import PCA
 from sklearn.metrics.cluster import normalized_mutual_info_score as nmi_sc
@@ -193,6 +193,23 @@ def clusterData(featVec, n_clusters, applyNormalization=True, applyPca=True, clu
         sc = SpectralClustering(n_clusters=n_clusters, affinity='rbf', random_state=0)
         sc_clustering = sc.fit(featVec)
         predictedKlusters = sc_clustering.labels_
+    elif 'OPTICS' in clusterModel:
+        N = featVec.shape[0]
+        min_cluster_size = int(np.ceil(N / (n_clusters * 4)))
+        pars = clusterModel.split('_')  # 'OPTICS_hamming_dbscan', 'OPTICS_russellrao_xi'
+        #  metricsAvail = np.sort(['braycurtis', 'canberra', 'chebyshev', 'correlation', 'dice', 'hamming', 'jaccard', 'kulsinski',
+        #                'mahalanobis', 'minkowski', 'rogerstanimoto', 'russellrao', 'seuclidean', 'sokalmichener',
+        #                'sokalsneath', 'sqeuclidean', 'yule',
+        #                'cityblock', 'cosine', 'euclidean', 'l1', 'l2', 'manhattan'])
+        #  cluster_methods_avail = ['xi', 'dbscan']
+        clust = ClusterOPT(min_samples=50, xi=.05, min_cluster_size=min_cluster_size, metric=pars[1], cluster_method=pars[2])
+        clust.fit(featVec)
+        predictedKlusters = cluster_optics_dbscan(reachability=clust.reachability_,
+                                                   core_distances=clust.core_distances_,
+                                                   ordering=clust.ordering_, eps=0.5)
+        n1 = np.unique(predictedKlusters)
+        print(clusterModel, ' found ', str(n1), ' uniq clusters')
+        predictedKlusters = predictedKlusters + 1
 
     return np.asarray(predictedKlusters, dtype=int)
 
