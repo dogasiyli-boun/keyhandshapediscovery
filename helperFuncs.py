@@ -15,6 +15,12 @@ from matplotlib.ticker import MultipleLocator
 from pandas import DataFrame
 import scipy.io
 
+def numOfFilesInFolder(dir2Search, startswith="", endswith=""):
+    numOfFiles = len([f for f in os.listdir(dir2Search)
+                                    if f.startswith(startswith) and f.endswith(endswith) and os.path.isfile(
+            os.path.join(dir2Search, f))])
+    return numOfFiles
+
 def is_number(s):
     try:
         float(s)
@@ -102,6 +108,48 @@ def calcCleanConfMat(labels, predictions):
     x_cleaned = xtoclear[np.any(xtoclear, axis=1), :]
     return x_cleaned
 
+def removeConfMatUnnecessaryRows(_confMat):
+    _confMat = _confMat[~np.all(_confMat == 0, axis=1)]
+    return _confMat
+
+def confusionFromKluster(labVec, predictedKlusters):
+    _confMat = []
+    #rows are true labels, cols are predictedLabels
+
+    _confMat = confMatCalc(labVec, predictedKlusters)
+    _confMat = removeConfMatUnnecessaryRows(_confMat)
+
+    inputConfMat_const = tf.constant(_confMat, dtype="float")
+    c_C, r_K = _confMat.shape
+    symb_W = tf.Variable(tf.truncated_normal(shape=[r_K, c_C], stddev=0.1, ), dtype="float")
+    W_softMax = tf.nn.softmax(symb_W, 1)
+    regularizerCoeff = tf.constant(10.0, dtype="float")
+    symbOutConfMat = tf.einsum('ck,kx->cx', inputConfMat_const, W_softMax)  # eXpectedClassCount
+    symbOutCost = -tf.trace(symbOutConfMat)
+    regularizar = tf.reduce_sum(tf.square(tf.reduce_sum(W_softMax, axis=0))) + tf.reduce_sum(
+    tf.square(tf.reduce_sum(W_softMax, axis=1)))
+    optimizer = tf.train.AdamOptimizer(learning_rate=0.5).minimize(symbOutCost + regularizerCoeff * regularizar)
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        for eph in range(1000):
+            sess.run(optimizer)
+        W = sess.run((W_softMax))
+    w_discrete, kluster2Classes = discretizeW(W)
+    _confMat = _confMat @ w_discrete
+    return _confMat, kluster2Classes
+
+def accFromKlusterLabels(labVec, predictedKlusters, removeZeroLabels=False):
+    labVec = np.asarray(labVec,dtype=int)
+    predictedKlusters = np.asarray(predictedKlusters,dtype=int)
+    if removeZeroLabels:
+        predictedKlusters = predictedKlusters[np.where(labVec)]
+        labVec = labVec[np.where(labVec)]
+
+    _confMat, kluster2Classes = confusionFromKluster(labVec, predictedKlusters)
+    classCntPrecision = 1.0
+    acc = np.trace(_confMat)/np.einsum('ij->', _confMat)
+    return acc, classCntPrecision
+
 def getAccFromConf(labels, predictions):
     inputConfMat = calcCleanConfMat(labels, predictions)
     c_C, r_K = inputConfMat.shape
@@ -139,10 +187,23 @@ def getAccFromConf(labels, predictions):
     return acc
     # print('confAcc(', acc ,'),nmiAr(', nmiAr,')nmiGeo(',nmiGeo ,')')
 
-def get_NMI_Acc(non_zero_labels, non_zero_predictions):
-    nmi_cur = nmi(non_zero_labels, non_zero_predictions, average_method='geometric')
+def get_nmi_only(l, p, average_method='geometric'):
+    nmi_res = nmi(l, p, average_method=average_method)
+    return nmi_res
+
+def get_NMI_Acc(non_zero_labels, non_zero_predictions, average_method='geometric'):
+    nmi_cur = get_nmi_only(non_zero_labels, non_zero_predictions, average_method=average_method)
     acc_cur = getAccFromConf(non_zero_labels, non_zero_predictions)
     return nmi_cur, acc_cur
+
+def get_nmi_deepCluster(featVec, labVec, n_clusters, clusterModel='Kmeans', applyNormalization=True, applyPca=True):
+    predictedKlusters = clusterData(featVec, n_clusters,
+                                    applyNormalization=applyNormalization, applyPca=applyPca,
+                                    clusterModel=clusterModel)
+    nmi_score = get_nmi_only(labVec, predictedKlusters, average_method='geometric')
+    labVec_nonzero, predictedKlusters_nonzero = getNonZeroLabels(labVec, predictedKlusters)
+    nmi_score_nonzero = get_nmi_only(labVec_nonzero, predictedKlusters_nonzero, average_method='geometric')
+    return nmi_score, predictedKlusters, nmi_score_nonzero
 
 def applyMatTransform(featVec, applyNormalization=True, applyPca=True, whiten=True, verbose=0):
     exp_var_rat = []
@@ -212,19 +273,6 @@ def clusterData(featVec, n_clusters, applyNormalization=True, applyPca=True, clu
         predictedKlusters = predictedKlusters + 1
 
     return np.asarray(predictedKlusters, dtype=int)
-
-def get_nmi(featVec, labVec, n_clusters, applyNormalization=True, applyPca=True):
-    featVec, exp_var_rat = applyMatTransform(np.array(featVec), applyNormalization, applyPca)
-    df = DataFrame(featVec)
-
-    kmeans_result = KMeans(n_clusters=n_clusters).fit(df)
-    predictedKlusters = kmeans_result.labels_.astype(float)
-    nmi_score = nmi_sc(labVec, predictedKlusters, average_method='geometric')
-
-    labVec_nonzero, predictedKlusters_nonzero = getNonZeroLabels(labVec, predictedKlusters)
-    nmi_score_nonzero = nmi_sc(labVec_nonzero, predictedKlusters_nonzero, average_method='geometric')
-
-    return nmi_score, predictedKlusters, nmi_score_nonzero
 
 def backtrack(D, max_x, max_y):
     #https://github.com/gulzi/DTWpy/blob/master/dtwpy.py
