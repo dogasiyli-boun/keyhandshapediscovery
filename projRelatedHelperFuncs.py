@@ -293,7 +293,6 @@ def runOPTICSClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, p
             else:
                 npz = np.load(predictionFileNameFull)
                 if 'arr_0' in npz.files:
-                    predClusters = npz['arr_1']
                     np.savez(predictionFileNameFull, labels_all=npz['arr_0'], predClusters=npz['arr_1'])
                     npz = np.load(predictionFileNameFull)
                 predClusters = npz['predClusters']
@@ -313,7 +312,6 @@ def runOPTICSClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, p
                 print(resultList[3][5][0:10])
                 if updateResultBaseFile:
                     np.save(baseResultFileNameFull, resultDict, allow_pickle=True)
-
 
     np.set_printoptions(prevPrintOpts)
     return resultDict

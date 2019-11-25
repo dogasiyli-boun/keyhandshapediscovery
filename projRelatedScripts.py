@@ -78,15 +78,15 @@ def runForBaseClusterResults(randomSeed = 5, clusterModels = ['Kmeans', 'GMM_dia
                                               clusterModels=clusterModels, randomSeed=randomSeed)
 
 #
-def runForBaseClusterResults_OPTICS(randomSeed = 5, clustCntVec = [32, 64, 128, 256, 512]):
+def runForBaseClusterResults_OPTICS(randomSeed = 5, clustCntVec = [32, 64, 128, 256, 512], numOfSignsVec = [11, 41]):
     data_dir = funcH.getVariableByComputerName('data_dir')
     results_dir = funcH.getVariableByComputerName('results_dir')
     for dataToUse in ["hog", "skeleton", "sn"]:
-        for numOfSigns in [11, 41]:
+        for numOfSigns in numOfSignsVec:
             if dataToUse == 'sn' or dataToUse == 'hog':
-                dimArray = [256, 512]
+                dimArray = [256]  # 512
             elif dataToUse == 'skeleton':
-                dimArray = [32, 64, 96]
+                dimArray = [96]  # 32, 64,
             for dims in dimArray:
                 funcHP.runOPTICSClusteringOnFeatSet(data_dir=data_dir, results_dir=results_dir, dataToUse=dataToUse,
                                               numOfSigns=numOfSigns, pcaCount=dims, expectedFileType='Data',

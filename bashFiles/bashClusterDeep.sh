@@ -50,7 +50,7 @@ then
 elif [ "$funcNameToRun" == "runForBaseClusterResults_OPTICS" ];
 then
     echo here333
-    python -c"import projRelatedScripts as funcPRS; funcPRS.runForBaseClusterResults_OPTICS(randomSeed = 5, clustCntVec = [32, 64])"
+    python -c"import projRelatedScripts as funcPRS; funcPRS.runForBaseClusterResults_OPTICS(randomSeed = 5, clustCntVec = [256], numOfSignsVec = [11])"
 elif [ $curHost == "doga-MSISSD" ];
 then
   declare -i i=0
