@@ -57,11 +57,11 @@ def trainFramewise(trainParams, modelParams, model, modelTest, feat_set_pca, lab
 
         # Prepare data for training
         inIdx, outIdx, trainParams = getCorrespondanceIDs(sampleCount, trainParams, epochID)
-        inFeats = [feat_set_pca[inIdx, :]]
-        outFeats = [feat_set_pca[outIdx, :]]
+        inFeats = [np.array(feat_set_pca[inIdx, :]).squeeze()]
+        outFeats = [np.array(feat_set_pca[outIdx, :]).squeeze()]
 
         # train
-        print('*+*+*+* model fit started', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ', inFeats.shape', inFeats.shape, ', outFeats.shape', outFeats.shape)
+        print('*+*+*+* model fit started', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ', inFeats.shape', np.shape(inFeats), ', outFeats.shape',  np.shape(outFeats))
         model.fit(inFeats, outFeats, validation_split=0.0, shuffle=True, verbose=0,
                   batch_size=trainParams["batch_size"], callbacks=modelParams["callbacks"],
                   epochs=trainParams["subEpochs"])

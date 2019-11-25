@@ -3,6 +3,7 @@
 readonly curHost="$HOSTNAME"
 readonly funcNameToRun=$1
 readonly epochCountToRun=$2
+readonly runOrDisplay=$3
 echo "Bash version ${BASH_VERSION}..."
 echo "computer name is" "${curHost}"
 
@@ -84,14 +85,24 @@ then
           do
             [ "$trainMode" == "cosae" ] &&
             {
-              echo $i $trainMode $dataToUse $pcaCount $posterior_dim $applyCorr $numOfSigns
-              #python ./clusterDeep.py --trainMode $trainMode --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
+              [ "$runOrDisplay" == "display" ] &&
+              {
+                echo $i $trainMode $dataToUse $pcaCount $posterior_dim $applyCorr $numOfSigns
+              } ||
+              {
+                python ./clusterDeep.py --trainMode $trainMode --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
+              }
             } ||
             {
               for rnnDataMode in ${rnnDataMode_array[@]}
               do
-                echo $i $trainMode $dataToUse $pcaCount $posterior_dim $applyCorr $rnnDataMode $numOfSigns
-                #python ./clusterDeep.py --trainMode $trainMode --rnnDataMode $rnnDataMode --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
+                [ "$runOrDisplay" == "display" ] &&
+                {
+                  echo $i $trainMode $dataToUse $pcaCount $posterior_dim $applyCorr $rnnDataMode $numOfSigns rnnTimesteps 1
+                } ||
+                {
+                  python ./clusterDeep.py --trainMode $trainMode --rnnDataMode $rnnDataMode --rnnTimesteps 1 --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
+                }
               done
             }
             i=$((i+1))
@@ -138,7 +149,7 @@ else
             {
               for rnnDataMode in ${rnnDataMode_array[@]}
               do
-                echo $i $trainMode $dataToUse $pcaCount $posterior_dim $applyCorr $rnnDataMode $numOfSigns
+                echo $i $trainMode $dataToUse $pcaCount $posterior_dim $applyCorr $rnnDataMode $numOfSigns rnnTimesteps 1
                 python ./clusterDeep.py --trainMode $trainMode --rnnDataMode $rnnDataMode --rnnTimesteps 1 --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
               done
             }
