@@ -15,10 +15,29 @@ from matplotlib.ticker import MultipleLocator
 from pandas import DataFrame
 import scipy.io
 
+def getFileList(dir2Search, startString="", endString="", sortList=False):
+    fileList = [f for f in os.listdir(dir2Search) if f.startswith(startString) and
+                                                     f.endswith(endString) and
+                                                    os.path.isfile(os.path.join(dir2Search, f))]
+    if sortList:
+        fileList = np.sort(fileList)
+    return fileList
+
+def getFolderList(dir2Search, startString="", endString="", sortList=False):
+    folderList = [f for f in os.listdir(dir2Search) if f.startswith(startString) and
+                                                     f.endswith(endString) and
+                                                    os.path.isdir(os.path.join(dir2Search, f))]
+    if sortList:
+        folderList = np.sort(folderList)
+    return folderList
+
+def filterList(string_list, includeList, excludeList):
+    filter_func = lambda s: any(x in s for x in includeList) and not any(x in s for x in excludeList)
+    matching_lines = [line for line in string_list if filter_func(line)]
+    return matching_lines
+
 def numOfFilesInFolder(dir2Search, startswith="", endswith=""):
-    numOfFiles = len([f for f in os.listdir(dir2Search)
-                                    if f.startswith(startswith) and f.endswith(endswith) and os.path.isfile(
-            os.path.join(dir2Search, f))])
+    numOfFiles = len(getFileList(dir2Search, startString=startswith, endString=endswith))
     return numOfFiles
 
 def is_number(s):
@@ -86,13 +105,9 @@ def createDirIfNotExist(dir2create):
     if not os.path.isdir(dir2create):
         os.makedirs(dir2create)
 
-def normalize(x, axis=0):
-    s = np.sum(x, axis=axis, keepdims=True)
-    return x / s
-
-def normalize_max(x, axis=0):
-    s = np.max(x, axis=axis, keepdims=True)
-    return x / s
+def normalize(x, axis=None):
+    x = x / np.linalg.norm(x, axis=axis)
+    return x
 
 def discretizeW(W, printAssignments=False):
     rows2ColAssignments = np.argmax(W, axis=1) + 1
@@ -196,16 +211,16 @@ def get_NMI_Acc(non_zero_labels, non_zero_predictions, average_method='geometric
     acc_cur = getAccFromConf(non_zero_labels, non_zero_predictions)
     return nmi_cur, acc_cur
 
-def get_nmi_deepCluster(featVec, labVec, n_clusters, clusterModel='Kmeans', applyNormalization=True, applyPca=True):
+def get_nmi_deepCluster(featVec, labVec, n_clusters, clusterModel='Kmeans', normMode='', applyPca=True):
     predictedKlusters = clusterData(featVec, n_clusters,
-                                    applyNormalization=applyNormalization, applyPca=applyPca,
+                                    applyPca=applyPca, normMode=normMode,
                                     clusterModel=clusterModel)
     nmi_score = get_nmi_only(labVec, predictedKlusters, average_method='geometric')
     labVec_nonzero, predictedKlusters_nonzero = getNonZeroLabels(labVec, predictedKlusters)
     nmi_score_nonzero = get_nmi_only(labVec_nonzero, predictedKlusters_nonzero, average_method='geometric')
     return nmi_score, predictedKlusters, nmi_score_nonzero
 
-def applyMatTransform(featVec, applyNormalization=True, applyPca=True, whiten=True, verbose=0):
+def applyMatTransform(featVec, applyPca=True, whiten=True, normMode='', verbose=0):
     exp_var_rat = []
     if applyPca:
         pca = PCA(whiten=whiten, svd_solver='full')
@@ -213,11 +228,19 @@ def applyMatTransform(featVec, applyNormalization=True, applyPca=True, whiten=Tr
         exp_var_rat = np.cumsum(pca.explained_variance_ratio_)
         if verbose > 0:
             print('Max of featsPCA = ', np.amax(featVec), ', Min of featsPCA = ', np.amin(featVec))
-    if applyNormalization:
-        #featVec = featVec / np.linalg.norm(featVec)
-        featVec = normalize_max(featVec, axis=0)
-        if verbose > 0:
-            print('Max of normedFeats = ', np.amax(featVec), ', Min of normedFeats = ', np.amin(featVec))
+
+    if normMode == '':
+        pass # do nothing
+    elif normMode == 'nm':
+        featVec = normalize(featVec, axis=1)
+    elif normMode == 'nl':
+        featVec = normalize(featVec, axis=None)
+    else:
+        os.error("shouldnt be here")
+
+    if verbose > 0 and normMode != '':
+        print('Max of normedFeats = ', np.amax(featVec), ', Min of normedFeats = ', np.amin(featVec))
+
     return featVec, exp_var_rat
     # X = np.array([[3, 5, 7, 9, 11], [4, 6, 15, 228, 245], [28, 19, 225, 149, 81], [18, 9, 125, 49, 2181], [8, 9, 25, 149, 81], [8, 9, 25, 49, 81], [8, 19, 25, 49, 81]])
     # print('input array : \n', X)
@@ -239,8 +262,8 @@ def getNonZeroLabels(labVec, predictedKlusters):
     labVec = labVec[np.where(labVec)]
     return labVec, predictedKlusters
 
-def clusterData(featVec, n_clusters, applyNormalization=True, applyPca=True, clusterModel='Kmeans'):
-    featVec, exp_var_rat = applyMatTransform(np.array(featVec), applyNormalization, applyPca)
+def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='Kmeans'):
+    featVec, exp_var_rat = applyMatTransform(np.array(featVec), applyPca=applyPca, normMode=normMode)
     df = DataFrame(featVec)
 
     if clusterModel == 'Kmeans':

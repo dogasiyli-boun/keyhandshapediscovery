@@ -125,10 +125,10 @@ def parseDataset_ds5(root_dir, istrain):
     labels = []
     ids = []
     user_list = os.listdir(root_dir)
-    for u in range(0,len(user_list)):
+    for u in range(0, len(user_list)):
         class_list = os.listdir(root_dir + os.sep + user_list[u])
-        for c in range(3):#range(0,len(class_list)):
-            image_list = os.listdir(root_dir + os.sep + user_list[u] + os.sep + class_list[c])
+        for c in range(3):  # range(0,len(class_list)):
+            image_list = os.listdir(os.path.join(root_dir, user_list[u], class_list[c]))
             for i in image_list:
                 if u == 0 and not istrain:
                     images.append(root_dir + os.sep + user_list[u] + os.sep + class_list[c] + os.sep + i)

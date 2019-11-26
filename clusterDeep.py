@@ -38,8 +38,10 @@ def parseArgs(argv):
                "vs": "-pc", "defaultVal": -1, "dvSet": True, "paramType": "int"}
     param17 = {"paramName": "numOfSigns", "possibleValues": "{11, 41}",
                "vs": "-ns", "defaultVal": 11, "dvSet": True, "paramType": "int"}
+    param18 = {"paramName": "normMode", "possibleValues": "{'', 'nm', 'nl'}",
+               "vs": "-nm", "defaultVal": '', "dvSet": True, "paramType": "string"}
     # model and data parameters
-    params_model_data = [param01, param02, param03, param04, param16, param17]
+    params_model_data = [param01, param02, param03, param04, param16, param17, param18]
 
     # train parameters
     # --epochs 50 --appendEpochBinary 0 --batch_size 64 --applyCorr 0 --corr_randMode 0
@@ -178,7 +180,8 @@ def parseArgs(argv):
         "weight_of_regularizer": valuesParamsCur["weight_of_regularizer"],
         "dataToUse": valuesParamsCur["dataToUse"],
         "pcaCount": valuesParamsCur["pcaCount"],
-        "numOfSigns": valuesParamsCur["numOfSigns"]
+        "numOfSigns": valuesParamsCur["numOfSigns"],
+        "normMode": valuesParamsCur["normMode"]
     }
     trainParams = {
         "epochs": valuesParamsCur["epochs"],
@@ -282,7 +285,7 @@ trainParams["epochTo"] = epochTo
 trainParams["corr_indis_a"] = np.mod(epochFr, 2)
 if trainParams["applyCorr"] >= 2:
     trainParams["corrFramesAll"] = funcD.getCorrespondentFrames(base_dir, data_dir, featType=modelParams["dataToUse"],
-                                                                numOfSigns=numOfSigns, pcaCount=-1,
+                                                                numOfSigns=numOfSigns, pcaCount=modelParams["pcaCount"],
                                                                 expectedFileType='Data')
 
 print('started training')

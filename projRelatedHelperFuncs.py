@@ -12,12 +12,13 @@ import datetime
 def createExperimentName(trainParams, modelParams, rnnParams):
 
     pcaCountStr = str(modelParams["pcaCount"]) if modelParams["pcaCount"] > 0 else "Feats"
+    normModeStr = str(modelParams["normMode"]) if modelParams["normMode"] == "" else "_" + str(modelParams["normMode"]) + "_"
 
     if modelParams["trainMode"] == "corsa":
         exp_name  = str(modelParams["trainMode"]) + \
                     '_pd' + str(modelParams["posterior_dim"]) + \
                     '_wr' + str(modelParams["weight_of_regularizer"]) + \
-                    '_' + str(modelParams["dataToUse"]) + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
+                    '_' + str(modelParams["dataToUse"]) + normModeStr + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
                     '_bs' + str(trainParams["batch_size"]) + \
                     '_dM' + str(rnnParams["dataMode"]) + \
                     '_ts' + str(rnnParams["timesteps"]) + \
@@ -29,7 +30,7 @@ def createExperimentName(trainParams, modelParams, rnnParams):
         exp_name  = str(modelParams["trainMode"]) + \
                     '_pd' + str(modelParams["posterior_dim"]) + \
                     '_wr' + str(modelParams["weight_of_regularizer"]) + \
-                    '_' + str(modelParams["dataToUse"]) + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
+                    '_' + str(modelParams["dataToUse"]) + normModeStr + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
                     '_bs' + str(trainParams["batch_size"]) + \
                     '_dM' + str(rnnParams["dataMode"]) + \
                     '_ts' + str(rnnParams["timesteps"])
@@ -43,7 +44,7 @@ def createExperimentName(trainParams, modelParams, rnnParams):
         exp_name  = str(modelParams["trainMode"]) + \
                     '_pd' + str(modelParams["posterior_dim"]) + \
                     '_wr' + str(modelParams["weight_of_regularizer"]) + \
-                    '_' + str(modelParams["dataToUse"]) + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
+                    '_' + str(modelParams["dataToUse"]) + normModeStr + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
                     '_bs' + str(trainParams["batch_size"]) + \
                     '_cp' + str(trainParams["applyCorr"]) + \
                     '_cRM' + str(trainParams["corr_randMode"])
@@ -51,7 +52,7 @@ def createExperimentName(trainParams, modelParams, rnnParams):
         exp_name  = str(modelParams["trainMode"]) + \
                     '_pd' + str(modelParams["posterior_dim"]) + \
                     '_wr' + str(modelParams["weight_of_regularizer"]) + \
-                    '_' + str(modelParams["dataToUse"]) + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
+                    '_' + str(modelParams["dataToUse"]) + normModeStr + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
                     '_bs' + str(trainParams["batch_size"])
     return exp_name
 
@@ -86,8 +87,9 @@ def getMatFile(data_dir, signCnt, possible_fname_init):
     mat = funcH.loadMatFile(matFileName)
     return mat
 
-def createPCAOfData(data_dir, dataToUse, sign_count, recreate=False):
-    npy_PCAFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=sign_count, expectedFileType='PCA', pcaCount=-1)
+def createPCAOfData(data_dir, dataToUse, sign_count, recreate=False, normMode=''):
+    # normMode = str(modelParams["normMode"])
+    npy_PCAFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=sign_count, expectedFileType='PCA', pcaCount=-1, normMode=normMode)
     npy_PCAFileName = os.path.join(data_dir, npy_PCAFileName)
     if os.path.isfile(npy_PCAFileName) and not recreate:
         feats_pca = np.load(npy_PCAFileName)
@@ -99,7 +101,7 @@ def createPCAOfData(data_dir, dataToUse, sign_count, recreate=False):
         npy_FeatsFileName = os.path.join(data_dir, npy_FeatsFileName)
         feats = np.load(npy_FeatsFileName)
         print('Max of feats = ', np.amax(feats), ', Min of feats = ', np.amin(feats))
-        feats_pca, exp_var_rat = funcH.applyMatTransform(feats, applyNormalization=True, applyPca=True, whiten=True, verbose=2)
+        feats_pca, exp_var_rat = funcH.applyMatTransform(feats, applyPca=True, whiten=True, normMode=normMode, verbose=2)
         np.save(npy_PCAFileName, feats_pca)
     return feats_pca, exp_var_rat
 
@@ -200,7 +202,7 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, pcaCoun
                 t = time.time()
                 print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                 print(featsFileName, 'clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ') running.')
-                predClusters = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, applyNormalization=False, applyPca=False, clusterModel=clusterModel)
+                predClusters = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, normMode='', applyPca=False, clusterModel=clusterModel)
                 print('elapsedTime(', time.time() - t, ')')
 
                 nmi_cur, acc_cur = funcH.get_NMI_Acc(labels_all, predClusters)
@@ -287,7 +289,7 @@ def runOPTICSClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, p
                 t = time.time()
                 print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                 print(featsFileName, 'clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ') running.')
-                predClusters = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, applyNormalization=False, applyPca=False, clusterModel=clusterModel)
+                predClusters = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, norMMode='', applyPca=False, clusterModel=clusterModel)
                 print('elapsedTime(', time.time() - t, ')')
                 np.savez(predictionFileNameFull, labels_all, predClusters)
             else:
@@ -318,13 +320,22 @@ def runOPTICSClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, p
 
 def loadData(model_params, numOfSigns, data_dir):
     featsFileName = funcD.getFileName(dataToUse=model_params["dataToUse"], numOfSigns=numOfSigns,
-                                      expectedFileType='Data', pcaCount=model_params["pcaCount"])
+                                      expectedFileType='Data', pcaCount=model_params["pcaCount"], normMode=str(model_params["normMode"]))
     fileName_detailedLabels = funcD.getFileName(dataToUse=model_params["dataToUse"], numOfSigns=numOfSigns,
                                                 expectedFileType='DetailedLabels', pcaCount=model_params["pcaCount"])
     fileName_labels = funcD.getFileName(dataToUse=model_params["dataToUse"], numOfSigns=numOfSigns,
                                         expectedFileType='Labels', pcaCount=model_params["pcaCount"])
 
     feat_set = funcD.loadFileIfExist(data_dir, featsFileName)
+    if feat_set.size == 0:
+        featsFileName = funcD.getFileName(dataToUse=model_params["dataToUse"], numOfSigns=numOfSigns,
+                                          expectedFileType='Data', pcaCount=-1,
+                                          normMode='')
+        feat_set = funcD.loadFileIfExist(data_dir, featsFileName)
+        os.error("finish here")
+        # apply needed transofrmation and use the data
+
+
     detailed_labels_all = funcD.loadFileIfExist(data_dir, fileName_detailedLabels)
     labels_all = funcD.loadFileIfExist(data_dir, fileName_labels)
 

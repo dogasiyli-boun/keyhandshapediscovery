@@ -15,13 +15,16 @@ def loadFileIfExist(directoryOfFile, fileName):
         X = np.array([])
     return X
 
-def getFileName(dataToUse, numOfSigns, expectedFileType, pcaCount=-1):
+def getFileName(dataToUse, numOfSigns, expectedFileType, pcaCount=-1, normMode=''):
     if expectedFileType == 'PCA':
         fileName_PCA            = dataToUse + 'PCA' + '_' + str(numOfSigns) + '.npy'  # 'hogPCA_41.npy' or 'hogPCA_11.npy' or 'skeletonFeats_11.npy' or 'snFeats_11.npy'
         fileName = fileName_PCA
     if expectedFileType == 'Data':
         pcaCountStr = str(pcaCount) if pcaCount>0 else ""
-        fileName_Data           = dataToUse + pcaCountStr + 'Feats' + '_' + str(numOfSigns) + '.npy'  # 'hogFeats_41.npy' or 'hogFeats_11.npy' or 'skeletonFeats_11.npy' or 'snFeats_11.npy'
+        #normMode = str(modelParams["normMode"])
+        normModeStr = normMode if normMode == "" else "_" + normMode + "_"
+
+        fileName_Data           = dataToUse + normModeStr + pcaCountStr + 'Feats' + '_' + str(numOfSigns) + '.npy'  # 'hogFeats_41.npy' or 'hogFeats_11.npy' or 'skeletonFeats_11.npy' or 'snFeats_11.npy'
         fileName = fileName_Data
     if expectedFileType == 'Labels':
         fileName_Labels         = 'labels' + '_' + str(numOfSigns) + '.npy'  # 'labels_41.npy' or 'labels_11.npy'
@@ -31,11 +34,13 @@ def getFileName(dataToUse, numOfSigns, expectedFileType, pcaCount=-1):
         fileName = fileName_DetailedLabels
     if expectedFileType == 'CorrespendenceVec':
         pcaCountStr = str(pcaCount) if pcaCount > 0 else "Feats"
-        fileName_Corr = dataToUse + pcaCountStr + '_corrFrames' + '_' + str(numOfSigns) + '.npy'  # 'hog_corrFrames_41.npy' or 'hog_corrFrames_11.npy'
+        normModeStr = normMode if normMode == "" else "_" + normMode + "_"
+        fileName_Corr = dataToUse + normModeStr + pcaCountStr + '_corrFrames' + '_' + str(numOfSigns) + '.npy'  # 'hog_corrFrames_41.npy' or 'hog_corrFrames_11.npy'
         fileName = fileName_Corr
     if expectedFileType == 'BaseResultName':
         pcaCountStr = str(pcaCount) if pcaCount > 0 else "Feats"
-        fileName_BaseRes = dataToUse + pcaCountStr + '_' + str(numOfSigns) + '_baseResults' + '.npy'  # 'hog_baseResults_41.npy' or 'hog_baseResults_11.npy'
+        normModeStr = normMode if normMode == "" else "_" + normMode + "_"
+        fileName_BaseRes = dataToUse + normModeStr + pcaCountStr + '_' + str(numOfSigns) + '_baseResults' + '.npy'  # 'hog_baseResults_41.npy' or 'hog_baseResults_11.npy'
         fileName = fileName_BaseRes
     return fileName
 
@@ -236,10 +241,10 @@ def loadData_hog(base_dir = funcH.getVariableByComputerName('base_dir'), data_di
 
     return feat_set, labels_all, detailedLabels_all
 
-def getCorrespondentFrames(base_dir, data_dir, featType, numOfSigns=11, pcaCount=-1, expectedFileType='Data'):
-
+def getCorrespondentFrames(base_dir, data_dir, featType, numOfSigns=11, pcaCount=-1, expectedFileType='Data', normMode=''):
+    #normMode = str(modelParams["normMode"])
     videosFolderName = 'neuralNetHandVideos_' + str(numOfSigns)
-    featsFileName = getFileName(dataToUse=featType, numOfSigns=numOfSigns, expectedFileType=expectedFileType, pcaCount=pcaCount) # 'hogFeats_41.npy', 'skeletonFeats_41.npy'
+    featsFileName = getFileName(dataToUse=featType, numOfSigns=numOfSigns, expectedFileType=expectedFileType, pcaCount=pcaCount, normMode=normMode) # 'hogFeats_41.npy', 'skeletonFeats_41.npy'
     detailedLabelsFileName = getFileName(dataToUse=featType, numOfSigns=numOfSigns, expectedFileType='DetailedLabels', pcaCount=pcaCount) # 'detailedLabels_41.npy'
     corrFramesFileName = getFileName(dataToUse=featType, numOfSigns=numOfSigns, expectedFileType='CorrespendenceVec', pcaCount=pcaCount) #
     corrFramesFileName = data_dir + os.sep + corrFramesFileName
@@ -316,8 +321,9 @@ def getCorrespondentFrames(base_dir, data_dir, featType, numOfSigns=11, pcaCount
         np.save(corrFramesFileName, corrFramesAll)
     return corrFramesAll, detailedLabels_all
 
-def applyPCA2Data(feat_set, data_dir, data_dim, dataToUse, numOfSigns=11, loadIfExist = True):
-    pcaFeatsFileName = getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='PCA')
+def applyPCA2Data(feat_set, data_dir, data_dim, dataToUse, numOfSigns=11, loadIfExist = True, normMode=''):
+    # normMode = str(modelParams["normMode"])
+    pcaFeatsFileName = getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='PCA', normMode=normMode)
     hogFeatsFileName = getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='Data')
 
     pcaFeatsFileNameFull = data_dir + os.sep + pcaFeatsFileName
@@ -338,8 +344,9 @@ def applyPCA2Data(feat_set, data_dir, data_dim, dataToUse, numOfSigns=11, loadIf
 
     return feat_set_pca
 
-def loadPCAData(dataToUse, data_dir, data_dim, numOfSigns, skipLoadOfOriginalData, base_dir = funcH.getVariableByComputerName('base_dir')):
-    pcaFeatsFileName = getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='PCA')
+def loadPCAData(dataToUse, data_dir, data_dim, numOfSigns, skipLoadOfOriginalData, base_dir = funcH.getVariableByComputerName('base_dir'), normMode=''):
+    # normMode = str(modelParams["normMode"])
+    pcaFeatsFileName = getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='PCA', normMode=normMode)
     hogFeatsFileName = getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='Data')
     if not skipLoadOfOriginalData:
         feat_set, _, _ = loadData_hog(base_dir=base_dir, data_dir=data_dir, loadHogIfExist=True, numOfSigns=numOfSigns)
