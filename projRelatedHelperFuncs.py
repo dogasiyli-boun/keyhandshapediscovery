@@ -89,7 +89,7 @@ def getMatFile(data_dir, signCnt, possible_fname_init):
 
 def createPCAOfData(data_dir, dataToUse, sign_count, recreate=False, normMode=''):
     # normMode = str(modelParams["normMode"])
-    npy_PCAFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=sign_count, expectedFileType='PCA', pcaCount=-1, normMode=normMode)
+    npy_PCAFileName = funcD.getFileName(dataToUse=dataToUse, normMode=normMode, pcaCount=-1, numOfSigns=sign_count, expectedFileType='PCA')
     npy_PCAFileName = os.path.join(data_dir, npy_PCAFileName)
     if os.path.isfile(npy_PCAFileName) and not recreate:
         feats_pca = np.load(npy_PCAFileName)
@@ -97,7 +97,7 @@ def createPCAOfData(data_dir, dataToUse, sign_count, recreate=False, normMode=''
         print('loaded ', dataToUse, 'Feats(', feats_pca.shape, ') from : ', npy_PCAFileName)
         print('Max of featsPCA = ', np.amax(feats_pca), ', Min of featsPCA = ', np.amin(feats_pca))
     else:
-        npy_FeatsFileName = funcD.getFileName(dataToUse, sign_count, expectedFileType='Data', pcaCount=-1)
+        npy_FeatsFileName = funcD.getFileName(dataToUse=dataToUse, normMode=normMode, pcaCount=-1, numOfSigns=sign_count, expectedFileType='Data')
         npy_FeatsFileName = os.path.join(data_dir, npy_FeatsFileName)
         feats = np.load(npy_FeatsFileName)
         print('Max of feats = ', np.amax(feats), ', Min of feats = ', np.amin(feats))
@@ -106,9 +106,9 @@ def createPCAOfData(data_dir, dataToUse, sign_count, recreate=False, normMode=''
     return feats_pca, exp_var_rat
 
 def convert_Mat2NPY(dataToUse, data_dir, signCnt, featureStr, labelStr, possible_fname_init, recreate=False):
-    npy_labels_file_name = funcD.getFileName(dataToUse=dataToUse, numOfSigns=signCnt, expectedFileType='Labels')
+    npy_labels_file_name = funcD.getFileName(dataToUse=dataToUse, normMode='', pcaCount=-1, numOfSigns=signCnt, expectedFileType='Labels')
     npy_labels_file_name = os.path.join(data_dir, npy_labels_file_name)
-    npy_feats_file_name = funcD.getFileName(dataToUse=dataToUse, numOfSigns=signCnt, expectedFileType='Data')
+    npy_feats_file_name = funcD.getFileName(dataToUse=dataToUse, normMode='', pcaCount=-1, numOfSigns=signCnt, expectedFileType='Data')
     npy_feats_file_name = os.path.join(data_dir, npy_feats_file_name)
 
     if not recreate and os.path.isfile(npy_labels_file_name) and os.path.isfile(npy_feats_file_name):
@@ -127,15 +127,16 @@ def convert_Mat2NPY(dataToUse, data_dir, signCnt, featureStr, labelStr, possible
         np.save(npy_feats_file_name, feats)
     return feats, labels
 
-def createPCADimsOfData(data_dir, data2use, sign_count, dimArray = [256, 512, 1024], recreate=False):
-    featsPCA, exp_var_rat = createPCAOfData(data_dir=data_dir, dataToUse=data2use, sign_count=sign_count, recreate=recreate)
+def createPCADimsOfData(data_dir, data2use, sign_count, dimArray = [256, 512, 1024], recreate=False, normMode=''):
+    featsPCA, exp_var_rat = createPCAOfData(data_dir=data_dir, dataToUse=data2use, sign_count=sign_count, recreate=recreate, normMode=normMode)
     try:
-        print(data2use, ' feats exp_var_rat[', list(map('{:.2f}%'.format, dimArray)), '] = ', list(map('{:.2f}%'.format, exp_var_rat[dimArray])))
+        print(data2use, ' feats exp_var_rat[', list(map('{:.2f}%'.format, dimArray)), '] = ', list(map('{:.2f}%'.format, exp_var_rat[dimArray])), ', normMode=<', str(normMode), '>')
     except:
+        print(data2use, ' feats exp_var_rat[', list(map('{:.2f}%'.format, dimArray)), '], normMode=<', str(normMode), '>')
         pass
 
     for dims in dimArray:
-        npy_PCAFileName = funcD.getFileName(data2use, sign_count, expectedFileType='Data', pcaCount=dims)
+        npy_PCAFileName = funcD.getFileName(dataToUse=data2use, normMode=normMode, pcaCount=dims, numOfSigns=sign_count, expectedFileType='Data')
         npy_PCAFileName = os.path.join(data_dir, npy_PCAFileName)
         featsToSave = featsPCA[:,0:dims]
         if os.path.isfile(npy_PCAFileName) and not recreate:
@@ -146,19 +147,19 @@ def createPCADimsOfData(data_dir, data2use, sign_count, dimArray = [256, 512, 10
             print('saving pca sn features at : ', npy_PCAFileName)
             np.save(npy_PCAFileName, featsToSave)
 
-def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, pcaCount, expectedFileType, clusterModels = ['Kmeans', 'GMM_diag', 'GMM_full', 'Spectral'], randomSeed=5):
+def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, numOfSigns, pcaCount, expectedFileType, clusterModels = ['Kmeans', 'GMM_diag', 'GMM_full', 'Spectral'], randomSeed=5):
     seed(randomSeed)
     tf.set_random_seed(seed=randomSeed)
     prevPrintOpts = np.get_printoptions()
     np.set_printoptions(precision=4, suppress=True)
 
-    featsFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType=expectedFileType, pcaCount=pcaCount) # 'hogFeats_41.npy', 'skeletonFeats_41.npy'
-    detailedLabelsFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='DetailedLabels', pcaCount=pcaCount) # 'detailedLabels_41.npy'
+    featsFileName = funcD.getFileName(dataToUse=dataToUse, normMode=normMode, pcaCount=pcaCount, numOfSigns=numOfSigns, expectedFileType=expectedFileType) # 'hogFeats_41.npy', 'skeletonFeats_41.npy'
+    detailedLabelsFileName = funcD.getFileName(dataToUse=dataToUse, normMode=normMode, pcaCount=pcaCount, numOfSigns=numOfSigns, expectedFileType='DetailedLabels') # 'detailedLabels_41.npy'
     detailedLabelsFileNameFull = data_dir + os.sep + detailedLabelsFileName
-    labelsFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='Labels', pcaCount=pcaCount) # 'labels_41.npy'
+    labelsFileName = funcD.getFileName(dataToUse=dataToUse, normMode=normMode, pcaCount=pcaCount, numOfSigns=numOfSigns, expectedFileType='Labels') # 'labels_41.npy'
     labelsFileNameFull = data_dir + os.sep + labelsFileName
 
-    baseResultFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='BaseResultName', pcaCount=pcaCount)
+    baseResultFileName = funcD.getFileName(dataToUse=dataToUse, normMode=normMode, pcaCount=pcaCount, numOfSigns=numOfSigns, expectedFileType='BaseResultName')
     funcH.createDirIfNotExist(os.path.join(results_dir, 'baseResults'))
     baseResultFileNameFull = os.path.join(results_dir, 'baseResults', baseResultFileName)
 
@@ -223,19 +224,19 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, pcaCoun
     np.set_printoptions(prevPrintOpts)
     return resultDict
 
-def runOPTICSClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, pcaCount, expectedFileType, clustCntVec = [32, 64, 128, 256, 512], randomSeed=5, updateResultBaseFile=False):
+def runOPTICSClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, pcaCount, numOfSigns, expectedFileType, clustCntVec = [32, 64, 128, 256, 512], randomSeed=5, updateResultBaseFile=False):
     seed(randomSeed)
     tf.set_random_seed(seed=randomSeed)
     prevPrintOpts = np.get_printoptions()
     np.set_printoptions(precision=4, suppress=True)
 
-    featsFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType=expectedFileType, pcaCount=pcaCount) # 'hogFeats_41.npy', 'skeletonFeats_41.npy'
-    detailedLabelsFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='DetailedLabels', pcaCount=pcaCount) # 'detailedLabels_41.npy'
+    featsFileName = funcD.getFileName(dataToUse=dataToUse, normMode=normMode, pcaCount=pcaCount, numOfSigns=numOfSigns, expectedFileType=expectedFileType) # 'hogFeats_41.npy', 'skeletonFeats_41.npy'
+    detailedLabelsFileName = funcD.getFileName(dataToUse=dataToUse, normMode=normMode, pcaCount=pcaCount, numOfSigns=numOfSigns, expectedFileType='DetailedLabels') # 'detailedLabels_41.npy'
     detailedLabelsFileNameFull = data_dir + os.sep + detailedLabelsFileName
-    labelsFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='Labels', pcaCount=pcaCount) # 'labels_41.npy'
+    labelsFileName = funcD.getFileName(dataToUse=dataToUse, normMode=normMode, pcaCount=pcaCount, numOfSigns=numOfSigns, expectedFileType='Labels') # 'labels_41.npy'
     labelsFileNameFull = data_dir + os.sep + labelsFileName
 
-    baseResultFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns, expectedFileType='BaseResultName', pcaCount=pcaCount)
+    baseResultFileName = funcD.getFileName(dataToUse=dataToUse, normMode=normMode, pcaCount=pcaCount, numOfSigns=numOfSigns, expectedFileType='BaseResultName')
     funcH.createDirIfNotExist(os.path.join(results_dir, 'baseResults'))
     baseResultFileNameFull = os.path.join(results_dir, 'baseResults', baseResultFileName)
 
@@ -319,20 +320,19 @@ def runOPTICSClusteringOnFeatSet(data_dir, results_dir, dataToUse, numOfSigns, p
     return resultDict
 
 def loadData(model_params, numOfSigns, data_dir):
-    featsFileName = funcD.getFileName(dataToUse=model_params["dataToUse"], numOfSigns=numOfSigns,
-                                      expectedFileType='Data', pcaCount=model_params["pcaCount"], normMode=str(model_params["normMode"]))
-    fileName_detailedLabels = funcD.getFileName(dataToUse=model_params["dataToUse"], numOfSigns=numOfSigns,
-                                                expectedFileType='DetailedLabels', pcaCount=model_params["pcaCount"])
-    fileName_labels = funcD.getFileName(dataToUse=model_params["dataToUse"], numOfSigns=numOfSigns,
-                                        expectedFileType='Labels', pcaCount=model_params["pcaCount"])
+    featsFileName = funcD.getFileName(dataToUse=model_params["dataToUse"], normMode=str(model_params["normMode"]), pcaCount=model_params["pcaCount"],
+                                      numOfSigns=numOfSigns, expectedFileType='Data')
+    fileName_detailedLabels = funcD.getFileName(dataToUse=model_params["dataToUse"], normMode=str(model_params["normMode"]), pcaCount=model_params["pcaCount"],
+                                                numOfSigns=numOfSigns,expectedFileType='DetailedLabels')
+    fileName_labels = funcD.getFileName(dataToUse=model_params["dataToUse"], normMode=str(model_params["normMode"]), pcaCount=model_params["pcaCount"],
+                                        numOfSigns=numOfSigns, expectedFileType='Labels')
 
     feat_set = funcD.loadFileIfExist(data_dir, featsFileName)
     if feat_set.size == 0:
-        featsFileName = funcD.getFileName(dataToUse=model_params["dataToUse"], numOfSigns=numOfSigns,
-                                          expectedFileType='Data', pcaCount=-1,
-                                          normMode='')
+        _ = funcH.createPCAOfData(data_dir, dataToUse=model_params["dataToUse"], sign_count=numOfSigns, recreate=False, normMode=str(model_params["normMode"]))
         feat_set = funcD.loadFileIfExist(data_dir, featsFileName)
-        os.error("finish here")
+        if feat_set.size == 0:
+            os.error("finish here")
         # apply needed transofrmation and use the data
 
 
@@ -341,11 +341,11 @@ def loadData(model_params, numOfSigns, data_dir):
 
     return feat_set, labels_all, detailed_labels_all
 
-def displayDataResults(method, dataToUse, posteriorDim, pcaCount, numOfSigns, weightReg = 1.0, batchSize = 16):
+def displayDataResults(method, dataToUse, normMode, pcaCount, numOfSigns, posteriorDim, weightReg = 1.0, batchSize = 16):
     results_dir = funcH.getVariableByComputerName('results_dir')  # '/media/dg/SSD_Data/DataPath/bdResults'
     baseLineResultFolder = os.path.join(results_dir, 'baseResults')  # '/media/dg/SSD_Data/DataPath/bdResults/baseResults'
-    baseResultFileName = funcD.getFileName(dataToUse=dataToUse, numOfSigns=numOfSigns,
-                                           expectedFileType='BaseResultName', pcaCount=pcaCount)
+    baseResultFileName = funcD.getFileName(dataToUse=dataToUse, normMode=normMode, pcaCount=pcaCount, numOfSigns=numOfSigns,
+                                           expectedFileType='BaseResultName')
     baseResultFileNameFull = os.path.join(baseLineResultFolder, baseResultFileName)
 
     resultDict = np.load(baseResultFileNameFull, allow_pickle=True)

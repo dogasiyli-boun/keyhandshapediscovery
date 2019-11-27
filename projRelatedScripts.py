@@ -39,11 +39,13 @@ def checkCreateData2Use(sign_count, dataToUse, recreate=False, recreate_hog=Fals
     # saving labels((104472,)) at: / home / dg / DataPath / bdData / labels_41.npy
     # saving snFeats((104472, 1600)) at: / home / dg / DataPath / bdData / snFeats_41.npy
 
-    _ = funcHP.createPCAOfData(data_dir, dataToUse, sign_count, recreate=recreate)
+    for normMode in ['', 'nm']:
+        _ = funcHP.createPCAOfData(data_dir, dataToUse, sign_count, recreate=recreate, normMode=normMode)
     # loaded sn_feats((104472, 1600)) from: / home / dg / DataPath / bdData / snPCA_41.npy
     # Max of featsPCA = 0.003667559914686907, Min of featsPCA = -0.0028185132292039457
 
-    funcHP.createPCADimsOfData(data_dir, dataToUse, sign_count, dimArray, recreate=recreate)
+    for normMode in ['', 'nm']:
+        funcHP.createPCADimsOfData(data_dir, dataToUse, sign_count, dimArray, recreate=recreate, normMode=normMode)
     # loaded  sn Feats( (104472, 1600) ) from :  /home/dg/DataPath/bdData/snPCA_41.npy
     # Max of featsPCA =  0.003667559914686907 , Min of featsPCA =  -0.0028185132292039457
     # features.shape: (104472, 256)
@@ -53,8 +55,9 @@ def checkCreateData2Use(sign_count, dataToUse, recreate=False, recreate_hog=Fals
     # features.shape: (104472, 1024)
     # saving pca sn features at :  /home/dg/DataPath/bdData/sn1024Feats_41.npy
 
-    for dims in dimArray:
-        funcD.getCorrespondentFrames(base_dir=base_dir, data_dir=data_dir, featType=dataToUse, numOfSigns=sign_count, pcaCount=dims, expectedFileType='Data')
+    for normMode in ['', 'nm']:
+        for dims in dimArray:
+            funcD.getCorrespondentFrames(base_dir=base_dir, data_dir=data_dir, featType=dataToUse, numOfSigns=sign_count, pcaCount=dims, expectedFileType='Data', normMode=normMode)
     funcD.getCorrespondentFrames(base_dir=base_dir, data_dir=data_dir, featType=dataToUse, numOfSigns=sign_count, pcaCount=-1, expectedFileType='Data')
 
 def run4All_createData():
@@ -62,7 +65,7 @@ def run4All_createData():
         for sign_count in [11, 41]:
             checkCreateData2Use(sign_count=sign_count, dataToUse=dataToUse, recreate=False, recreate_hog=False)
 
-def runForBaseClusterResults(randomSeed = 5, clusterModels = ['Kmeans', 'GMM_diag', 'Spectral']):
+def runForBaseClusterResults(normMode, randomSeed = 5, clusterModels = ['Kmeans', 'GMM_diag', 'Spectral']):
     data_dir = funcH.getVariableByComputerName('data_dir')
     results_dir = funcH.getVariableByComputerName('results_dir')
 
@@ -74,8 +77,9 @@ def runForBaseClusterResults(randomSeed = 5, clusterModels = ['Kmeans', 'GMM_dia
                 dimArray = [32, 64, 96]
             for dims in dimArray:
                 funcHP.runClusteringOnFeatSet(data_dir=data_dir, results_dir=results_dir, dataToUse=dataToUse,
-                                              numOfSigns=numOfSigns, pcaCount=dims, expectedFileType='Data',
-                                              clusterModels=clusterModels, randomSeed=randomSeed)
+                                              normMode=normMode, numOfSigns=numOfSigns, pcaCount=dims,
+                                              expectedFileType='Data', clusterModels=clusterModels,
+                                              randomSeed=randomSeed)
 
 #
 def runForBaseClusterResults_OPTICS(randomSeed = 5, clustCntVec = [32, 64, 128, 256, 512], numOfSignsVec = [11, 41]):
@@ -96,5 +100,6 @@ def runForBaseClusterResults_OPTICS(randomSeed = 5, clustCntVec = [32, 64, 128, 
 #                                           results_dir=funcH.getVariableByComputerName('results_dir'),
 #                                           dataToUse='skeleton', numOfSigns=11, pcaCount=32,
 #                                           expectedFileType='Data', clusterModels=['Kmeans', 'GMM_diag'], randomSeed=5)
-#runForBaseClusterResults(randomSeed = 5)
+#runForBaseClusterResults(normMode='', clusterModels = ['Kmeans', 'GMM_diag'])
 #runForBaseClusterResults_OPTICS(randomSeed = 5, clustCntVec = [32, 64])
+#run4All_createData()
