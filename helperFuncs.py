@@ -71,7 +71,7 @@ def getVariableByComputerName(variableName):
     curCompName = socket.gethostname()
     if variableName=='base_dir':
         if curCompName == 'doga-MSISSD':
-            base_dir = '/mnt/USB_HDD_1TB'  # for bogazici kasa
+            base_dir = '/media/doga/SSD258/DataPath'  # for bogazici kasa
         elif curCompName == 'WsUbuntu05':
             base_dir = '/media/dg/SSD_Data/DataPath'  # for WS Doga DHO
         elif curCompName == 'doga-msi-ubu':
@@ -81,7 +81,7 @@ def getVariableByComputerName(variableName):
         retVal = base_dir
     if variableName=='data_dir':
         if curCompName == 'doga-MSISSD':
-            data_dir = '/mnt/USB_HDD_1TB/bdData'  # for bogazici kasa
+            data_dir = '/media/doga/SSD258/DataPath/bdData'  # for bogazici kasa
         elif curCompName == 'WsUbuntu05':
             data_dir = '/media/dg/SSD_Data/DataPath/bdData'  # for WS Doga DHO
         elif curCompName == 'doga-msi-ubu':
@@ -91,7 +91,7 @@ def getVariableByComputerName(variableName):
         retVal = data_dir
     if variableName=='results_dir':
         if curCompName == 'doga-MSISSD':
-            results_dir = '/mnt/USB_HDD_1TB/bdResults'  # for bogazici kasa
+            results_dir = '/media/doga/SSD258/DataPath/bdResults'  # for bogazici kasa
         elif curCompName == 'WsUbuntu05':
             results_dir = '/media/dg/SSD_Data/DataPath/bdResults'  # for WS Doga DHO
         elif curCompName == 'doga-msi-ubu':
