@@ -284,17 +284,20 @@ def getCorrespondentFrames(base_dir, data_dir, featType, normMode, pcaCount, num
                     for v2 in range(v1 + 1, vidCnt):
                         detailedLabels_cur_vid_rows_rel = np.argwhere(detailedLabels_all[detailedLabels_all_sign_rows, 1] == v1+1).flatten()
                         frIDs_v1 = detailedLabels_all_sign_rows[detailedLabels_cur_vid_rows_rel]
-                        feat_set_v1 = featSet[detailedLabels_cur_vid_rows_rel, :]
+                        feat_set_v1 = featSet[frIDs_v1, :]
 
                         detailedLabels_cur_vid_rows_rel = np.argwhere(detailedLabels_all[detailedLabels_all_sign_rows, 1] == v2+1).flatten()
                         frIDs_v2 = detailedLabels_all_sign_rows[detailedLabels_cur_vid_rows_rel]
-                        feat_set_v2 = featSet[detailedLabels_cur_vid_rows_rel, :]
+                        feat_set_v2 = featSet[frIDs_v2, :]
 
                         if feat_set_v1.shape[0]!=frIDs_v1.shape[0] or feat_set_v2.shape[0]!=frIDs_v2.shape[0]:
                             print('s_', signCur, ', v ', videos[v1], ' to vCnt-', vidCnt - v1)
                             print("feat_set_v1.shape(", feat_set_v1.shape, "), frIDs_v1.shape(", frIDs_v1.shape, ")")
                             print("feat_set_v2.shape(", feat_set_v2.shape, "), frIDs_v2.shape(", frIDs_v2.shape, ")")
                             os._exit(3)
+
+                        if verbose > 1:
+                            print('s_', signCur, ', v1(', str(np.min(frIDs_v1)), ' to ', str(np.max(frIDs_v1)), ') and v2(', str(np.min(frIDs_v2)), ' to ', str(np.max(frIDs_v2)), ')')
 
                         corrPath = funcH.getCorrPath(feat_set_v1, feat_set_v2, frIDs_v1, frIDs_v2, metric='euclidean')
                         if corrFramesSign.size == 0:

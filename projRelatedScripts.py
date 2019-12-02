@@ -58,7 +58,7 @@ def checkCreateData2Use(sign_count, dataToUse, recreate=False, recreate_hog=Fals
     for normMode in ['', 'nm']:
         for dims in dimArray:
             funcD.getCorrespondentFrames(base_dir=base_dir, data_dir=data_dir, featType=dataToUse, numOfSigns=sign_count, pcaCount=dims, expectedFileType='Data', normMode=normMode)
-    funcD.getCorrespondentFrames(base_dir=base_dir, data_dir=data_dir, featType=dataToUse, numOfSigns=sign_count, pcaCount=-1, expectedFileType='Data')
+    funcD.getCorrespondentFrames(base_dir=base_dir, data_dir=data_dir, featType=dataToUse, numOfSigns=sign_count, pcaCount=-1, expectedFileType='Data', normMode='')
 
 def run4All_createData(dataToUseArr=["hog", "skeleton", "sn"], sign_countArr=[11, 41]):
     for dataToUse in dataToUseArr:

@@ -14,12 +14,15 @@ def createExperimentName(trainParams, modelParams, rnnParams):
     pcaCountStr = str(modelParams["pcaCount"]) if modelParams["pcaCount"] > 0 else "Feats"
     normModeStr = str(modelParams["normMode"]) if modelParams["normMode"] == "" else "_" + str(modelParams["normMode"]) + "_"
 
+    allInitStr = str(modelParams["trainMode"]) + \
+                 '_pd' + str(modelParams["posterior_dim"]) + \
+                 '_wr' + str(modelParams["weight_of_regularizer"]) + \
+                 '_' + str(modelParams["dataToUse"]) + normModeStr + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
+                 '_bs' + str(trainParams["batch_size"]) + \
+                 '_rs' + str(trainParams["randomSeed"])
+
     if modelParams["trainMode"] == "corsa":
-        exp_name  = str(modelParams["trainMode"]) + \
-                    '_pd' + str(modelParams["posterior_dim"]) + \
-                    '_wr' + str(modelParams["weight_of_regularizer"]) + \
-                    '_' + str(modelParams["dataToUse"]) + normModeStr + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
-                    '_bs' + str(trainParams["batch_size"]) + \
+        exp_name  = allInitStr + \
                     '_dM' + str(rnnParams["dataMode"]) + \
                     '_ts' + str(rnnParams["timesteps"]) + \
                     '_cp' + str(trainParams["applyCorr"]) + \
@@ -27,11 +30,7 @@ def createExperimentName(trainParams, modelParams, rnnParams):
         if rnnParams["dropout"] > 0:
             exp_name += '_do' + str(rnnParams["dropout"])
     elif modelParams["trainMode"] == "rsa":
-        exp_name  = str(modelParams["trainMode"]) + \
-                    '_pd' + str(modelParams["posterior_dim"]) + \
-                    '_wr' + str(modelParams["weight_of_regularizer"]) + \
-                    '_' + str(modelParams["dataToUse"]) + normModeStr + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
-                    '_bs' + str(trainParams["batch_size"]) + \
+        exp_name  = allInitStr + \
                     '_dM' + str(rnnParams["dataMode"]) + \
                     '_ts' + str(rnnParams["timesteps"])
         if rnnParams["dropout"] > 0:
@@ -41,19 +40,11 @@ def createExperimentName(trainParams, modelParams, rnnParams):
         if rnnParams["dataMode"] == 2:
             exp_name += '_fo' + str(rnnParams["frameOverlap"])
     elif modelParams["trainMode"] == "cosae":
-        exp_name  = str(modelParams["trainMode"]) + \
-                    '_pd' + str(modelParams["posterior_dim"]) + \
-                    '_wr' + str(modelParams["weight_of_regularizer"]) + \
-                    '_' + str(modelParams["dataToUse"]) + normModeStr + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
-                    '_bs' + str(trainParams["batch_size"]) + \
+        exp_name  = allInitStr + \
                     '_cp' + str(trainParams["applyCorr"]) + \
                     '_cRM' + str(trainParams["corr_randMode"])
     elif modelParams["trainMode"] == "sae":
-        exp_name  = str(modelParams["trainMode"]) + \
-                    '_pd' + str(modelParams["posterior_dim"]) + \
-                    '_wr' + str(modelParams["weight_of_regularizer"]) + \
-                    '_' + str(modelParams["dataToUse"]) + normModeStr + pcaCountStr + '_' + str(modelParams["numOfSigns"]) + \
-                    '_bs' + str(trainParams["batch_size"])
+        exp_name  = allInitStr
     return exp_name
 
 def createExperimentDirectories(results_dir, exp_name):
