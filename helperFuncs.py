@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import normalized_mutual_info_score as nmi
-from sklearn.cluster import KMeans, SpectralClustering, OPTICS as ClusterOPT, cluster_optics_dbscan
+from sklearn.cluster import KMeans, SpectralClustering #, OPTICS as ClusterOPT, cluster_optics_dbscan
 from sklearn.mixture import GaussianMixture
 from sklearn.decomposition import PCA
 from sklearn.metrics.cluster import normalized_mutual_info_score as nmi_sc
@@ -211,7 +211,7 @@ def get_NMI_Acc(non_zero_labels, non_zero_predictions, average_method='geometric
     acc_cur = getAccFromConf(non_zero_labels, non_zero_predictions)
     return nmi_cur, acc_cur
 
-def get_nmi_deepCluster(featVec, labVec, n_clusters, clusterModel='Kmeans', normMode='', applyPca=True):
+def get_nmi_deepCluster(featVec, labVec, n_clusters, clusterModel='KMeans', normMode='', applyPca=True):
     predictedKlusters = clusterData(featVec, n_clusters,
                                     applyPca=applyPca, normMode=normMode,
                                     clusterModel=clusterModel)
@@ -263,11 +263,11 @@ def getNonZeroLabels(labVec, predictedKlusters):
     labVec = labVec[np.where(labVec)]
     return labVec, predictedKlusters
 
-def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='Kmeans'):
+def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='KMeans'):
     featVec, exp_var_rat = applyMatTransform(np.array(featVec), applyPca=applyPca, normMode=normMode)
     df = DataFrame(featVec)
 
-    if clusterModel == 'Kmeans':
+    if clusterModel == 'KMeans':
         kmeans_result = KMeans(n_clusters=n_clusters).fit(df)
         predictedKlusters = kmeans_result.labels_.astype(float)
     elif clusterModel == 'GMM_full':
@@ -278,23 +278,23 @@ def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='K
         sc = SpectralClustering(n_clusters=n_clusters, affinity='rbf', random_state=0)
         sc_clustering = sc.fit(featVec)
         predictedKlusters = sc_clustering.labels_
-    elif 'OPTICS' in clusterModel:
-        N = featVec.shape[0]
-        min_cluster_size = int(np.ceil(N / (n_clusters * 4)))
-        pars = clusterModel.split('_')  # 'OPTICS_hamming_dbscan', 'OPTICS_russellrao_xi'
-        #  metricsAvail = np.sort(['braycurtis', 'canberra', 'chebyshev', 'correlation', 'dice', 'hamming', 'jaccard', 'kulsinski',
-        #                'mahalanobis', 'minkowski', 'rogerstanimoto', 'russellrao', 'seuclidean', 'sokalmichener',
-        #                'sokalsneath', 'sqeuclidean', 'yule',
-        #                'cityblock', 'cosine', 'euclidean', 'l1', 'l2', 'manhattan'])
-        #  cluster_methods_avail = ['xi', 'dbscan']
-        clust = ClusterOPT(min_samples=50, xi=.05, min_cluster_size=min_cluster_size, metric=pars[1], cluster_method=pars[2])
-        clust.fit(featVec)
-        predictedKlusters = cluster_optics_dbscan(reachability=clust.reachability_,
-                                                   core_distances=clust.core_distances_,
-                                                   ordering=clust.ordering_, eps=0.5)
-        n1 = np.unique(predictedKlusters)
-        print(clusterModel, ' found ', str(n1), ' uniq clusters')
-        predictedKlusters = predictedKlusters + 1
+    # elif 'OPTICS' in clusterModel:
+    #     N = featVec.shape[0]
+    #     min_cluster_size = int(np.ceil(N / (n_clusters * 4)))
+    #     pars = clusterModel.split('_')  # 'OPTICS_hamming_dbscan', 'OPTICS_russellrao_xi'
+    #     #  metricsAvail = np.sort(['braycurtis', 'canberra', 'chebyshev', 'correlation', 'dice', 'hamming', 'jaccard', 'kulsinski',
+    #     #                'mahalanobis', 'minkowski', 'rogerstanimoto', 'russellrao', 'seuclidean', 'sokalmichener',
+    #     #                'sokalsneath', 'sqeuclidean', 'yule',
+    #     #                'cityblock', 'cosine', 'euclidean', 'l1', 'l2', 'manhattan'])
+    #     #  cluster_methods_avail = ['xi', 'dbscan']
+    #     clust = ClusterOPT(min_samples=50, xi=.05, min_cluster_size=min_cluster_size, metric=pars[1], cluster_method=pars[2])
+    #     clust.fit(featVec)
+    #     predictedKlusters = cluster_optics_dbscan(reachability=clust.reachability_,
+    #                                                core_distances=clust.core_distances_,
+    #                                                ordering=clust.ordering_, eps=0.5)
+    #     n1 = np.unique(predictedKlusters)
+    #     print(clusterModel, ' found ', str(n1), ' uniq clusters')
+    #     predictedKlusters = predictedKlusters + 1
 
     return np.asarray(predictedKlusters, dtype=int)
 

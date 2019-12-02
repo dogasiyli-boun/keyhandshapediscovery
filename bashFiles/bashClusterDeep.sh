@@ -42,7 +42,7 @@ then
   [ "$funcNameToRun" == "runForBaseClusterResults" ] &&
   {
     echo here111
-    strToRun="import projRelatedScripts as funcPRS; funcPRS.runForBaseClusterResults(normMode='"$epochCountToRun"', randomSeed = 5, clusterModels = ['Kmeans', 'GMM_diag'])"
+    strToRun="import projRelatedScripts as funcPRS; funcPRS.runForBaseClusterResults(normMode='"$epochCountToRun"', randomSeed = 5, clusterModels = ['KMeans', 'GMM_diag'])"
     echo "strToRun = "$strToRun
     python -c $strToRun
   } ||
@@ -65,7 +65,7 @@ then
   numOfSigns_array=(11 41)
   randomSeed=5
   appendEpochBinary=0
-  posterior_dim_array=(256 512) # 32 64 128
+  posterior_dim_array=(256) # 32 64 128 512
   rnnDataMode_array=(lookBack) # patchPerVideo frameOverlap
   epochs=$epochCountToRun
   for numOfSigns in ${numOfSigns_array[@]}

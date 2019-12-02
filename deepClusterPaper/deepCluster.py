@@ -237,7 +237,7 @@ def initSomeVals(params_dict):
     return input_initial_resize, input_size, batch_size, num_workers
 
 def iterate_1(featTrInit, labelsTrInit, predictionsTr, k, labelSaveFileName, ep, num_epochs, trAccInit,
-              clusterModel='Kmeans'):
+              clusterModel='KMeans'):
     labelsTrInit = np.asarray(labelsTrInit, dtype=int)
     predictionsTr = np.asarray(predictionsTr, dtype=int)
 
@@ -286,10 +286,13 @@ def getTransformFuncs(input_size, input_initial_resize):
     ])
     return train_data_transform, valid_data_transform
 
-def setEpochBounds(labelSaveFolder):
+def setEpochBounds(labelSaveFolder, num_epochs, appendEpochBinary):
     completedEpochCnt = funcH.numOfFilesInFolder(labelSaveFolder, startswith="labels", endswith=".npz")
     epochFr = completedEpochCnt
-    epochTo = num_epochs + completedEpochCnt
+    epochTo = num_epochs + appendEpochBinary*completedEpochCnt
+    if epochFr >= epochTo:
+        print('epochFr(', str(epochFr), ') >= (', str(epochTo), ')epochTo. hence exiting.')
+        sys.exit(5)
     print('epochFr = ', str(epochFr), ', epochTo = ', str(epochTo))
     return epochFr, epochTo
 
@@ -330,7 +333,7 @@ def getModel(params_dict, modelsDir, expName):
     return model, optimizer, updatedModelFile
 
 def saveFeatsExtracted(data_dir, epochID, modelName, expName, featVec, labels, predictions):
-    if epochFr == 0:
+    if epochID == 0:
         saveToFileName = os.path.join(data_dir, modelName + '_featsVec.npz')
     else:
         saveToFileName = os.path.join(data_dir, expName + '_featsVec.npz')
@@ -341,13 +344,12 @@ def saveFeatsExtracted(data_dir, epochID, modelName, expName, featVec, labels, p
     print(actionStr + 'ed ', saveToFileName)
     return
 
-if __name__ == '__main__':
+def main(argv):
     np.set_printoptions(formatter={"float_kind": lambda x: "%g" % x})
 
-    params_dict = parseArgs(sys.argv)
+    params_dict = parseArgs(argv)
     numOfSigns = params_dict["numOfSigns"]  # 11 or 41
-    num_epochs = params_dict["epochs"]  # 1000
-    clusterModel = params_dict["clusterModel"]  # 'Kmeans', 'GMM_diag', 'Spectral'
+    clusterModel = params_dict["clusterModel"]  # 'KMeans', 'GMM_diag', 'Spectral'
     params_dict["hostName"] = socket.gethostname()
 
     print('you are running this train function on = <', params_dict["hostName"], '>')
@@ -374,7 +376,7 @@ if __name__ == '__main__':
     funcH.createDirIfNotExist(modelsDir)
     funcH.createDirIfNotExist(labelSaveFolder)
 
-    epochFr, epochTo = setEpochBounds(labelSaveFolder)
+    epochFr, epochTo = setEpochBounds(labelSaveFolder, params_dict["epochs"], params_dict["appendEpochBinary"])
 
     train_dataset = HandShapeDataset(root_dir=nnVidsDir, istrain=True, transform=train_data_transform, datasetname='nnv')
     val_dataset = HandShapeDataset(root_dir=nnVidsDir, istrain=False, transform=valid_data_transform, datasetname='nnv')
@@ -431,3 +433,6 @@ if __name__ == '__main__':
         saveFeatsExtracted(data_dir, ep, params_dict["modelName"], expName, features_avgPool, labelsTrInit, predictionsTr)
         saveToResultMatFile(resultMatFile, resultRow)
         torch.save(model, f=updatedModelFile)
+
+if __name__ == '__main__':
+    main(sys.argv)

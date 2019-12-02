@@ -65,7 +65,7 @@ def run4All_createData(dataToUseArr=["hog", "skeleton", "sn"], sign_countArr=[11
         for sign_count in sign_countArr:
             checkCreateData2Use(sign_count=sign_count, dataToUse=dataToUse, recreate=False, recreate_hog=False)
 
-def runForBaseClusterResults(normMode, randomSeed = 5, clusterModels = ['Kmeans', 'GMM_diag']):
+def runForBaseClusterResults(normMode, randomSeed = 5, clusterModels = ['KMeans', 'GMM_diag']):
     data_dir = funcH.getVariableByComputerName('data_dir')
     results_dir = funcH.getVariableByComputerName('results_dir')
 
@@ -99,7 +99,7 @@ def runForBaseClusterResults_OPTICS(randomSeed = 5, clustCntVec = [32, 64, 128, 
 #resultDict = funcHP.runClusteringOnFeatSet(data_dir=funcH.getVariableByComputerName('data_dir'),
 #                                           results_dir=funcH.getVariableByComputerName('results_dir'),
 #                                           dataToUse='skeleton', numOfSigns=11, pcaCount=32,
-#                                           expectedFileType='Data', clusterModels=['Kmeans', 'GMM_diag'], randomSeed=5)
-#runForBaseClusterResults(normMode='', clusterModels = ['Kmeans', 'GMM_diag'])
+#                                           expectedFileType='Data', clusterModels=['KMeans', 'GMM_diag'], randomSeed=5)
+#runForBaseClusterResults(normMode='', clusterModels = ['KMeans', 'GMM_diag'])
 #runForBaseClusterResults_OPTICS(randomSeed = 5, clustCntVec = [32, 64])
-run4All_createData()
+#run4All_createData()

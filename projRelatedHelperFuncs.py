@@ -138,7 +138,7 @@ def createPCADimsOfData(data_dir, data2use, sign_count, dimArray = [256, 512, 10
             print('saving pca sn features at : ', npy_PCAFileName)
             np.save(npy_PCAFileName, featsToSave)
 
-def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, numOfSigns, pcaCount, expectedFileType, clusterModels = ['Kmeans', 'GMM_diag', 'GMM_full', 'Spectral'], randomSeed=5):
+def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, numOfSigns, pcaCount, expectedFileType, clusterModels = ['KMeans', 'GMM_diag', 'GMM_full', 'Spectral'], randomSeed=5):
     seed(randomSeed)
     tf.set_random_seed(seed=randomSeed)
     prevPrintOpts = np.get_printoptions()
@@ -332,11 +332,12 @@ def loadData(model_params, numOfSigns, data_dir):
 
     return feat_set, labels_all, detailed_labels_all
 
-def displayDataResults(method, dataToUse, normMode, pcaCount, numOfSigns, posteriorDim, weightReg = 1.0, batchSize = 16):
+def getBaseResults(dataToUse, normMode, pcaCount, numOfSigns, displayResults=True, baseResultFileName=''):
+    if baseResultFileName == '':
+        baseResultFileName = funcD.getFileName(dataToUse=dataToUse, normMode=normMode, pcaCount=pcaCount,
+                                               numOfSigns=numOfSigns, expectedFileType='BaseResultName')
     results_dir = funcH.getVariableByComputerName('results_dir')  # '/media/dg/SSD_Data/DataPath/bdResults'
     baseLineResultFolder = os.path.join(results_dir, 'baseResults')  # '/media/dg/SSD_Data/DataPath/bdResults/baseResults'
-    baseResultFileName = funcD.getFileName(dataToUse=dataToUse, normMode=normMode, pcaCount=pcaCount, numOfSigns=numOfSigns,
-                                           expectedFileType='BaseResultName')
     baseResultFileNameFull = os.path.join(baseLineResultFolder, baseResultFileName)
 
     resultDict = np.load(baseResultFileNameFull, allow_pickle=True)
@@ -345,10 +346,11 @@ def displayDataResults(method, dataToUse, normMode, pcaCount, numOfSigns, poster
     #valuesStrFormat = headerStrFormatBase + "* nmiAll(%6.2f) * accAll(%6.2f) * nmiNoz(%6.2f) * accNoz(%6.2f) * emptyClusters(%6d)"
     valuesStrFormat2= headerStrFormatBase + "* %6.2f * %6.2f * %6.2f * %6.2f * %6d"
 
-    print(headerStrFormat % ("npyFileName", "clusModel", "clusCnt", "nmiAll", "accAll", "nmiNoz", "accNoz", "emptyK"))
-    baseResults = {}
-    baseResultsLab = []
-    baseResultsVal = []
+    #print(headerStrFormat % ("npyFileName", "clusModel", "clusCnt", "nmiAll", "accAll", "nmiNoz", "accNoz", "emptyK"))
+    #baseResults = {}
+    #baseResultsLab = []
+    #baseResultsVal = []
+    returnDict = []
     for resultList in resultDict:
         clusterModel = resultList[1]
         clusterCount = resultList[2]
@@ -358,12 +360,39 @@ def displayDataResults(method, dataToUse, normMode, pcaCount, numOfSigns, poster
         accNoz = resultList[3][3]
         emptyK = resultList[3][4]
         # , '*histCnt=', resultList[3][5][0:10]
-        baseResultsLab.append([str(clusterModel)+str(clusterCount)])
-        baseResultsVal.append(nmiNoz)
-        baseResults[str(clusterModel)+str(clusterCount)] = [nmiNoz]
-        print(valuesStrFormat2 %
-        (baseResultFileName.replace('.npy', '').replace('_baseResults', ''), clusterModel, clusterCount, nmiAll, accAll, nmiNoz, accNoz, emptyK))
+        #baseResultsLab.append([str(clusterModel)+str(clusterCount)])
+        #baseResultsVal.append(nmiNoz)
+        #baseResults[str(clusterModel)+str(clusterCount)] = [nmiNoz]
+        dataUsed = baseResultFileName.replace('.npy', '').replace('_baseResults', '')
+        #print(valuesStrFormat2 %
+        #(dataUsed, clusterModel, clusterCount, nmiAll, accAll, nmiNoz, accNoz, emptyK))
+        returnDict.append([dataUsed, clusterModel, clusterCount, nmiAll, accAll, nmiNoz, accNoz, emptyK])
 
+    df = pd.DataFrame(returnDict, columns=['npyFileName', 'clusModel', 'clusCnt', 'nmiAll', 'accAll', 'nmiNoz', 'accNoz', 'emptyK'])
+    pd.set_option('display.max_columns', 500)
+    pd.set_option('display.width', 1000)
+    if displayResults:
+        print(df)
+
+    return returnDict
+
+def traverseBaseResultsFolder():
+    results_dir = funcH.getVariableByComputerName('results_dir')  # '/media/dg/SSD_Data/DataPath/bdResults'
+    baseLineResultFolder = os.path.join(results_dir, 'baseResults')  # '/media/dg/SSD_Data/DataPath/bdResults/baseResults'
+    fileList = funcH.getFileList(dir2Search=baseLineResultFolder, startString='', endString='.npy')
+    brAll = []
+    for f in fileList:
+        br = getBaseResults(dataToUse='', normMode='', pcaCount=-1, numOfSigns=-1, displayResults=False, baseResultFileName=f)
+        brAll = brAll + br
+    returnDictAll = pd.DataFrame(brAll, columns=['npyFileName', 'clusModel', 'clusCnt', 'nmiAll', 'accAll', 'nmiNoz', 'accNoz', 'emptyK']).sort_values(by='accNoz', ascending=False)
+    print(returnDictAll)
+
+    baseResults_csv = os.path.join(baseLineResultFolder, 'baseLineResults.csv')
+    returnDictAll.to_csv(path_or_buf=baseResults_csv, sep=',', na_rep='NaN', float_format='%8.4f')
+
+def displayDataResults(method, dataToUse, normMode, pcaCount, numOfSigns, posteriorDim, weightReg = 1.0, batchSize = 16):
+
+    getBaseResults(dataToUse=dataToUse, normMode=normMode, pcaCount=pcaCount, numOfSigns=numOfSigns, displayResults=True)
     modelParams = {
         "trainMode": method,
         "posterior_dim": posteriorDim,
@@ -401,6 +430,5 @@ def displayDataResults(method, dataToUse, normMode, pcaCount, numOfSigns, poster
     df = pd.DataFrame({'lab':baseResultsLab, 'val':baseResultsVal})
     ax = df.plot.bar(x='lab', y='val', rot=45)
     plt.pyplot.show()
-
 
 #displayDataResults(method='sae', dataToUse='skeleton', posteriorDim=256, pcaCount=32, numOfSigns=11, weightReg = 1.0, batchSize = 16)
