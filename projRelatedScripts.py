@@ -39,12 +39,12 @@ def checkCreateData2Use(sign_count, dataToUse, recreate=False, recreate_hog=Fals
     # saving labels((104472,)) at: / home / dg / DataPath / bdData / labels_41.npy
     # saving snFeats((104472, 1600)) at: / home / dg / DataPath / bdData / snFeats_41.npy
 
-    for normMode in ['', 'nm']:
+    for normMode in ['']:
         _ = funcHP.createPCAOfData(data_dir, dataToUse, sign_count, recreate=recreate, normMode=normMode)
     # loaded sn_feats((104472, 1600)) from: / home / dg / DataPath / bdData / snPCA_41.npy
     # Max of featsPCA = 0.003667559914686907, Min of featsPCA = -0.0028185132292039457
 
-    for normMode in ['', 'nm']:
+    for normMode in ['']:
         funcHP.createPCADimsOfData(data_dir, dataToUse, sign_count, dimArray, recreate=recreate, normMode=normMode)
     # loaded  sn Feats( (104472, 1600) ) from :  /home/dg/DataPath/bdData/snPCA_41.npy
     # Max of featsPCA =  0.003667559914686907 , Min of featsPCA =  -0.0028185132292039457
@@ -55,24 +55,24 @@ def checkCreateData2Use(sign_count, dataToUse, recreate=False, recreate_hog=Fals
     # features.shape: (104472, 1024)
     # saving pca sn features at :  /home/dg/DataPath/bdData/sn1024Feats_41.npy
 
-    for normMode in ['', 'nm']:
+    for normMode in ['']:
         for dims in dimArray:
             funcD.getCorrespondentFrames(base_dir=base_dir, data_dir=data_dir, featType=dataToUse, numOfSigns=sign_count, pcaCount=dims, expectedFileType='Data', normMode=normMode)
     funcD.getCorrespondentFrames(base_dir=base_dir, data_dir=data_dir, featType=dataToUse, numOfSigns=sign_count, pcaCount=-1, expectedFileType='Data', normMode='')
 
-def run4All_createData(dataToUseArr=["hog", "skeleton", "sn"], sign_countArr=[11, 41]):
+def run4All_createData(dataToUseArr=["hog", "skeleton", "sn"], sign_countArr=[11]):
     for dataToUse in dataToUseArr:
         for sign_count in sign_countArr:
             checkCreateData2Use(sign_count=sign_count, dataToUse=dataToUse, recreate=False, recreate_hog=False)
 
-def runForBaseClusterResults(normMode, randomSeed = 5, clusterModels = ['Kmeans', 'GMM_diag', 'Spectral']):
+def runForBaseClusterResults(normMode, randomSeed = 5, clusterModels = ['Kmeans', 'GMM_diag']):
     data_dir = funcH.getVariableByComputerName('data_dir')
     results_dir = funcH.getVariableByComputerName('results_dir')
 
     for dataToUse in ["hog", "skeleton", "sn"]:
-        for numOfSigns in [11, 41]:
+        for numOfSigns in [11]:
             if dataToUse == 'sn' or dataToUse == 'hog':
-                dimArray = [256, 512]
+                dimArray = [256]
             elif dataToUse == 'skeleton':
                 dimArray = [32, 64, 96]
             for dims in dimArray:
@@ -102,4 +102,4 @@ def runForBaseClusterResults_OPTICS(randomSeed = 5, clustCntVec = [32, 64, 128, 
 #                                           expectedFileType='Data', clusterModels=['Kmeans', 'GMM_diag'], randomSeed=5)
 #runForBaseClusterResults(normMode='', clusterModels = ['Kmeans', 'GMM_diag'])
 #runForBaseClusterResults_OPTICS(randomSeed = 5, clustCntVec = [32, 64])
-run4All_createData(dataToUseArr=["hog"], sign_countArr=[11])
+run4All_createData()

@@ -162,7 +162,7 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, numOfSign
     print('*-*-*-*-*-*-*running for : ', featsFileName, '*-*-*-*-*-*-*')
     print('featSet(', featSet.shape, '), detailedLabels(', detailedLabels_all.shape, '), labels_All(', labels_all.shape, '), labels_nonzero(', non_zero_labels.shape, ')')
 
-    clustCntVec = [32, 64, 128, 256, 512]
+    clustCntVec = [64, 128, 256] #[32, 64, 128, 256, 512]
     if os.path.isfile(baseResultFileNameFull):
         print('resultDict will be loaded from(', baseResultFileNameFull, ')')
         resultDict = list(np.load(baseResultFileNameFull, allow_pickle=True))

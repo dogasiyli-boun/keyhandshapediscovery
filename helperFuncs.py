@@ -223,8 +223,8 @@ def get_nmi_deepCluster(featVec, labVec, n_clusters, clusterModel='Kmeans', norm
 def applyMatTransform(featVec, applyPca=True, whiten=True, normMode='', verbose=0):
     exp_var_rat = []
     if applyPca:
-        pca = PCA(whiten=whiten, svd_solver='full')
-        #pca = PCA(whiten=False, svd_solver='auto')
+        #pca = PCA(whiten=whiten, svd_solver='full')
+        pca = PCA(whiten=False, svd_solver='auto')
         featVec = pca.fit_transform(featVec)
         exp_var_rat = np.cumsum(pca.explained_variance_ratio_)
         if verbose > 0:
