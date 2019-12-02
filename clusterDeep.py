@@ -284,8 +284,8 @@ trainParams["epochFr"] = epochFr
 trainParams["epochTo"] = epochTo
 trainParams["corr_indis_a"] = np.mod(epochFr, 2)
 if trainParams["applyCorr"] >= 2:
-    trainParams["corrFramesAll"] = funcD.getCorrespondentFrames(base_dir, data_dir, featType=modelParams["dataToUse"],
-                                                                numOfSigns=numOfSigns, pcaCount=modelParams["pcaCount"],
+    trainParams["corrFramesAll"] = funcD.getCorrespondentFrames(base_dir=base_dir, data_dir=data_dir, featType=modelParams["dataToUse"],
+                                                                normMode=modelParams["normMode"], pcaCount=modelParams["pcaCount"], numOfSigns=numOfSigns,
                                                                 expectedFileType='Data')
 
 print('started training')

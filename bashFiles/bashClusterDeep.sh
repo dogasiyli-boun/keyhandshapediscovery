@@ -34,7 +34,7 @@ fi
 
 cd $folderCode
 echo "current directory = " pwd
-echo "funcNameToRun=" "$funcNameToRun" ",epochCountToRun=" "$epochCountToRun"
+echo "funcNameToRun=" "$funcNameToRun" ",epochCountToRun=" "$epochCountToRun" ",runOrDisplay=" "$runOrDisplay"
 
 if [ "$funcNameToRun" == "runForBaseClusterResults" ];
 then
@@ -42,11 +42,13 @@ then
   [ "$funcNameToRun" == "runForBaseClusterResults" ] &&
   {
     echo here111
-    python -c"import projRelatedScripts as funcPRS; funcPRS.runForBaseClusterResults(randomSeed = 5, clusterModels = ['Kmeans', 'GMM_diag'])"
+    strToRun="import projRelatedScripts as funcPRS; funcPRS.runForBaseClusterResults(normMode='"$epochCountToRun"', randomSeed = 5, clusterModels = ['Kmeans', 'GMM_diag'])"
+    echo "strToRun = "$strToRun
+    python -c $strToRun
   } ||
   {
     echo here222
-    python ./clusterDeep.py --trainMode cosae --posterior_dim 32 --dataToUse skeleton --applyCorr 2 --pcaCount 64 --numOfSigns 11 --epochs 100 --appendEpochBinary 1 --randomSeed 5
+    #python ./clusterDeep.py --trainMode cosae --posterior_dim 32 --dataToUse skeleton --applyCorr 2 --pcaCount 64 --numOfSigns 11 --epochs 100 --appendEpochBinary 1 --randomSeed 5
   }
 elif [ "$funcNameToRun" == "runForBaseClusterResults_OPTICS" ];
 then

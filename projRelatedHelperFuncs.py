@@ -97,7 +97,7 @@ def createPCAOfData(data_dir, dataToUse, sign_count, recreate=False, normMode=''
         print('loaded ', dataToUse, 'Feats(', feats_pca.shape, ') from : ', npy_PCAFileName)
         print('Max of featsPCA = ', np.amax(feats_pca), ', Min of featsPCA = ', np.amin(feats_pca))
     else:
-        npy_FeatsFileName = funcD.getFileName(dataToUse=dataToUse, normMode=normMode, pcaCount=-1, numOfSigns=sign_count, expectedFileType='Data')
+        npy_FeatsFileName = funcD.getFileName(dataToUse=dataToUse, normMode='', pcaCount=-1, numOfSigns=sign_count, expectedFileType='Data')
         npy_FeatsFileName = os.path.join(data_dir, npy_FeatsFileName)
         feats = np.load(npy_FeatsFileName)
         print('Max of feats = ', np.amax(feats), ', Min of feats = ', np.amin(feats))

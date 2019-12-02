@@ -232,11 +232,11 @@ def applyMatTransform(featVec, applyPca=True, whiten=True, normMode='', verbose=
     if normMode == '':
         pass # do nothing
     elif normMode == 'nm':
-        featVec = normalize(featVec, axis=1)
+        featVec = normalize(featVec, axis=0)  # divide per column max
     elif normMode == 'nl':
-        featVec = normalize(featVec, axis=None)
+        featVec = normalize(featVec, axis=None)  # divide to a scalar = max of matrix
     else:
-        os.error("shouldnt be here")
+        os.error("normMode must be defined as one of the following = ['','nm','nl']. normMode(" + normMode + ")")
 
     if verbose > 0 and normMode != '':
         print('Max of normedFeats = ', np.amax(featVec), ', Min of normedFeats = ', np.amin(featVec))
