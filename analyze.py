@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import helperFuncs as funcH
 
-
 """
 ========================================
 Create 2D bar graphs in different planes

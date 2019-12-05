@@ -38,7 +38,7 @@ echo "funcNameToRun=" "$funcNameToRun" ",epochCountToRun=" "$epochCountToRun" ",
 
 if [ "$funcNameToRun" == "runForBaseClusterResults" ];
 then
-  chmod +x clusterDeep.py
+  chmod +x aeCluster.py
   [ "$funcNameToRun" == "runForBaseClusterResults" ] &&
   {
     echo here111
@@ -48,7 +48,7 @@ then
   } ||
   {
     echo here222
-    #python ./clusterDeep.py --trainMode cosae --posterior_dim 32 --dataToUse skeleton --applyCorr 2 --pcaCount 64 --numOfSigns 11 --epochs 100 --appendEpochBinary 1 --randomSeed 5
+    #python ./aeCluster.py --trainMode cosae --posterior_dim 32 --dataToUse skeleton --applyCorr 2 --pcaCount 64 --numOfSigns 11 --epochs 100 --appendEpochBinary 1 --randomSeed 5
   }
 elif [ "$funcNameToRun" == "runForBaseClusterResults_OPTICS" ];
 then
@@ -92,7 +92,7 @@ then
                 echo $i $trainMode $dataToUse $pcaCount $posterior_dim $applyCorr $numOfSigns
               } ||
               {
-                python ./clusterDeep.py --trainMode $trainMode --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
+                python ./aeCluster.py --trainMode $trainMode --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
               }
             } ||
             {
@@ -103,7 +103,7 @@ then
                   echo $i $trainMode $dataToUse $pcaCount $posterior_dim $applyCorr $rnnDataMode $numOfSigns rnnTimesteps 1
                 } ||
                 {
-                  python ./clusterDeep.py --trainMode $trainMode --rnnDataMode $rnnDataMode --rnnTimesteps 1 --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
+                  python ./aeCluster.py --trainMode $trainMode --rnnDataMode $rnnDataMode --rnnTimesteps 1 --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
                 }
               done
             }
@@ -146,13 +146,13 @@ else
             [ "$trainMode" == "cosae" ] &&
             {
               echo $i $trainMode $dataToUse $pcaCount $posterior_dim $applyCorr $numOfSigns
-              python ./clusterDeep.py --trainMode $trainMode --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
+              python ./aeCluster.py --trainMode $trainMode --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
             } ||
             {
               for rnnDataMode in ${rnnDataMode_array[@]}
               do
                 echo $i $trainMode $dataToUse $pcaCount $posterior_dim $applyCorr $rnnDataMode $numOfSigns rnnTimesteps 1
-                python ./clusterDeep.py --trainMode $trainMode --rnnDataMode $rnnDataMode --rnnTimesteps 1 --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
+                python ./aeCluster.py --trainMode $trainMode --rnnDataMode $rnnDataMode --rnnTimesteps 1 --posterior_dim $posterior_dim --dataToUse $dataToUse --applyCorr $applyCorr --pcaCount $pcaCount --numOfSigns $numOfSigns --epochs $epochs --appendEpochBinary $appendEpochBinary --randomSeed $randomSeed
               done
             }
             i=$((i+1))
