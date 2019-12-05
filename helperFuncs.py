@@ -1,5 +1,6 @@
 import socket
 import os
+import sys
 import numpy as np
 import tensorflow as tf
 from sklearn.metrics import confusion_matrix
@@ -7,13 +8,29 @@ from sklearn.metrics import normalized_mutual_info_score as nmi
 from sklearn.cluster import KMeans, SpectralClustering #, OPTICS as ClusterOPT, cluster_optics_dbscan
 from sklearn.mixture import GaussianMixture
 from sklearn.decomposition import PCA
-from sklearn.metrics.cluster import normalized_mutual_info_score as nmi_sc
 
 from scipy.spatial.distance import cdist
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 from pandas import DataFrame
 import scipy.io
+import time
+import datetime
+
+def removeLastLine():
+    sys.stdout.write("\033[F")
+    sys.stdout.write("\033[K")
+
+def getElapsedTimeFormatted(elapsed_miliseconds):
+    hours, rem = divmod(elapsed_miliseconds, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if hours > 0:
+        retStr = "{:0>2}:{:0>2}:{:05.2f}".format(int(hours), int(minutes), seconds)
+    elif minutes > 0:
+        retStr = "{:0>2}:{:05.2f}".format(int(minutes), seconds)
+    else:
+        retStr = "{:05.2f}".format(seconds)
+    return retStr
 
 def getFileList(dir2Search, startString="", endString="", sortList=False):
     fileList = [f for f in os.listdir(dir2Search) if f.startswith(startString) and
@@ -131,8 +148,8 @@ def confusionFromKluster(labVec, predictedKlusters):
     _confMat = []
     #rows are true labels, cols are predictedLabels
 
-    _confMat = confMatCalc(labVec, predictedKlusters)
-    _confMat = removeConfMatUnnecessaryRows(_confMat)
+    _confMat = calcCleanConfMat(labVec, predictedKlusters)
+    #_confMat = removeConfMatUnnecessaryRows(_confMat)
 
     inputConfMat_const = tf.constant(_confMat, dtype="float")
     c_C, r_K = _confMat.shape
@@ -267,17 +284,40 @@ def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='K
     featVec, exp_var_rat = applyMatTransform(np.array(featVec), applyPca=applyPca, normMode=normMode)
     df = DataFrame(featVec)
 
-    if clusterModel == 'KMeans':
-        kmeans_result = KMeans(n_clusters=n_clusters).fit(df)
-        predictedKlusters = kmeans_result.labels_.astype(float)
-    elif clusterModel == 'GMM_full':
-        predictedKlusters = GaussianMixture(n_components=n_clusters, covariance_type='full').fit_predict(df)
-    elif clusterModel == 'GMM_diag':
-        predictedKlusters = GaussianMixture(n_components=n_clusters, covariance_type='diag').fit_predict(df)
-    elif clusterModel == 'Spectral':
-        sc = SpectralClustering(n_clusters=n_clusters, affinity='rbf', random_state=0)
-        sc_clustering = sc.fit(featVec)
-        predictedKlusters = sc_clustering.labels_
+    curTol = 0.0001 if clusterModel == 'KMeans' else 0.01
+    max_iter = 300 if clusterModel == 'KMeans' else 200
+
+    t = time.time()
+    numOf_1_sample_bins = 1
+    expCnt = 0
+    while numOf_1_sample_bins > 0 and expCnt < 5:
+        if expCnt > 0:
+            print("running ", clusterModel, " for the ", str(expCnt), " time due to numOf_1_sample_bins(",
+                  str(numOf_1_sample_bins), ")")
+        print('Clustering the featVec(', featVec.shape, ') with n_clusters(', str(n_clusters), ') and model = ',
+              clusterModel, ", curTol(", str(curTol), "), max_iter(", str(max_iter), "), at ",
+              datetime.datetime.now().strftime("%H:%M:%S"))
+        if clusterModel == 'KMeans':
+                #default vals for kmeans --> max_iter=300, 1e-4
+                kmeans_result = KMeans(n_clusters=n_clusters, n_init=5, tol=curTol, max_iter=max_iter).fit(df)
+                predictedKlusters = kmeans_result.labels_.astype(float)
+        elif clusterModel == 'GMM_full':
+            # default vals for gmm --> max_iter=100, 1e-3
+            predictedKlusters = GaussianMixture(n_components=n_clusters, covariance_type='full', tol=curTol, max_iter=max_iter).fit_predict(df)
+        elif clusterModel == 'GMM_diag':
+            predictedKlusters = GaussianMixture(n_components=n_clusters, covariance_type='diag', tol=curTol, max_iter=max_iter).fit_predict(df)
+        elif clusterModel == 'Spectral':
+            sc = SpectralClustering(n_clusters=n_clusters, affinity='rbf', random_state=0)
+            sc_clustering = sc.fit(featVec)
+            predictedKlusters = sc_clustering.labels_
+        numOf_1_sample_bins, histSortedInv = analyzeClusterDistribution(predictedKlusters, n_clusters, verbose=0)
+        curTol = curTol * 10
+        max_iter = max_iter + 50
+        expCnt = expCnt + 1
+        elapsed = time.time() - t
+        print('Clustering done in (', getElapsedTimeFormatted(elapsed), '), ended at ', datetime.datetime.now().strftime("%H:%M:%S"))
+    removeLastLine()
+    print('Clustering completed with (', np.unique(predictedKlusters).shape, ') clusters,  expCnt(', str(expCnt), ')')
     # elif 'OPTICS' in clusterModel:
     #     N = featVec.shape[0]
     #     min_cluster_size = int(np.ceil(N / (n_clusters * 4)))

@@ -5,7 +5,7 @@ from PIL import Image
 import numpy as np
 import torch
 
-def parseDataset_nnv(base_dir, istrain, loadHogIfExist=True, labelsFileName='labels_convModel.npy', detailedLabelsFileName='detailed_labels_convModel.npy'):
+def parseDataset_nnv(base_dir, labelsFileName='labels_convModel.npy', detailedLabelsFileName='detailed_labels_convModel.npy'):
     labelsFileNameFull = base_dir + os.sep + labelsFileName
     detailedLabelsFileNameFull = base_dir + os.sep + detailedLabelsFileName
     base_dir_train_feat = base_dir
@@ -25,13 +25,13 @@ def parseDataset_nnv(base_dir, istrain, loadHogIfExist=True, labelsFileName='lab
         signID = signID + 1
         videoID = 0
         videos = np.sort(os.listdir(sign_folder))
-        print('going to grab images from sign folder(', sign_folder, ')')
+        #print('going to grab images from sign folder(', sign_folder, ')')
         for v in videos:
             video_folder = os.path.join(sign_folder, v)
             if not os.path.isdir(video_folder):
                 continue
             videoID = videoID + 1
-            print('going to grab images from video folder(', video_folder, ')')
+            #print('going to grab images from video folder(', video_folder, ')')
             frames = os.listdir(video_folder)
             for frame in sorted(frames):
                 if frame.endswith('.png'):
@@ -48,7 +48,7 @@ def parseDataset_nnv(base_dir, istrain, loadHogIfExist=True, labelsFileName='lab
             frameIDs = np.asarray(range(fr, to)).reshape(frCnt, -1)
             detailedLabels_video = np.hstack((signID * np.ones([frCnt, 1]), videoID * np.ones([frCnt, 1]), frameIDs, np.asarray(labels).reshape(frCnt, -1)))
 
-            for i in range(0,len(labels)):
+            for i in range(0, len(labels)):
                 labels_all.append(int(labels[i]))
 
             if np.all(detailedLabels_all == 0):
@@ -149,7 +149,7 @@ def parseDataset(root_dir, datasetname, istrain):
         images, labels, ids = parseDataset_khs(root_dir, istrain)
     elif datasetname == 'nnv':
         #root_dir = '/home/doga/DataFolder/neuralNetHandVideos'#str.replace(root_dir,'neuralNetHandImages','neuralNetHandVideos')
-        images, labels, ids = parseDataset_nnv(root_dir, istrain)
+        images, labels, ids = parseDataset_nnv(root_dir)
     return images, labels, ids
 
 class HandShapeDataset(Dataset):

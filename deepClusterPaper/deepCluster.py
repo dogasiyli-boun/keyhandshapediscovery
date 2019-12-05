@@ -1,14 +1,18 @@
-from deepClusterPaper.dataset import HandShapeDataset
-from torch.utils.data import DataLoader
-import numpy as np
-import torch
-from torchvision import transforms, utils
-import torchvision.models as models
+import datetime
+import getopt
 import os
 import socket
-import helperFuncs as funcH
-import getopt
 import sys
+import time
+
+import numpy as np
+import torch
+import torchvision.models as models
+from torch.utils.data import DataLoader
+from torchvision import transforms
+
+import helperFuncs as funcH
+from deepClusterPaper.dataset import HandShapeDataset
 
 # Freeze layers
 def freeze_layers(model, feature_extracting):
@@ -47,8 +51,9 @@ def extract_features(layerSize, model, feature_layer_string, images):
     # np.savez(os.path.join(feature_cls_path, video + '.npz'), np.array(features))
     return features
 
-def runTrainDs(model, dsLoad_train_train):
-    accuracy = 0
+def runTrainDs(model, optimizer, dsLoad_train_train):
+    print("running --> runTrainDs", datetime.datetime.now().strftime("%H:%M:%S"))
+    t = time.time()
     running_acc = []
     idShuffle = []
     cnt = 0
@@ -72,6 +77,11 @@ def runTrainDs(model, dsLoad_train_train):
         idShuffle = idShuffle + ids.tolist()
 
     tr_acc_run = (np.sum(np.array(running_acc)) / len(np.array(running_acc))).astype(dtype=np.float)
+    elapsed = time.time() - t
+
+    funcH.removeLastLine()
+    print('runTrainDs completed (', funcH.getElapsedTimeFormatted(elapsed), '), ended at ', datetime.datetime.now().strftime("%H:%M:%S"))
+
     return tr_acc_run, idShuffle
 
 def runValidDs(model, dsLoad_train_featExtract, return_feats=True, layerSize=512):
@@ -82,6 +92,9 @@ def runValidDs(model, dsLoad_train_featExtract, return_feats=True, layerSize=512
     features_avgPool = []
     labels_avgPool = []
     predictions_avgPool = []
+
+    print("running --> runValidDs(return_feats=", str(return_feats), ", layerSize=", str(layerSize), ")", datetime.datetime.now().strftime("%H:%M:%S"))
+    t = time.time()
 
     for sample in dsLoad_train_featExtract:
         images = sample['image'].cuda()
@@ -102,7 +115,11 @@ def runValidDs(model, dsLoad_train_featExtract, return_feats=True, layerSize=512
             predictions_avgPool = predictions_avgPool + indices.tolist()
         idSorted = idSorted + ids.tolist()
 
+    elapsed = time.time() - t
     val_acc_epoch = (np.sum(np.array(epoc_acc)) / len(np.array(epoc_acc))).astype(dtype=np.float)
+
+    funcH.removeLastLine()
+    print('runValidDs(return_feats=', str(return_feats), ' completed (', funcH.getElapsedTimeFormatted(elapsed), '), ended at ', datetime.datetime.now().strftime("%H:%M:%S"))
 
     return val_acc_epoch, idSorted, features_avgPool, labels_avgPool, predictions_avgPool
 
@@ -236,29 +253,39 @@ def initSomeVals(params_dict):
 
     return input_initial_resize, input_size, batch_size, num_workers
 
-def iterate_1(featTrInit, labelsTrInit, predictionsTr, k, labelSaveFileName, ep, num_epochs, trAccInit,
-              clusterModel='KMeans'):
-    labelsTrInit = np.asarray(labelsTrInit, dtype=int)
-    predictionsTr = np.asarray(predictionsTr, dtype=int)
-
-    nmi_lab, predClusters, nmi_lab_nonzero = funcH.get_nmi_deepCluster(featTrInit, labelsTrInit, k,
-                                                                       clusterModel=clusterModel)
+def calc_stats_on_iterate(featTrInit, labelsTrInit, predictionsTr, k, clusterModel):
+    nmi_lab, predClusters, nmi_lab_nonzero = funcH.get_nmi_deepCluster(featTrInit, labelsTrInit, k, clusterModel=clusterModel)
     acc_lab, _ = funcH.accFromKlusterLabels(labelsTrInit, predClusters, removeZeroLabels=False)
     acc_lab_nonzero, _ = funcH.accFromKlusterLabels(labelsTrInit, predClusters, removeZeroLabels=True)
-
     nmi_pred = funcH.get_nmi_only(predictionsTr, predClusters, average_method='geometric')
     x, y = funcH.getNonZeroLabels(predictionsTr, predClusters)
     nmi_pred_nonzero = funcH.get_nmi_only(x, y, average_method='geometric')
     acc_pred, _ = funcH.accFromKlusterLabels(predictionsTr, predClusters, removeZeroLabels=False)
     acc_pred_nonzero, _ = funcH.accFromKlusterLabels(predictionsTr, predClusters, removeZeroLabels=True)
 
-    np.savez(labelSaveFileName, labelsTrInit=labelsTrInit, predClusters=predClusters, acc_lab=acc_lab, acc_lab_nonzero=acc_lab_nonzero, predictionsTr=predictionsTr)
+    return nmi_lab, acc_lab, nmi_lab_nonzero, acc_lab_nonzero, \
+           nmi_pred, acc_pred, nmi_pred_nonzero, acc_pred_nonzero, predClusters
 
-    resultRow = np.array([ep, trAccInit, nmi_lab, nmi_lab_nonzero, acc_lab, acc_lab_nonzero, nmi_pred, nmi_pred_nonzero, acc_pred, acc_pred_nonzero])
+def iterate_1(featTrInit, labelsTrInit, predictionsTr, k, labelSaveFileName, ep, epochTo, trAccInit, epochStartTime,
+              clusterModel='KMeans'):
+    labelsTrInit = np.asarray(labelsTrInit, dtype=int)
+    predictionsTr = np.asarray(predictionsTr, dtype=int)
+
+    nmi_lab, acc_lab, nmi_lab_nz, acc_lab_nz, \
+    nmi_pred, acc_pred, nmi_pred_nz, acc_pred_nz, predClusters = \
+                                                        calc_stats_on_iterate(featTrInit, labelsTrInit, predictionsTr,
+                                                                              k, clusterModel)
+
+    np.savez(labelSaveFileName, labelsTrInit=labelsTrInit, predClusters=predClusters, acc_lab=acc_lab, acc_lab_nonzero=acc_pred_nz, predictionsTr=predictionsTr)
+
+    resultRow = np.array([ep, trAccInit, nmi_lab, nmi_lab_nz, acc_lab, acc_lab_nz, nmi_pred, nmi_pred_nz, acc_pred, acc_pred_nz])
     print('ep={:d}/{:d}, trAccInit={:0.5f} - '
           'nmi_lab={:0.2f}, nmi_lab_nonzero={:0.2f}, acc_lab={:0.2f}, acc_lab_nonzero={:0.2f}, '
           'nmi_pred={:0.2f}, nmi_pred_nonzero={:0.2f}, acc_pred={:0.2f}, acc_pred_nonzero={:0.2f} '.format(
-            ep, num_epochs, trAccInit, nmi_lab, nmi_lab_nonzero, acc_lab, acc_lab_nonzero, nmi_pred, nmi_pred_nonzero, acc_pred, acc_pred_nonzero))
+            ep, epochTo, trAccInit, nmi_lab, nmi_lab_nz, acc_lab, acc_lab_nz, nmi_pred, nmi_pred_nz, acc_pred, acc_pred_nz))
+    #elapsed time of epoch
+    print('Epoch done in (', funcH.getElapsedTimeFormatted(time.time() - epochStartTime), '), ended at ', datetime.datetime.now().strftime("%H:%M:%S"))
+    print('*-*-*-*-*-*-*')
 
     return predClusters, resultRow
 
@@ -381,7 +408,6 @@ def main(argv):
     train_dataset = HandShapeDataset(root_dir=nnVidsDir, istrain=True, transform=train_data_transform, datasetname='nnv')
     val_dataset = HandShapeDataset(root_dir=nnVidsDir, istrain=False, transform=valid_data_transform, datasetname='nnv')
 
-    val_dataset_loader = torch.utils.data.DataLoader(val_dataset, batch_size=5, shuffle=False, num_workers=num_workers)
     num_classes = np.unique(train_dataset.labels).size
 
     print('trainCnt = ', len(train_dataset))
@@ -392,14 +418,21 @@ def main(argv):
     num_ftrs = model.fc.in_features
     print('num_classes = ', num_classes, ', num_ftrs = ', num_ftrs, flush=True)
 
-    model.eval()
+    epochStartTime = time.time()
+
+    dsLoad_train_train = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     dsLoad_train_featExtract = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+    model.eval()
+
     trAccInit, idTrInit, featTrInit, labelsTrInit, predictionsTrInit = runValidDs(model, dsLoad_train_featExtract, return_feats=True, layerSize=num_ftrs)
 
     saveFeatsExtracted(data_dir, epochFr, params_dict["modelName"], expName, featTrInit, labelsTrInit, predictionsTrInit)
 
-    labelSaveFileName = labelSaveFolder + os.sep + 'labels_{:03d}.npz'.format(epochTo)
-    predClusters, resultRow = iterate_1(featTrInit, labelsTrInit, predictionsTrInit, params_dict["posterior_dim"], labelSaveFileName, epochFr-1, epochTo, trAccInit, clusterModel=clusterModel)
+    labelSaveFileName = labelSaveFolder + os.sep + 'labels_{:03d}.npz'.format(epochFr)
+    predClusters, resultRow = iterate_1(featTrInit, labelsTrInit, predictionsTrInit, params_dict["posterior_dim"],
+                                        labelSaveFileName, epochFr-1, epochTo, trAccInit,
+                                        epochStartTime, clusterModel=clusterModel)
     train_dataset.updateLabels(list(predClusters))
 
     resultMat = []
@@ -416,17 +449,15 @@ def main(argv):
 
     for ep in range(epochFr, epochTo):
         model.train()  # Set model to training mode
-        dsLoad_train_train = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-        tr_acc_run, idTrShuffle = runTrainDs(model, dsLoad_train_train)
+        epochStartTime = time.time()
+        _, _ = runTrainDs(model, optimizer, dsLoad_train_train)
 
         model.eval()
-        val_acc_epoch, idValSorted, _, _, _ = runValidDs(model, val_dataset_loader, return_feats=False, layerSize=num_ftrs)
-        dsLoad_train_featExtract = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-        tr_acc_epoch, idTrSorted, features_avgPool, labels_avgPool, predictionsTr = runValidDs(model, dsLoad_train_featExtract, return_feats=True, layerSize=num_ftrs)
+        tr_acc_epoch, _, features_avgPool, labels_avgPool, predictionsTr = \
+            runValidDs(model, dsLoad_train_featExtract, return_feats=True, layerSize=num_ftrs)
 
-        #predLabs_?x --> has the previous
         labelSaveFileName = labelSaveFolder + os.sep + 'labels_{:03d}.npz'.format(ep+1)
-        predClusters, resultRow = iterate_1(features_avgPool, labelsTrInit, predictionsTr, params_dict["posterior_dim"], labelSaveFileName, ep, num_epochs, tr_acc_epoch, clusterModel=clusterModel)
+        predClusters, resultRow = iterate_1(features_avgPool, labelsTrInit, predictionsTr, params_dict["posterior_dim"], labelSaveFileName, ep, epochTo, tr_acc_epoch, epochStartTime, clusterModel=clusterModel)
         resultMat = resultMat + resultRow.tolist()
         train_dataset.updateLabels(list(predClusters))
 

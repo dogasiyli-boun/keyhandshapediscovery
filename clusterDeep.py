@@ -273,7 +273,7 @@ epochCnt = trainParams["epochs"]
 predictionLabelsDir = results_dir + os.sep + 'results' + os.sep + exp_name
 model, epochFr, epochTo = initEpochIDsModelParams(trainFromScratch, trainParams["appendEpochBinary"], model, model_name, predictionLabelsDir)
 
-if epochFr==epochTo:
+if epochFr == epochTo:
     print("+*-+*-+*-+*-epochs completed+*-+*-+*-+*-")
     exit(12)
 
