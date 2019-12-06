@@ -144,10 +144,12 @@ def parseArgs(argv):
                "vs": "-rs", "defaultVal": 1, "dvSet": True, "paramType": "int"}
     param09 = {"paramName": "clusterModel", "possibleValues": "{'KMeans','GMM_diag','Spectral'}",
                "vs": "-cm", "defaultVal": "KMeans", "dvSet": True, "paramType": "str"}
+    param10 = {"paramName": "initialLabel", "possibleValues": "{None,'baseResults_featName_pcaCnt_baseClusterModel','fileName_<relativePathUnderResults>'}",
+               "vs": "-il", "defaultVal": None, "dvSet": True, "paramType": "str"}
 
     # model and data parameters
     paramsAll = [param01, param02, param03, param04, param05,
-                 param06, param07, param08, param09]
+                 param06, param07, param08, param09, param10]
 
     argSetDescriptions = ""
     go_00 = "hi:o:"
@@ -229,6 +231,7 @@ def parseArgs(argv):
         "batch_size": valuesParamsCur["batch_size"],
         "randomSeed": valuesParamsCur["randomSeed"],
         "appendEpochBinary": valuesParamsCur["appendEpochBinary"],
+        "initialLabel": valuesParamsCur["initialLabel"],
     }
     return params_dict
 
@@ -371,6 +374,28 @@ def saveFeatsExtracted(data_dir, epochID, modelName, expName, featVec, labels, p
     print(actionStr + 'ed ', saveToFileName)
     return
 
+def decode_initial_label_param(initialLabelParam):
+
+    if initialLabelParam is None:
+        initialLabelVec = None
+    else:
+        initialLabelVecStrings = initialLabelParam.split("_")
+        if initialLabelVecStrings[0] == 'fn':
+            fileName_end = initialLabelVecStrings[1]  # 'baseResults/hgsk256_11_KMeans_256.npz'
+            results_dir = funcH.getVariableByComputerName('results_dir').replace("bdResults", "dcResults")
+            labelFileFullName = os.path.join(results_dir, fileName_end)
+            if fileName_end.__contains__("baseResults"):
+                print('Not implemented yet')
+                os._exit(30)
+            else:
+                print('Not implemented yet')
+                os._exit(31)
+        else:
+            print('Not implemented yet')
+            os._exit(32)
+
+    return initialLabelVec
+
 def main(argv):
     np.set_printoptions(formatter={"float_kind": lambda x: "%g" % x})
 
@@ -378,6 +403,7 @@ def main(argv):
     numOfSigns = params_dict["numOfSigns"]  # 11 or 41
     clusterModel = params_dict["clusterModel"]  # 'KMeans', 'GMM_diag', 'Spectral'
     params_dict["hostName"] = socket.gethostname()
+    initialLabelVec = decode_initial_label_param(params_dict["initialLabel"])
 
     print('you are running this train function on = <', params_dict["hostName"], '>')
 
