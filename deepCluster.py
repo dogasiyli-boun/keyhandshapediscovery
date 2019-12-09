@@ -146,10 +146,12 @@ def parseArgs(argv):
                "vs": "-cm", "defaultVal": "KMeans", "dvSet": True, "paramType": "str"}
     param10 = {"paramName": "initialLabel", "possibleValues": "{None,'baseResults_featName_pcaCnt_baseClusterModel','fileName_<relativePathUnderResults>'}",
                "vs": "-il", "defaultVal": None, "dvSet": True, "paramType": "str"}
+    param11 = {"paramName": "clusterLabelUpdateInterval", "possibleValues": "{some integer}",
+               "vs": "-cli", "defaultVal": 2, "dvSet": True, "paramType": "int"}
 
     # model and data parameters
     paramsAll = [param01, param02, param03, param04, param05,
-                 param06, param07, param08, param09, param10]
+                 param06, param07, param08, param09, param10, param11]
 
     argSetDescriptions = ""
     go_00 = "hi:o:"
@@ -232,6 +234,7 @@ def parseArgs(argv):
         "randomSeed": valuesParamsCur["randomSeed"],
         "appendEpochBinary": valuesParamsCur["appendEpochBinary"],
         "initialLabel": valuesParamsCur["initialLabel"],
+        "clusterLabelUpdateInterval": valuesParamsCur["clusterLabelUpdateInterval"],
     }
     return params_dict
 
@@ -384,17 +387,29 @@ def decode_initial_label_param(initialLabelParam):
             fileName_end = initialLabelVecStrings[1]  # 'baseResults/hgsk256_11_KMeans_256.npz'
             results_dir = funcH.getVariableByComputerName('results_dir').replace("bdResults", "dcResults")
             labelFileFullName = os.path.join(results_dir, fileName_end)
-            if fileName_end.__contains__("baseResults"):
-                print('Not implemented yet')
-                os._exit(30)
-            else:
-                print('Not implemented yet')
-                os._exit(31)
+            #  np.savez(predictionFileNameFull, labels_all, predClusters)
+            npzDict = np.load(labelFileFullName, allow_pickle=True)
+            initialLabelVec = npzDict["arr_1"]
         else:
             print('Not implemented yet')
-            os._exit(32)
+            os._exit(30)
+        if initialLabelVecStrings[0] == "baseResults":
+            print('Not implemented yet')
+            os._exit(30)
 
     return initialLabelVec
+
+def updateTrainLabels(train_dataset, clusterLabelUpdateInterval, epochID, predClusters=None, initialLabelVec=None):
+    modVal = np.mod(epochID, clusterLabelUpdateInterval)
+    if initialLabelVec is not None and epochID < clusterLabelUpdateInterval:
+        print("updating  train labels with initialLabelVec at first epochID(", str(epochID), ")")
+        train_dataset.updateLabels(list(initialLabelVec))
+    elif modVal == 0:
+        print("updating  train labels at epochID(", str(epochID))
+        train_dataset.updateLabels(list(predClusters))
+    else:
+        print("epochID(", str(epochID), " mod  ", str(clusterLabelUpdateInterval) ,") clusterLabelUpdateInterval = ", str(modVal) ,".. not updating train labels")
+    return train_dataset
 
 def main(argv):
     np.set_printoptions(formatter={"float_kind": lambda x: "%g" % x})
@@ -404,6 +419,7 @@ def main(argv):
     clusterModel = params_dict["clusterModel"]  # 'KMeans', 'GMM_diag', 'Spectral'
     params_dict["hostName"] = socket.gethostname()
     initialLabelVec = decode_initial_label_param(params_dict["initialLabel"])
+    clusterLabelUpdateInterval = params_dict["clusterLabelUpdateInterval"]
 
     print('you are running this train function on = <', params_dict["hostName"], '>')
 
@@ -451,7 +467,12 @@ def main(argv):
 
     model.eval()
 
-    trAccInit, idTrInit, featTrInit, labelsTrInit, predictionsTrInit = runValidDs(model, dsLoad_train_featExtract, return_feats=True, layerSize=num_ftrs)
+    #  evaluate the model to extract
+    #  trAccInit : to save as initial training accuracy
+    #  featTrInit : features to cluster, also saved as result features in -saveFeatsExtracted-
+    #  labelsTrInit :
+    #  predictionsTrInit :
+    trAccInit, _, featTrInit, labelsTrInit, predictionsTrInit = runValidDs(model, dsLoad_train_featExtract, return_feats=True, layerSize=num_ftrs)
 
     saveFeatsExtracted(data_dir, epochFr, params_dict["modelName"], expName, featTrInit, labelsTrInit, predictionsTrInit)
 
@@ -459,7 +480,8 @@ def main(argv):
     predClusters, resultRow = iterate_1(featTrInit, labelsTrInit, predictionsTrInit, params_dict["posterior_dim"],
                                         labelSaveFileName, epochFr-1, epochTo, trAccInit,
                                         epochStartTime, clusterModel=clusterModel)
-    train_dataset.updateLabels(list(predClusters))
+
+    train_dataset = updateTrainLabels(train_dataset, clusterLabelUpdateInterval, epochFr, predClusters=predClusters, initialLabelVec=initialLabelVec)
 
     resultMat = []
     resultMat = resultMat + resultRow.tolist()
@@ -485,7 +507,8 @@ def main(argv):
         labelSaveFileName = labelSaveFolder + os.sep + 'labels_{:03d}.npz'.format(ep+1)
         predClusters, resultRow = iterate_1(features_avgPool, labelsTrInit, predictionsTr, params_dict["posterior_dim"], labelSaveFileName, ep, epochTo, tr_acc_epoch, epochStartTime, clusterModel=clusterModel)
         resultMat = resultMat + resultRow.tolist()
-        train_dataset.updateLabels(list(predClusters))
+
+        train_dataset = updateTrainLabels(train_dataset, clusterLabelUpdateInterval, ep, predClusters=predClusters)
 
         saveFeatsExtracted(data_dir, ep, params_dict["modelName"], expName, features_avgPool, labelsTrInit, predictionsTr)
         saveToResultMatFile(resultMatFile, resultRow)

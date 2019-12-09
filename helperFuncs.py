@@ -3,8 +3,7 @@ import os
 import sys
 import numpy as np
 import tensorflow as tf
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import normalized_mutual_info_score as nmi
+from sklearn.metrics import confusion_matrix, normalized_mutual_info_score as nmi
 from sklearn.cluster import KMeans, SpectralClustering #, OPTICS as ClusterOPT, cluster_optics_dbscan
 from sklearn.mixture import GaussianMixture
 from sklearn.decomposition import PCA
