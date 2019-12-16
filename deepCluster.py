@@ -388,9 +388,15 @@ def decode_initial_label_param(initialLabelParam):
             fileName_end = initialLabelVecStrings[1]  # 'baseResults-hgsk256-11-KMeans-256.npz'
             results_dir = funcH.getVariableByComputerName('results_dir').replace("bdResults", "dcResults")
             labelFileFullName = os.path.join(results_dir, fileName_end)
-            #  np.savez(predictionFileNameFull, labels_all, predClusters)
-            npzDict = np.load(labelFileFullName, allow_pickle=True)
-            initialLabelVec = npzDict["arr_1"]
+            if fileName_end.startswith("baseResults"):
+                #  np.savez(predictionFileNameFull, labels_all, predClusters)
+                npzDict = np.load(labelFileFullName, allow_pickle=True)
+                initialLabelVec = npzDict["arr_1"]
+            elif fileName_end.startswith("cosae"):
+                initialLabelVec = np.load(labelFileFullName)
+            else:
+                print('Not a valid input')
+                os._exit(29)
             expNameEnd = fileName_end
         else:
             print('Not implemented yet')
