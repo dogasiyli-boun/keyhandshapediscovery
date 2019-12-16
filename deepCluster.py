@@ -273,9 +273,9 @@ def calc_stats_on_iterate(featTrInit, labelsTrInit, predictionsTr, k, clusterMod
            nmi_pred, acc_pred, nmi_pred_nonzero, acc_pred_nonzero, predClusters
 
 def iterate_1(featTrInit, labelsTrInit, predictionsTr, k, labelSaveFileName, ep, epochTo, trAccInit, epochStartTime,
-              clusterModel='KMeans'):
+              clusterModel='KMeans', initialLabelVec=None):
     labelsTrInit = np.asarray(labelsTrInit, dtype=int)
-    predictionsTr = np.asarray(predictionsTr, dtype=int)
+    predictionsTr = np.asarray(predictionsTr, dtype=int) if initialLabelVec is None else np.asarray(initialLabelVec, dtype=int)
 
     nmi_lab, acc_lab, nmi_lab_nz, acc_lab_nz, \
     nmi_pred, acc_pred, nmi_pred_nz, acc_pred_nz, predClusters = \
@@ -381,15 +381,17 @@ def decode_initial_label_param(initialLabelParam):
 
     if initialLabelParam is None:
         initialLabelVec = None
+        expNameEnd = ""
     else:
         initialLabelVecStrings = initialLabelParam.split("_")
         if initialLabelVecStrings[0] == 'fn':
-            fileName_end = initialLabelVecStrings[1]  # 'baseResults/hgsk256_11_KMeans_256.npz'
+            fileName_end = initialLabelVecStrings[1]  # 'baseResults-hgsk256-11-KMeans-256.npz'
             results_dir = funcH.getVariableByComputerName('results_dir').replace("bdResults", "dcResults")
             labelFileFullName = os.path.join(results_dir, fileName_end)
             #  np.savez(predictionFileNameFull, labels_all, predClusters)
             npzDict = np.load(labelFileFullName, allow_pickle=True)
             initialLabelVec = npzDict["arr_1"]
+            expNameEnd = fileName_end
         else:
             print('Not implemented yet')
             os._exit(30)
@@ -397,7 +399,7 @@ def decode_initial_label_param(initialLabelParam):
             print('Not implemented yet')
             os._exit(30)
 
-    return initialLabelVec
+    return initialLabelVec, expNameEnd
 
 def updateTrainLabels(train_dataset, clusterLabelUpdateInterval, epochID, predClusters=None, initialLabelVec=None):
     modVal = np.mod(epochID, clusterLabelUpdateInterval)
@@ -418,7 +420,7 @@ def main(argv):
     numOfSigns = params_dict["numOfSigns"]  # 11 or 41
     clusterModel = params_dict["clusterModel"]  # 'KMeans', 'GMM_diag', 'Spectral'
     params_dict["hostName"] = socket.gethostname()
-    initialLabelVec = decode_initial_label_param(params_dict["initialLabel"])
+    initialLabelVec, expNameEnd = decode_initial_label_param(params_dict["initialLabel"])
     clusterLabelUpdateInterval = params_dict["clusterLabelUpdateInterval"]
 
     print('you are running this train function on = <', params_dict["hostName"], '>')
@@ -436,7 +438,9 @@ def main(argv):
     expName = params_dict["modelName"] + '_' + \
               params_dict["clusterModel"] + \
               '_pd' + str(params_dict["posterior_dim"]) + \
-              '_' + str(numOfSigns)
+              '_clui' + str(params_dict["clusterLabelUpdateInterval"]) + \
+              '_' + str(numOfSigns) + \
+              expNameEnd
     labelSaveFolder = os.path.join(labelsDir, expName)
     resultMatFile = os.path.join(results_dir, 'rMF_' + expName)
 
@@ -479,7 +483,7 @@ def main(argv):
     labelSaveFileName = labelSaveFolder + os.sep + 'labels_{:03d}.npz'.format(epochFr)
     predClusters, resultRow = iterate_1(featTrInit, labelsTrInit, predictionsTrInit, params_dict["posterior_dim"],
                                         labelSaveFileName, epochFr-1, epochTo, trAccInit,
-                                        epochStartTime, clusterModel=clusterModel)
+                                        epochStartTime, clusterModel=clusterModel, initialLabelVec=initialLabelVec)
 
     train_dataset = updateTrainLabels(train_dataset, clusterLabelUpdateInterval, epochFr, predClusters=predClusters, initialLabelVec=initialLabelVec)
 
@@ -505,10 +509,12 @@ def main(argv):
             runValidDs(model, dsLoad_train_featExtract, return_feats=True, layerSize=num_ftrs)
 
         labelSaveFileName = labelSaveFolder + os.sep + 'labels_{:03d}.npz'.format(ep+1)
-        predClusters, resultRow = iterate_1(features_avgPool, labelsTrInit, predictionsTr, params_dict["posterior_dim"], labelSaveFileName, ep, epochTo, tr_acc_epoch, epochStartTime, clusterModel=clusterModel)
+        predClusters, resultRow = iterate_1(features_avgPool, labelsTrInit, predictionsTr,
+                                            params_dict["posterior_dim"], labelSaveFileName, ep, epochTo, tr_acc_epoch,
+                                            epochStartTime, clusterModel=clusterModel, initialLabelVec=initialLabelVec)
         resultMat = resultMat + resultRow.tolist()
 
-        train_dataset = updateTrainLabels(train_dataset, clusterLabelUpdateInterval, ep, predClusters=predClusters)
+        train_dataset = updateTrainLabels(train_dataset, clusterLabelUpdateInterval, ep+1, predClusters=predClusters)
 
         saveFeatsExtracted(data_dir, ep, params_dict["modelName"], expName, features_avgPool, labelsTrInit, predictionsTr)
         saveToResultMatFile(resultMatFile, resultRow)
