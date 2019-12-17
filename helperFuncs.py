@@ -3,6 +3,7 @@ import os
 import sys
 import numpy as np
 import tensorflow as tf
+from sklearn import metrics
 from sklearn.metrics import confusion_matrix, normalized_mutual_info_score as nmi
 from sklearn.cluster import KMeans, SpectralClustering #, OPTICS as ClusterOPT, cluster_optics_dbscan
 from sklearn.mixture import GaussianMixture
@@ -11,7 +12,7 @@ from sklearn.decomposition import PCA
 from scipy.spatial.distance import cdist
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
-from pandas import DataFrame
+from pandas import DataFrame as pd_df
 import scipy.io
 import time
 import datetime
@@ -83,6 +84,10 @@ def createLabelsForConfMat(confMat):
                 colLabels.append(ci)
     return rowLabels, colLabels
 
+def removeConfMatUnnecessaryRows(_confMat):
+    _confMat = _confMat[~np.all(_confMat == 0, axis=1)]
+    return _confMat
+
 def getVariableByComputerName(variableName):
     curCompName = socket.gethostname()
     if variableName=='base_dir':
@@ -138,10 +143,6 @@ def calcCleanConfMat(labels, predictions):
     xtoclear = confusion_matrix(labels, predictions)
     x_cleaned = xtoclear[np.any(xtoclear, axis=1), :]
     return x_cleaned
-
-def removeConfMatUnnecessaryRows(_confMat):
-    _confMat = _confMat[~np.all(_confMat == 0, axis=1)]
-    return _confMat
 
 def confusionFromKluster(labVec, predictedKlusters):
     _confMat = []
@@ -281,7 +282,7 @@ def getNonZeroLabels(labVec, predictedKlusters):
 
 def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='KMeans'):
     featVec, exp_var_rat = applyMatTransform(np.array(featVec), applyPca=applyPca, normMode=normMode)
-    df = DataFrame(featVec)
+    df = pd_df(featVec)
 
     curTol = 0.0001 if clusterModel == 'KMeans' else 0.01
     max_iter = 300 if clusterModel == 'KMeans' else 200
@@ -386,7 +387,7 @@ def getCorrPath(a, b, a_frame_ids, b_frame_ids, metric='euclidean'):
     corrPath = np.vstack((a_frame_ids[pb].reshape(1,-1), b_frame_ids[pa].reshape(1,-1)))
     return corrPath
 
-def plotConfMat(_confMat, labels, saveFileName='', iterID=-1, normalizeByAxis=-1, add2XLabel='', add2YLabel='', addCntXTicks=True, addCntYTicks=True):
+def plotConfMat(_confMat, labels, saveFileName='', iterID=-1, normalizeByAxis=-1, add2XLabel='', add2YLabel='', addCntXTicks=True, addCntYTicks=True, tickSize=8):
     if addCntXTicks:
         col_sums = _confMat.T.sum(axis=1)
         labelsX = labels.copy()
@@ -423,8 +424,8 @@ def plotConfMat(_confMat, labels, saveFileName='', iterID=-1, normalizeByAxis=-1
     else:
         plt.xlabel('Predicted - ' + ' ' + add2XLabel)
     plt.ylabel('True' + ' ' + add2YLabel)
-    plt.xticks(rotation=90, size=8)
-    plt.yticks(rotation=15, size=8)
+    plt.xticks(rotation=90, size=tickSize)
+    plt.yticks(rotation=15, size=tickSize)
     if saveFileName=='':
         plt.show()
     else:
@@ -524,3 +525,122 @@ def analyzeClusterDistribution(predictedKlusters, n_clusters, verbose=0):
     if verbose>1:
         print("hist counts ascending = ", histSortedInv[0:10])
     return numOf_1_sample_bins, histSortedInv
+
+def getDict(retInds, retVals):
+    ret_data = []
+    for i in range(0, len(retInds)):
+        ret_data.append([retInds[i], retVals[i]])
+    return ret_data
+
+def getPandasFromDict(retInds, retVals, columns):
+    ret_data = getDict(retInds, retVals)
+    if "pandas" in sys.modules:
+        ret_data = pd_df(ret_data, columns=columns)
+        print(ret_data)
+    return ret_data
+
+def calcClusterMetrics(labels_true, labels_pred, removeZeroLabels=False, labelNames=None):
+    # print("This function gets predictions and real labels")
+    # print("also a parameter that says either remove 0 labels or not")
+    # print("an optional parameter as list of label names")
+    np.unique(labels_true)
+    # 1 remove zero labels if necessary
+
+    # 2 calculate
+    ars = metrics.adjusted_rand_score(labels_true, labels_pred)
+    mis = metrics.mutual_info_score(labels_true, labels_pred)
+    amis = metrics.adjusted_mutual_info_score(labels_true, labels_pred)
+    nmi = metrics.normalized_mutual_info_score(labels_true, labels_pred)
+    hs = metrics.homogeneity_score(labels_true, labels_pred)
+    cs = metrics.completeness_score(labels_true, labels_pred)
+    vms = metrics.v_measure_score(labels_true, labels_pred)
+    fms = metrics.fowlkes_mallows_score(labels_true, labels_pred)
+
+    # 3 print
+    retVals = [ars, mis, amis, cs, vms, fms, nmi, hs]
+    retInds = ['adjusted_rand_score', 'mutual_info_score', 'adjusted_mutual_info_score', 'completeness_score',
+               'v_measure_score', 'fowlkes_mallows_score', 'normalized_mutual_info_score', 'homogeneity_score']
+    ret_data = getPandasFromDict(retInds, retVals, columns=['metric', 'value'])
+
+    return ret_data
+
+def getInds(vec, val):
+    return np.array([i for i, e in enumerate(vec) if e == val])
+
+def getIndicedList(baseList, indsList):
+    return [baseList[i] for i in indsList]
+
+def calcCluster2ClassMetrics(labels_true, labels_pred, removeZeroLabels=False, labelNames=None):
+    # print("This function gets predictions and real labels")
+    # print("also a parameter that says either remove 0 labels or not")
+    # print("an optional parameter as list of label names")
+    # print("calc purity and assignment per cluster")
+
+    # 4 map klusters to classes
+    _confMat, kluster2Classes = confusionFromKluster(labels_true, labels_pred)
+
+    sampleCount = np.sum(np.sum(_confMat))
+    acc = 100 * np.sum(np.diag(_confMat)) / sampleCount
+
+    kluster2Classes = kluster2Classes - 1
+    print("k2c", kluster2Classes)
+    print("\r\n\r\n")
+
+    kr_data = []
+    uniq_preds = np.unique(labels_pred)
+    weightedPurity = 0
+    for i in range(0, uniq_preds.size):
+        klust_cur = kluster2Classes[i]
+        mappedClass = kluster2Classes[i]
+
+        inds = getInds(labels_pred, i)
+        labels_k = getIndicedList(labels_true, inds)
+        correctLabelInds = getInds(labels_k, mappedClass)
+        purity_k = 100 * (len(correctLabelInds) / len(labels_k))
+
+        weightedPurity += purity_k * (len(inds) / sampleCount)
+
+        cStr = "c(" + klust_cur + ")" if labelNames is None else labelNames[mappedClass]
+        kr_data.append(["k" + str(uniq_preds[i]), cStr, len(correctLabelInds), len(inds), purity_k])
+    kr_pdf = pd_df(kr_data, columns=['kID', 'mappedClass', '#of', 'N', '%purity'])
+    kr_pdf.sort_values(by=['%purity', 'N'], inplace=True, ascending=[False, False])
+    print("kr_pdf:\r\n", kr_pdf, "\r\n\r\n")
+    c_data = []
+    uniq_labels = np.unique(labels_true)
+    trueCnt = np.sum(_confMat, axis=1)
+    predCnt = np.sum(_confMat, axis=0)
+    weightedPrecision = 0
+    weightedRecall = 0
+    weightedF1Score = 0
+    for i in range(0, uniq_labels.size):
+        class_cur = uniq_labels[i]
+        mappedKlusters = getInds(kluster2Classes, class_cur)
+
+        correctCnt = _confMat[class_cur, class_cur]
+        recallCur = 100 * (correctCnt / trueCnt[class_cur])
+        precisionCur = 100 * (correctCnt / predCnt[class_cur])
+        f1Cur = 2 * ((precisionCur * recallCur) / (precisionCur + recallCur))
+
+        wp = precisionCur * (trueCnt[class_cur] / sampleCount)
+        wr = recallCur * (trueCnt[class_cur] / sampleCount)
+        wf = f1Cur * ((trueCnt[class_cur]) / (sampleCount))
+
+        weightedPrecision += wp
+        weightedRecall += wr
+        weightedF1Score += wf
+
+        cStr = ["c(" + class_cur + ")" if labelNames is None else labelNames[class_cur]]
+        c_data.append([cStr, correctCnt, precisionCur, recallCur, f1Cur, wp, wr, wf])
+    c_pdf = pd_df(c_data, columns=['class', '#', '%prec', '%recall', '%f1', '%wp', '%wr', '%wf'])
+    c_pdf.sort_values(by=['#', '%prec'], inplace=True, ascending=[False, False])
+
+    retVals = [acc, weightedPurity, weightedPrecision, weightedRecall, weightedF1Score]
+    retInds = ['accuracy', 'weightedPurity', 'weightedPrecision', 'weightedRecall', 'weightedF1Score']
+    classRet = getPandasFromDict(retInds, retVals, columns=['metric', 'value'])
+
+    print("c_pdf:\r\n", c_pdf, "\r\n\r\n")
+    # print("classRet:\r\n",json.dumps(classRet, indent = 2),"\r\n\r\n")
+    plotConfMat(_confMat, labelNames, addCntXTicks=False, addCntYTicks=False, tickSize=10)
+    print("_confMat:\r\n", pd_df(_confMat.T, columns=labelNames, index=labelNames), "\r\n\r\n")
+
+    return classRet, _confMat, c_pdf, kr_pdf
