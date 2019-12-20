@@ -2,6 +2,7 @@ import socket
 import os
 import sys
 import numpy as np
+from math import isnan as isNaN
 import tensorflow as tf
 from sklearn import metrics
 from sklearn.metrics import confusion_matrix, normalized_mutual_info_score as nmi
@@ -515,7 +516,7 @@ def getMappedKlusters(predictions, Kluster2ClassesK):
     mappedKlustersSampleCnt = mappedKlustersSampleCnt.squeeze()
     return mappedKlusters, mappedKlustersSampleCnt
 
-def analyzeClusterDistribution(predictedKlusters, n_clusters, verbose=0):
+def analyzeClusterDistribution(predictedKlusters, n_clusters, verbose=0, printHistCnt=10):
     histOfClust, binIDs = np.histogram(predictedKlusters, np.unique(predictedKlusters))
     numOfBins = len(binIDs)
     numOf_1_sample_bins = np.sum(histOfClust==1)
@@ -523,7 +524,7 @@ def analyzeClusterDistribution(predictedKlusters, n_clusters, verbose=0):
         print(n_clusters, " expected - ", numOfBins, " bins extracted. ", numOf_1_sample_bins, " of them have 1 sample")
     histSortedInv = np.sort(histOfClust)[::-1]
     if verbose>1:
-        print("hist counts ascending = ", histSortedInv[0:10])
+        print("hist counts ascending = ", histSortedInv[0:printHistCnt])
     return numOf_1_sample_bins, histSortedInv
 
 def getDict(retInds, retVals):
@@ -570,33 +571,86 @@ def getInds(vec, val):
 def getIndicedList(baseList, indsList):
     return [baseList[i] for i in indsList]
 
-def calcCluster2ClassMetrics(labels_true, labels_pred, removeZeroLabels=False, labelNames=None):
+def get_most_frequent(List):
+    return max(set(List), key = List.count)
+
+def countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=None):
+    sampleCount = labels_pred.size
+    labels_pred2class = labels_pred.copy()
+    kluster2Classes = []
+    uniq_preds = np.unique(labels_pred)
+    kr_data = []
+    weightedPurity = 0
+    cntUniqPred = uniq_preds.size
+    for i in range(0, cntUniqPred):
+        klust_cur = uniq_preds[i]
+        inds = getInds(labels_pred, klust_cur)
+        labels_k = getIndicedList(labels_true, inds)
+        mappedClass = get_most_frequent(labels_k)
+        try:
+            correctLabelInds = getInds(labels_k, mappedClass)
+        except:
+            print("labels_k = ", labels_k)
+            print("mappedClass = ", mappedClass)
+            sys.exit("Error message")
+
+        kluster2Classes.append([klust_cur, mappedClass, len(labels_k), correctLabelInds.size])
+        labels_pred2class[inds] = mappedClass
+
+        purity_k = 0
+        if len(labels_k) > 0:
+            purity_k = 100 * (len(correctLabelInds) / len(labels_k))
+
+        weightedPurity += purity_k * (len(inds) / sampleCount)
+
+        try:
+            cStr = "c(" + str(klust_cur) + ")" if labelNames is None else labelNames[mappedClass]
+            #print('mappedClass {:d} : {}'.format(mappedClass, labelNames[mappedClass]))
+        except:
+            print("klust_cur = ", klust_cur)
+            print("mappedClass = ", mappedClass)
+            print("labelNames2.size = ", len(labelNames))
+            sys.exit("Some indice error maybe")
+
+        kr_data.append(["k" + str(uniq_preds[i]), cStr, len(correctLabelInds), len(inds), purity_k])
+
+    kr_pdf = pd_df(kr_data, columns=['kID', 'mappedClass', '#of', 'N', '%purity'])
+    kr_pdf.sort_values(by=['%purity', 'N'], inplace=True, ascending=[False, False])
+
+    _confMat = confusion_matrix(labels_true, labels_pred2class)
+
+    return _confMat, kluster2Classes
+
+def calcCluster2ClassMetrics(labels_true, labels_pred, removeZeroLabels=False, labelNames=None, predictDefStr=""):
     # print("This function gets predictions and real labels")
     # print("also a parameter that says either remove 0 labels or not")
     # print("an optional parameter as list of label names")
     # print("calc purity and assignment per cluster")
 
     # 4 map klusters to classes
-    _confMat, kluster2Classes = confusionFromKluster(labels_true, labels_pred)
+    #_confMat, kluster2Classes = confusionFromKluster(labels_true, labels_pred)
+    _confMat, kluster2Classes = countPredictionsForConfusionMat(labels_true, labels_pred)
 
     sampleCount = np.sum(np.sum(_confMat))
     acc = 100 * np.sum(np.diag(_confMat)) / sampleCount
 
-    kluster2Classes = kluster2Classes - 1
-    print("k2c", kluster2Classes)
+    #kluster2Classes = kluster2Classes - 1
+    print(predictDefStr, "-k2c", kluster2Classes)
     print("\r\n\r\n")
 
     kr_data = []
     uniq_preds = np.unique(labels_pred)
     weightedPurity = 0
     for i in range(0, uniq_preds.size):
-        klust_cur = kluster2Classes[i]
-        mappedClass = kluster2Classes[i]
+        klust_cur = uniq_preds[i]
+        mappedClass = kluster2Classes[i][1]
 
-        inds = getInds(labels_pred, i)
+        inds = getInds(labels_pred, klust_cur)
         labels_k = getIndicedList(labels_true, inds)
         correctLabelInds = getInds(labels_k, mappedClass)
-        purity_k = 100 * (len(correctLabelInds) / len(labels_k))
+        purity_k = 0
+        if len(labels_k) > 0:
+            purity_k = 100 * (len(correctLabelInds) / len(labels_k))
 
         weightedPurity += purity_k * (len(inds) / sampleCount)
 
@@ -604,7 +658,10 @@ def calcCluster2ClassMetrics(labels_true, labels_pred, removeZeroLabels=False, l
         kr_data.append(["k" + str(uniq_preds[i]), cStr, len(correctLabelInds), len(inds), purity_k])
     kr_pdf = pd_df(kr_data, columns=['kID', 'mappedClass', '#of', 'N', '%purity'])
     kr_pdf.sort_values(by=['%purity', 'N'], inplace=True, ascending=[False, False])
-    print("kr_pdf:\r\n", kr_pdf, "\r\n\r\n")
+
+    analyzeClusterDistribution(labels_pred, max(uniq_preds), verbose=2, printHistCnt=len(uniq_preds))
+
+    print(predictDefStr, "-kr_pdf:\r\n", kr_pdf, "\r\n\r\n")
     c_data = []
     uniq_labels = np.unique(labels_true)
     trueCnt = np.sum(_confMat, axis=1)
@@ -614,12 +671,19 @@ def calcCluster2ClassMetrics(labels_true, labels_pred, removeZeroLabels=False, l
     weightedF1Score = 0
     for i in range(0, uniq_labels.size):
         class_cur = uniq_labels[i]
-        mappedKlusters = getInds(kluster2Classes, class_cur)
+        #mappedKlusters = getInds(kluster2Classes, class_cur)
 
         correctCnt = _confMat[class_cur, class_cur]
-        recallCur = 100 * (correctCnt / trueCnt[class_cur])
-        precisionCur = 100 * (correctCnt / predCnt[class_cur])
-        f1Cur = 2 * ((precisionCur * recallCur) / (precisionCur + recallCur))
+        if correctCnt==0:
+            recallCur = 0
+            precisionCur = 0
+            f1Cur = 0
+        else:
+            recallCur = 100 * (correctCnt / trueCnt[class_cur])
+            precisionCur = 100 * (correctCnt / predCnt[class_cur])
+            f1Cur = 2 * ((precisionCur * recallCur) / (precisionCur + recallCur))
+        if isNaN(f1Cur):
+            print("****************************None")
 
         wp = precisionCur * (trueCnt[class_cur] / sampleCount)
         wr = recallCur * (trueCnt[class_cur] / sampleCount)
@@ -632,15 +696,15 @@ def calcCluster2ClassMetrics(labels_true, labels_pred, removeZeroLabels=False, l
         cStr = ["c(" + class_cur + ")" if labelNames is None else labelNames[class_cur]]
         c_data.append([cStr, correctCnt, precisionCur, recallCur, f1Cur, wp, wr, wf])
     c_pdf = pd_df(c_data, columns=['class', '#', '%prec', '%recall', '%f1', '%wp', '%wr', '%wf'])
-    c_pdf.sort_values(by=['#', '%prec'], inplace=True, ascending=[False, False])
+    c_pdf.sort_values(by=['%f1', '#'], inplace=True, ascending=[False, False])
 
     retVals = [acc, weightedPurity, weightedPrecision, weightedRecall, weightedF1Score]
     retInds = ['accuracy', 'weightedPurity', 'weightedPrecision', 'weightedRecall', 'weightedF1Score']
     classRet = getPandasFromDict(retInds, retVals, columns=['metric', 'value'])
 
-    print("c_pdf:\r\n", c_pdf, "\r\n\r\n")
+    print(predictDefStr, "-c_pdf:\r\n", c_pdf, "\r\n\r\n")
     # print("classRet:\r\n",json.dumps(classRet, indent = 2),"\r\n\r\n")
     plotConfMat(_confMat, labelNames, addCntXTicks=False, addCntYTicks=False, tickSize=10)
-    print("_confMat:\r\n", pd_df(_confMat.T, columns=labelNames, index=labelNames), "\r\n\r\n")
+    print(predictDefStr, "-_confMat:\r\n", pd_df(_confMat.T, columns=labelNames, index=labelNames), "\r\n\r\n")
 
     return classRet, _confMat, c_pdf, kr_pdf
