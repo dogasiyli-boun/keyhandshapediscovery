@@ -18,6 +18,9 @@ import scipy.io
 import time
 import datetime
 
+def install_package_str(package_name):
+    return "!{sys.executable} - m pip install " + package_name
+
 def removeLastLine():
     sys.stdout.write("\033[F")
     sys.stdout.write("\033[K")

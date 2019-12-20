@@ -467,3 +467,53 @@ def applyCorrespondance(feat_set_pca, corrFramesAll, corr_indis_a, applyCorr):
         inFeats = feat_set_pca
         outFeats = feat_set_pca
     return inFeats, outFeats
+
+def generate_detailed_labels_obj(detailedLabels):
+    # detailedLabels ->[signID videoId frameID labelOfFrame]
+    sList = np.array(np.unique(detailedLabels[:, 0]), dtype=int)
+    fr = 0
+    detailed_labels_obj = []
+    summaryInfoStr = ""
+    for s in sList:
+        detailedLabels_sign_rows = np.argwhere(detailedLabels[:, 0] == s).flatten()
+        to = fr + len(detailedLabels_sign_rows)
+        summaryInfoStr += "sign({:d}),frameCnt({:d}),fr({:d}),to({:d})\r\n".format(s, to - fr, fr, to)
+        fr = to
+        detailedLabels_sign = detailedLabels[detailedLabels_sign_rows, :]
+        # print(detailedLabels_sign.shape)
+        vList = np.array(np.unique(detailedLabels_sign[:, 1]), dtype=int)
+        # print(vList.shape)
+        vD = []
+        for v in vList:
+            detailedLabels_video_rows = np.argwhere(detailedLabels_sign[:, 1] == v).flatten()
+            detailedLabels_video = detailedLabels_sign[detailedLabels_video_rows, :]
+
+            videoLabels = detailedLabels_video[:, 3]
+
+            frIDs = detailedLabels_sign_rows[detailedLabels_video_rows]
+
+            vD.append({"vID": v, "labels": videoLabels, "frIDs": frIDs})
+        detailed_labels_obj.append({"sID": s, "videoDict": vD})
+    return detailed_labels_obj, summaryInfoStr
+
+def parse_detailed_labels_obj(detailed_labels_obj, signID):
+    frIDs = []
+    lengths = []
+    labels = []
+    for s in detailed_labels_obj:
+        if signID == s["sID"]:
+            vD = s["videoDict"]
+            for v in vD:
+                vID = v["vID"]
+                videoLabels = v["labels"]
+                videoFrameIDs = v["frIDs"]
+
+                labels = np.concatenate([labels, videoLabels])
+                frIDs = np.concatenate([frIDs, videoFrameIDs])
+                lengths.append(len(videoFrameIDs))
+
+    labels = np.array(labels, dtype=int)
+    frIDs = np.array(frIDs, dtype=int)
+    lengths = np.array(lengths, dtype=int)
+    print("signID:{:d}, frIDs.shape:{}, lengths.shape:{}, labels.shape:{}".format(signID, frIDs.shape, lengths.shape, labels.shape))
+    return frIDs, lengths, labels
