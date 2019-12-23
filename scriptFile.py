@@ -6,6 +6,35 @@ import pandas as pd
 import Cluster_Ensembles as CE  # sudo apt-get install metis
 import hmmWrapper as funcHMM
 
+def study01(useNZ):
+    numOfSigns = 11
+    results_dir = funcH.getVariableByComputerName('results_dir')
+    data_dir = funcH.getVariableByComputerName('data_dir')
+    fileName = 'hgsk256_11_KMeans_256'
+    preds = np.load(os.path.join(results_dir, 'baseResults', fileName + '.npz'))
+    labels_true = np.asarray(preds['arr_0'], dtype=int)
+    labels_pred = np.asarray(preds['arr_1'], dtype=int)
+    labelNames = load_label_names()
+
+    fileName_DetailedLabels = 'detailedLabels' + '_' + str(numOfSigns) + '.npy'
+    detailedLabelsFileName = os.path.join(data_dir, fileName_DetailedLabels)
+    detailedLabels = np.load(detailedLabelsFileName)
+    print(labels_true.shape)
+    print(labels_pred.shape)
+    print(detailedLabels.shape)
+
+    pred01Str = fileName + ("_nz" if useNZ else "")
+    labels_true_nz, labels_pred_nz, detailedLabels_nz = funcH.getNonZeroLabels(labels_true, labels_pred, detailedLabels)
+    if useNZ:
+        labels_pred = labels_pred_nz
+        labels_true = labels_true_nz-1
+        detailedLabels = detailedLabels_nz.copy()
+        detailedLabels[:, 3] = detailedLabels[:, 3]-1
+    else:
+        labelNames.insert(0, "None")
+
+    funcH.getVideosToLabel(detailedLabels, labels_pred, predStr=pred01Str, labelNames=labelNames)
+
 def runExamplePred():
     labelNames = ["cat", "fish", "hen"]
     labels_true = np.array(
@@ -43,6 +72,16 @@ def runForPred(labels_true, labels_pred, labelNames, predictDefStr):
 
     print("\r\n\r\n*-*-", predictDefStr, "calcCluster2ClassMetrics-*-*\r\n\r\n")
     classRet, _confMat, c_pdf, kr_pdf = funcH.calcCluster2ClassMetrics(labels_true, labels_pred, removeZeroLabels=False, labelNames=labelNames, predictDefStr=predictDefStr)
+
+    results_dir = funcH.getVariableByComputerName('results_dir')
+    predictResultFold = os.path.join(results_dir, "predictionResults")
+    funcH.createDirIfNotExist(predictResultFold)
+
+    confMatFileName = predictDefStr + ".csv"
+    confMatFileName = os.path.join(predictResultFold, confMatFileName)
+    _confMat_df = pd.DataFrame(data=_confMat, index=labelNames, columns=labelNames)
+    # _confMat_df = _confMat_df[(_confMat_df.T != 0).any()]
+    pd.DataFrame.to_csv(_confMat_df, path_or_buf=confMatFileName)
 
     print("*-*-*end-", predictDefStr, "-end*-*-*\r\n")
     return klusRet, classRet, _confMat, c_pdf, kr_pdf
@@ -92,7 +131,6 @@ def loadLabelsAndPreds(useNZ):
         labels_true = labels_true_nz-1
     else:
         labelNames.insert(0, "None")
-
 
     print(pred01Str)
     print(pred02Str)
@@ -156,8 +194,8 @@ def runScript01(useNZ):
 
 def runScript_hmm(n_components = 30, transStepAllow = 15, n_iter = 1000, startModel = 'firstOnly', transitionModel = 'lr'):
     numOfSigns = 11
-    results_dir = '/media/dg/SSD_Data/DataPath/bdResults'
-    data_dir = '/media/dg/SSD_Data/DataPath/bdData'
+    results_dir = funcH.getVariableByComputerName('results_dir')
+    data_dir = funcH.getVariableByComputerName('data_dir')
     fileName = 'hgsk256_11_KMeans_256'
     preds = np.load(os.path.join(results_dir, 'baseResults', fileName + '.npz'))
     labels_true = np.asarray(preds['arr_0'], dtype=int)
@@ -170,7 +208,7 @@ def runScript_hmm(n_components = 30, transStepAllow = 15, n_iter = 1000, startMo
     print(labels_pred.shape)
     print(detailedLabels.shape)
 
-    detailed_labels_obj, summaryInfoStr = funcD.generate_detailed_labels_obj(detailedLabels)
+    detailed_labels_obj, summaryInfoStr = funcH.generate_detailed_labels_obj(detailedLabels)
     print(summaryInfoStr)
 
     verbose = 1
@@ -180,7 +218,7 @@ def runScript_hmm(n_components = 30, transStepAllow = 15, n_iter = 1000, startMo
     maxClustID = 0
     predHMM = []
     for s in range(1, numOfSigns+1):
-        frIDs_s, lengths_s, labels_s = funcD.parse_detailed_labels_obj(detailed_labels_obj, s)
+        frIDs_s, lengths_s, labels_s = funcH.parse_detailed_labels_obj(detailed_labels_obj, s)
         labels_pred_sign = labels_pred[frIDs_s].reshape(-1, 1)
         _hmm_model_ = funcHMM.createHMMModel(n_components=n_components, transStepAllow=transStepAllow, n_iter=n_iter,
                                              startModel=startModel, transitionModel=transitionModel, verbose=0)
@@ -193,17 +231,17 @@ def runScript_hmm(n_components = 30, transStepAllow = 15, n_iter = 1000, startMo
 
     return labels_true, labels_pred, predHMM
 
-n_components = 30
-transStepAllow = 15
-n_iter = 1000
-startModel = 'decreasing'  # 'firstOnly' 'decreasing'
-transitionModel = 'lr'  # 'random' 'lr' 'circular'
-print("n_components({:d}),n_components({:d}),n_iter({:d}),startModel({}),transitionModel({})".format(n_components,transStepAllow,n_iter,startModel,transitionModel))
-labels_true, labels_pred, predHMM = runScript_hmm(n_components=n_components, transStepAllow=transStepAllow, n_iter=n_iter, startModel = startModel, transitionModel = transitionModel)
-labelNames = load_label_names()
-
-labels_true_nz, predHMM_nz = funcH.getNonZeroLabels(labels_true, predHMM)
-klusRet_nz_hmm, classRet_nz_hmm, _confMat_nz_hmm, c_pdf_nz_hmm, kr_pdf_nz_hmm = runForPred(labels_true_nz-1, predHMM_nz, labelNames, "hgsk256_KMeans_NZ_hmm")
+# n_components = 30
+# transStepAllow = 15
+# n_iter = 1000
+# startModel = 'decreasing'  # 'firstOnly' 'decreasing'
+# transitionModel = 'lr'  # 'random' 'lr' 'circular'
+# print("n_components({:d}),n_components({:d}),n_iter({:d}),startModel({}),transitionModel({})".format(n_components,transStepAllow,n_iter,startModel,transitionModel))
+# labels_true, labels_pred, predHMM = runScript_hmm(n_components=n_components, transStepAllow=transStepAllow, n_iter=n_iter, startModel = startModel, transitionModel = transitionModel)
+# labelNames = load_label_names()
+#
+# labels_true_nz, predHMM_nz = funcH.getNonZeroLabels(labels_true, predHMM)
+# klusRet_nz_hmm, classRet_nz_hmm, _confMat_nz_hmm, c_pdf_nz_hmm, kr_pdf_nz_hmm = runForPred(labels_true_nz-1, predHMM_nz, labelNames, "hgsk256_KMeans_NZ_hmm")
 
 #labels_true_nz, labels_pred_nz = funcH.getNonZeroLabels(labels_true, labels_pred)
 #klusRet_nz, classRet_nz, _confMat_nz, c_pdf_nz, kr_pdf_nz = runForPred(labels_true_nz-1, labels_pred_nz, labelNames, "hgsk256_KMeans_NZ")
@@ -211,5 +249,6 @@ klusRet_nz_hmm, classRet_nz_hmm, _confMat_nz_hmm, c_pdf_nz_hmm, kr_pdf_nz_hmm = 
 #labelNames.insert(0, "None")
 #klusRet, classRet, _confMat, c_pdf, kr_pdf = runForPred(labels_true, predHMM, labelNames, "hgsk256_KMeans_hmm")
 
-#useNZ = True
+useNZ = True
 #runScript01(useNZ)
+study01(useNZ)

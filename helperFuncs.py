@@ -18,6 +18,8 @@ import scipy.io
 import time
 import datetime
 
+from collections import Counter
+
 def install_package_str(package_name):
     return "!{sys.executable} - m pip install " + package_name
 
@@ -277,12 +279,14 @@ def applyMatTransform(featVec, applyPca=True, whiten=True, normMode='', verbose=
     # X_nT_pT = applyMatTransform(X, applyNormalization=True, applyPca=True)
     # printMatRes(X_nT_pT,'X_nT_pT')
 
-def getNonZeroLabels(labVec, predictedKlusters):
-    labVec = np.asarray(labVec, dtype=int)
-    predictedKlusters = np.asarray(predictedKlusters, dtype=int)
-    predictedKlusters = predictedKlusters[np.where(labVec)]
-    labVec = labVec[np.where(labVec)]
-    return labVec, predictedKlusters
+def getNonZeroLabels(labVec, predictedKlusters, detailedLabels=None):
+    labVec_nz = np.asarray(labVec[np.where(labVec)], dtype=int)
+    predictedKlusters_nz = np.asarray(predictedKlusters[np.where(labVec)], dtype=int)
+    if detailedLabels is not None:
+        detailedLabels_nz = detailedLabels[np.where(labVec), :].squeeze()
+    else:
+        detailedLabels_nz = detailedLabels
+    return labVec_nz, predictedKlusters_nz, detailedLabels_nz
 
 def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='KMeans'):
     featVec, exp_var_rat = applyMatTransform(np.array(featVec), applyPca=applyPca, normMode=normMode)
@@ -577,6 +581,82 @@ def getIndicedList(baseList, indsList):
 def get_most_frequent(List):
     return max(set(List), key = List.count)
 
+def encode_sign_video_ID(signIDsOfSamples, videoIDsOfSamples):
+    return signIDsOfSamples*1000 + videoIDsOfSamples
+
+def decode_sign_video_ID(encodedIDs):
+    videoIDsOfSamples = np.mod(encodedIDs, 1000)
+    signIDsOfSamples = (encodedIDs-videoIDsOfSamples)/1000
+    return signIDsOfSamples, videoIDsOfSamples
+
+def getVideosToLabel(detailedLabels, labels_pred, predStr="", labelNames=None):
+    # check detailedLabels according to labels_pred
+    # for every kluster find the video to be labelled
+    # repeat this procedure for every klusters 1, 2, 3 ... steps
+    # for every step report the mapping of klusters and accuracy gained
+
+    detailed_labels_obj, summaryInfoStr = generate_detailed_labels_obj(detailedLabels)
+    print(summaryInfoStr)
+
+    klusters_unique = np.unique(labels_pred)
+    combinedSVIDs_all = encode_sign_video_ID(detailedLabels[:, 0], detailedLabels[:, 1])
+    combinedSVIDs_unique = np.unique(combinedSVIDs_all)
+
+    rCnt=len(klusters_unique)
+    cCnt=len(combinedSVIDs_unique)
+    cntMat = np.zeros([rCnt, cCnt], dtype=int)
+    klustSampleCnts = np.zeros([rCnt, 1], dtype=int)
+    for k in klusters_unique:
+        # for every kluster find the video to be labelled
+        klusterIndices = getInds(labels_pred, k)
+
+        # videos are c0_c1 (s_v)
+        signIDsOfSamples = detailedLabels[klusterIndices, 0]
+        videoIDsOfSamples = detailedLabels[klusterIndices, 1]
+        combinedSVIDs = encode_sign_video_ID(signIDsOfSamples, videoIDsOfSamples)
+
+        k_ind = getInds(klusters_unique, k)
+        klustSampleCnts[k_ind, 0] = len(klusterIndices)
+
+        list_freq = (Counter(combinedSVIDs))
+        for sv, cnt_cur in list_freq.items():
+            sv_ind = getInds(combinedSVIDs_unique, sv)
+            cntMat[k_ind, sv_ind] = cnt_cur
+
+    pd_cntMat = pd_df(cntMat, columns=combinedSVIDs_unique, index=klusters_unique)
+
+    iterID = -1
+    vidLabelledCnt = 0
+    vidToLabelList = []
+    vidListsDict = []
+    cntMat_Del = cntMat.copy()
+    while vidLabelledCnt < cCnt:
+        iterID = iterID + 1
+        addList = []
+        for k in klusters_unique:
+            k_ind = getInds(klusters_unique, k)
+            rBase = cntMat[k_ind, :].copy().squeeze()
+            rCurr = list(cntMat_Del[k_ind, :].copy().squeeze())
+            maxVal = max(rCurr)
+            percVal = maxVal/np.sum(rBase)
+            sv_ind = rCurr.index(maxVal)
+            sv = combinedSVIDs_unique[sv_ind]
+            cntMat_Del[k_ind, sv_ind] = 0
+            if sv not in vidToLabelList:
+                vidToLabelList.append(sv)
+                vidLabelledCnt = vidLabelledCnt + 1
+                addList.append([iterID, vidLabelledCnt, k, sv, percVal])
+        vidListsDict.append([iterID, len(addList), np.sum(np.sum(cntMat_Del)), addList])
+
+    signs_uniq = np.unique(detailedLabels[:,0])
+    numOfSigns = len(signs_uniq)
+    for s in signs_uniq:
+        frIDs_s, lengths_s, labels_s = parse_detailed_labels_obj(detailed_labels_obj, s)
+        labels_pred_sign = labels_pred[frIDs_s].reshape(-1, 1)
+
+
+    return pd_cntMat
+
 def countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=None):
     sampleCount = labels_pred.size
     labels_pred2class = labels_pred.copy()
@@ -711,3 +791,53 @@ def calcCluster2ClassMetrics(labels_true, labels_pred, removeZeroLabels=False, l
     print(predictDefStr, "-_confMat:\r\n", pd_df(_confMat.T, columns=labelNames, index=labelNames), "\r\n\r\n")
 
     return classRet, _confMat, c_pdf, kr_pdf
+
+def generate_detailed_labels_obj(detailedLabels):
+    # detailedLabels ->[signID videoId frameID labelOfFrame]
+    sList = np.array(np.unique(detailedLabels[:, 0]), dtype=int)
+    fr = 0
+    detailed_labels_obj = []
+    summaryInfoStr = ""
+    for s in sList:
+        detailedLabels_sign_rows = np.argwhere(detailedLabels[:, 0] == s).flatten()
+        to = fr + len(detailedLabels_sign_rows)
+        summaryInfoStr += "sign({:d}),frameCnt({:d}),fr({:d}),to({:d})\r\n".format(s, to - fr, fr, to)
+        fr = to
+        detailedLabels_sign = detailedLabels[detailedLabels_sign_rows, :]
+        # print(detailedLabels_sign.shape)
+        vList = np.array(np.unique(detailedLabels_sign[:, 1]), dtype=int)
+        # print(vList.shape)
+        vD = []
+        for v in vList:
+            detailedLabels_video_rows = np.argwhere(detailedLabels_sign[:, 1] == v).flatten()
+            detailedLabels_video = detailedLabels_sign[detailedLabels_video_rows, :]
+
+            videoLabels = detailedLabels_video[:, 3]
+
+            frIDs = detailedLabels_sign_rows[detailedLabels_video_rows]
+
+            vD.append({"vID": v, "labels": videoLabels, "frIDs": frIDs})
+        detailed_labels_obj.append({"sID": s, "videoDict": vD})
+    return detailed_labels_obj, summaryInfoStr
+
+def parse_detailed_labels_obj(detailed_labels_obj, signID):
+    frIDs = []
+    lengths = []
+    labels = []
+    for s in detailed_labels_obj:
+        if signID == s["sID"]:
+            vD = s["videoDict"]
+            for v in vD:
+                vID = v["vID"]
+                videoLabels = v["labels"]
+                videoFrameIDs = v["frIDs"]
+
+                labels = np.concatenate([labels, videoLabels])
+                frIDs = np.concatenate([frIDs, videoFrameIDs])
+                lengths.append(len(videoFrameIDs))
+
+    labels = np.array(labels, dtype=int)
+    frIDs = np.array(frIDs, dtype=int)
+    lengths = np.array(lengths, dtype=int)
+    print("signID:{:d}, frIDs.shape:{}, lengths.shape:{}, labels.shape:{}".format(signID, frIDs.shape, lengths.shape, labels.shape))
+    return frIDs, lengths, labels
