@@ -14,6 +14,7 @@ from scipy.spatial.distance import cdist
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 from pandas import DataFrame as pd_df
+import pandas as pd
 import scipy.io
 import time
 import datetime
@@ -70,6 +71,13 @@ def is_number(s):
     except ValueError:
         return False
 
+def append_to_vstack(stack, new_arr, dtype=int):
+    if (stack is None or len(stack)==0):
+        stack = new_arr
+    else:
+        stack = np.asarray(np.vstack((stack, new_arr)), dtype=dtype)
+    return stack
+
 def printMatRes(X, defStr):
     print(defStr, '\n', X)
     print('samples-rows : ', X.shape[0], 'feats-cols : ', X.shape[1])
@@ -77,6 +85,12 @@ def printMatRes(X, defStr):
     mean1_X = np.mean(X, axis=1)
     print('mean over samples,axis=0', mean0_X, ', cnt=', len(mean0_X))
     print('correct --> mean over features,axis=1', mean1_X, ', cnt=', len(mean1_X))
+
+def setPandasDisplayOpts():
+    pd.set_option('display.max_columns', 500)
+    pd.set_option('display.width', 1000)
+    pd.set_option("display.precision", 3)
+    pd.set_option('display.max_rows', None)
 
 def createLabelsForConfMat(confMat):
     r, c = confMat.shape

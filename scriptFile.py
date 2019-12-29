@@ -5,6 +5,7 @@ import os
 import pandas as pd
 import Cluster_Ensembles as CE  # sudo apt-get install metis
 import hmmWrapper as funcHMM
+import ensembleFuncs as funcEnsemble
 
 def study01(useNZ):
     numOfSigns = 11
@@ -83,6 +84,14 @@ def runForPred(labels_true, labels_pred, labelNames, predictDefStr):
     # _confMat_df = _confMat_df[(_confMat_df.T != 0).any()]
     pd.DataFrame.to_csv(_confMat_df, path_or_buf=confMatFileName)
 
+    kr_pdf_FileName = "kluster_evaluations_" + predictDefStr + ".csv"
+    kr_pdf_FileName = os.path.join(predictResultFold, kr_pdf_FileName)
+    pd.DataFrame.to_csv(kr_pdf, path_or_buf=kr_pdf_FileName)
+
+    c_pdf_FileName = "class_evaluations_" + predictDefStr + ".csv"
+    c_pdf_FileName = os.path.join(predictResultFold, c_pdf_FileName)
+    pd.DataFrame.to_csv(c_pdf, path_or_buf=c_pdf_FileName)
+
     print("*-*-*end-", predictDefStr, "-end*-*-*\r\n")
     return klusRet, classRet, _confMat, c_pdf, kr_pdf
 
@@ -118,10 +127,10 @@ def loadLabelsAndPreds(useNZ):
 
     print(labelNames, "\r\n", labels_true, "\r\n", labels_pred_1)
 
-    labels_true_nz, labels_pred_nz_1 = funcH.getNonZeroLabels(labels_true, labels_pred_1)
-    _, labels_pred_nz_2 = funcH.getNonZeroLabels(labels_true, labels_pred_2)
-    _, labels_pred_nz_3 = funcH.getNonZeroLabels(labels_true, labels_pred_3)
-    _, labels_pred_nz_4 = funcH.getNonZeroLabels(labels_true, labels_pred_4)
+    labels_true_nz, labels_pred_nz_1, _ = funcH.getNonZeroLabels(labels_true, labels_pred_1)
+    _, labels_pred_nz_2, _ = funcH.getNonZeroLabels(labels_true, labels_pred_2)
+    _, labels_pred_nz_3, _ = funcH.getNonZeroLabels(labels_true, labels_pred_3)
+    _, labels_pred_nz_4, _ = funcH.getNonZeroLabels(labels_true, labels_pred_4)
 
     if useNZ:
         labels_pred_1 = labels_pred_nz_1
@@ -145,25 +154,22 @@ def loadLabelsAndPreds(useNZ):
 
     return labelNames, labels_true, predictionsDict, N
 
-def setPandasDisplayOpts():
-    pd.set_option('display.max_columns', 500)
-    pd.set_option('display.width', 1000)
-    pd.set_option("display.precision", 3)
-
 def runScript01(useNZ):
-    setPandasDisplayOpts()
+    funcH.setPandasDisplayOpts()
 
     labelNames, labels_true, predictionsDict, N = loadLabelsAndPreds(useNZ)
     print(predictionsDict[0]["str"])
     print(predictionsDict[1]["prd"])
 
-    cluster_runs = predictionsDict[0]["prd"]
-    for i in range(1, N):
-        cluster_runs = np.asarray(np.vstack((cluster_runs, predictionsDict[i]["prd"])), dtype=int)
+    cluster_runs = None
+    for i in range(0, N):
+        cluster_runs = funcH.append_to_vstack(cluster_runs, predictionsDict[i]["prd"], dtype=int)
+
     consensus_clustering_labels = CE.cluster_ensembles(cluster_runs, verbose=False, N_clusters_max=256)
 
     predCombined = "combined" + ("_nz" if useNZ else "")
     predictionsDict.append({"str": predCombined, "prd": consensus_clustering_labels})
+    cluster_runs = funcH.append_to_vstack(cluster_runs, consensus_clustering_labels, dtype=int)
 
     resultsDict = []
     for i in range(0, N+1):
@@ -191,6 +197,36 @@ def runScript01(useNZ):
     print("\r\nf1 score comparisons for classes\r\n")
     print(c_pdf)
     print("\r\n")
+
+    eci_vec, clusterCounts = funcEnsemble.calc_ensemble_driven_cluster_index(cluster_runs=cluster_runs)
+    lwca_mat = funcEnsemble.create_LWCA_matrix(cluster_runs, eci_vec=eci_vec, verbose=0)
+
+    results_dir = funcH.getVariableByComputerName("results_dir")
+    predictResultFold = os.path.join(results_dir, "predictionResults")
+    resultsToCombine_FileName = "klusterResults.npz"
+    resultsToCombine_FileName = os.path.join(predictResultFold, resultsToCombine_FileName)
+    np.savez(resultsToCombine_FileName, lwca_mat=lwca_mat, predictionsDict=predictionsDict, resultsDict=resultsDict, eci_vec=eci_vec, clusterCounts=clusterCounts)
+
+    #cluster_runs_cmbn = []
+    for i in range(0, N):
+        kr_pdf_cur = resultsDict[i]["kr_pdf"]
+        eci_vec_cur = eci_vec[i].copy()
+        predictDefStr = predictionsDict[i]["str"]
+        #cluster_runs_cmbn = funcH.append_to_vstack(cluster_runs_cmbn, predictionsDict[i]["prd"], dtype=int)
+        print(predictDefStr, kr_pdf_cur.shape)
+
+        kr_pdf_cur.sort_index(inplace=True)
+        eci_N = np.array(eci_vec_cur * kr_pdf_cur['N'], dtype=float)
+        eci_pd = pd.DataFrame(eci_vec_cur, columns=['ECi'])
+        eci_N_pd = pd.DataFrame(eci_N, columns=['ECi_n'])
+        pd_comb = pd.concat([kr_pdf_cur, eci_pd, eci_N_pd], axis=1)
+        pd_comb.sort_values(by=['ECi_n', 'N'], inplace=True, ascending=[False, False])
+
+        kr_pdf_FileName = "kluster_evaluations_" + predictDefStr + ".csv"
+        kr_pdf_FileName = os.path.join(predictResultFold, kr_pdf_FileName)
+        pd.DataFrame.to_csv(pd_comb, path_or_buf=kr_pdf_FileName)
+
+    #lwca_mat = funcEnsemble.create_LWCA_matrix(cluster_runs_cmbn, eci_vec=cluster_runs_cmbn, verbose=1)
 
 def runScript_hmm(n_components = 30, transStepAllow = 15, n_iter = 1000, startModel = 'firstOnly', transitionModel = 'lr'):
     numOfSigns = 11
@@ -250,5 +286,5 @@ def runScript_hmm(n_components = 30, transStepAllow = 15, n_iter = 1000, startMo
 #klusRet, classRet, _confMat, c_pdf, kr_pdf = runForPred(labels_true, predHMM, labelNames, "hgsk256_KMeans_hmm")
 
 useNZ = True
-#runScript01(useNZ)
-study01(useNZ)
+runScript01(useNZ)
+#study01(useNZ)

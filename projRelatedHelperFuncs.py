@@ -369,8 +369,7 @@ def getBaseResults(dataToUse, normMode, pcaCount, numOfSigns, displayResults=Tru
         returnDict.append([dataUsed, clusterModel, clusterCount, nmiAll, accAll, nmiNoz, accNoz, emptyK])
 
     df = pd.DataFrame(returnDict, columns=['npyFileName', 'clusModel', 'clusCnt', 'nmiAll', 'accAll', 'nmiNoz', 'accNoz', 'emptyK'])
-    pd.set_option('display.max_columns', 500)
-    pd.set_option('display.width', 1000)
+    funcH.setPandasDisplayOpts()
     if displayResults:
         print(df)
 
