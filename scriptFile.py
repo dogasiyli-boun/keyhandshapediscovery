@@ -6,6 +6,57 @@ import pandas as pd
 import Cluster_Ensembles as CE  # sudo apt-get install metis
 import hmmWrapper as funcHMM
 import ensembleFuncs as funcEnsemble
+from sklearn.metrics import confusion_matrix
+
+def study02(ep = 3):
+    funcH.setPandasDisplayOpts()
+    export_as_csv = False
+    dcResultsFolder = funcH.getVariableByComputerName('results_dir').replace("bdResults", "dcResults")
+    labelsDir = funcH.getVariableByComputerName('results_dir').replace("bdResults", "dcLabels")
+    expName = 'resnet18_KMeans_pd256_clui100_11cosae-hgsk-256-11-256-st5.npy'
+    labelSaveFolder = os.path.join(labelsDir, expName)
+    npyFileName = 'rMF_' + expName
+
+    fileNameFull = os.path.join(dcResultsFolder, npyFileName)
+    x = np.loadtxt(fileNameFull, dtype=float, comments='#', delimiter='*', converters=None, skiprows=1, unpack=True)
+    x_pd = pd.DataFrame(x.T, columns=['ep', 'tr_acc_epoch', 'nmi_lab', 'nmi_lab_nz', 'acc_lab', 'acc_lab_nz', 'nmi_pred', 'nmi_pred_nz', 'acc_pred', 'acc_pred_nz'])
+    print(x_pd)
+    if export_as_csv:
+        fileNameFull_csv = fileNameFull.replace('.npy','.csv')
+        export_csv = x_pd.to_csv (fileNameFull_csv, index = None, header=True)
+
+    labelSaveFileName = labelSaveFolder + os.sep + 'labels_{:03d}.npz'.format(ep + 1)
+    savedStuff = np.load(labelSaveFileName, allow_pickle=True)
+    print('loaded', labelSaveFileName)
+    print(savedStuff.files)
+    labelsTrInit = savedStuff['labelsTrInit']
+    predClusters = savedStuff['predClusters']
+    acc_lab = savedStuff['acc_lab']
+    acc_lab_nonzero = savedStuff['acc_lab_nonzero']
+    predictionsTr = savedStuff['predictionsTr']
+    print('ep{:03d}, acc_lab({:.5f}), acc_lab_nonzero({:.5f})'.format(ep + 1, acc_lab, acc_lab_nonzero))
+
+    labelNames_nz = load_label_names()
+    labels_true, _ = loadBaseResult("hgsk256_11_KMeans_256")
+    labels_true_nz, predClusters_nz, _ = funcH.getNonZeroLabels(labels_true, predClusters)
+    labels_true_nz = labels_true_nz - 1
+    labelNames = labelNames_nz.copy()
+    labelNames.insert(0, "None")
+
+    _, predictionsTr_nz, _ = funcH.getNonZeroLabels(labels_true, predictionsTr)
+
+    expIdentStr = "resnet18_cosae256_ep{:03d}".format(ep)
+    expIdentStr_tr = "resnet18_cosae256_ep{:03d}_tr".format(ep)
+    # klusRet, classRet, _confMat, c_pdf, kr_pdf = runForPred(labels_true, predClusters, labelNames, expIdentStr)
+    klusRet_nz, classRet_nz, _confMat_nz, c_pdf_nz, kr_pdf_nz = runForPred(labels_true_nz, predClusters_nz, labelNames_nz, expIdentStr+"_nz")
+    klusRet_nz, classRet_nz, _confMat_nz, c_pdf_nz, kr_pdf_nz = runForPred(labels_true_nz, predictionsTr_nz, labelNames_nz, expIdentStr_tr+"_nz")
+
+    #the question is what is we only used the matched samples from predictionsTr_nz==predClusters_nz
+    _confMat_preds, kluster2Classes = funcH.countPredictionsForConfusionMat(predictionsTr_nz, predClusters_nz, labelNames=None)
+    #_confMat_preds = confusion_matrix(predictionsTr_nz, predClusters_nz)
+    sampleCount = np.sum(np.sum(_confMat_preds))
+    acc = 100 * np.sum(np.diag(_confMat_preds)) / sampleCount
+    print("acc between found correct is..", acc)
 
 def study01(useNZ):
     numOfSigns = 11
@@ -279,12 +330,14 @@ def runScript_hmm(n_components = 30, transStepAllow = 15, n_iter = 1000, startMo
 # labels_true_nz, predHMM_nz = funcH.getNonZeroLabels(labels_true, predHMM)
 # klusRet_nz_hmm, classRet_nz_hmm, _confMat_nz_hmm, c_pdf_nz_hmm, kr_pdf_nz_hmm = runForPred(labels_true_nz-1, predHMM_nz, labelNames, "hgsk256_KMeans_NZ_hmm")
 
-#labels_true_nz, labels_pred_nz = funcH.getNonZeroLabels(labels_true, labels_pred)
-#klusRet_nz, classRet_nz, _confMat_nz, c_pdf_nz, kr_pdf_nz = runForPred(labels_true_nz-1, labels_pred_nz, labelNames, "hgsk256_KMeans_NZ")
+# labels_true_nz, labels_pred_nz = funcH.getNonZeroLabels(labels_true, labels_pred)
+# klusRet_nz, classRet_nz, _confMat_nz, c_pdf_nz, kr_pdf_nz = runForPred(labels_true_nz-1, labels_pred_nz, labelNames, "hgsk256_KMeans_NZ")
 
-#labelNames.insert(0, "None")
-#klusRet, classRet, _confMat, c_pdf, kr_pdf = runForPred(labels_true, predHMM, labelNames, "hgsk256_KMeans_hmm")
+# labelNames.insert(0, "None")
+# klusRet, classRet, _confMat, c_pdf, kr_pdf = runForPred(labels_true, predHMM, labelNames, "hgsk256_KMeans_hmm")
 
-useNZ = True
-runScript01(useNZ)
-#study01(useNZ)
+# useNZ = True
+# runScript01(useNZ)
+# study01(useNZ)
+
+study02(ep=98)

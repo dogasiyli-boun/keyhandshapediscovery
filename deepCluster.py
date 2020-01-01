@@ -282,7 +282,7 @@ def iterate_1(featTrInit, labelsTrInit, predictionsTr, k, labelSaveFileName, ep,
                                                         calc_stats_on_iterate(featTrInit, labelsTrInit, predictionsTr,
                                                                               k, clusterModel)
 
-    np.savez(labelSaveFileName, labelsTrInit=labelsTrInit, predClusters=predClusters, acc_lab=acc_lab, acc_lab_nonzero=acc_pred_nz, predictionsTr=predictionsTr)
+    np.savez(labelSaveFileName, labelsTrInit=labelsTrInit, predClusters=predClusters, acc_lab=acc_lab, acc_lab_nonzero=acc_lab_nz, predictionsTr=predictionsTr)
 
     resultRow = np.array([ep, trAccInit, nmi_lab, nmi_lab_nz, acc_lab, acc_lab_nz, nmi_pred, nmi_pred_nz, acc_pred, acc_pred_nz])
     print('ep={:d}/{:d}, trAccInit={:0.5f} - '

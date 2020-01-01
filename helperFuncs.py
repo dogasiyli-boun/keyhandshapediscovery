@@ -751,7 +751,7 @@ def calcCluster2ClassMetrics(labels_true, labels_pred, removeZeroLabels=False, l
 
         weightedPurity += purity_k * (len(inds) / sampleCount)
 
-        cStr = "c(" + klust_cur + ")" if labelNames is None else labelNames[mappedClass]
+        cStr = "c(" + str(klust_cur) + ")" if labelNames is None else labelNames[mappedClass]
         kr_data.append(["k" + str(uniq_preds[i]), cStr, len(correctLabelInds), len(inds), purity_k])
     kr_pdf = pd_df(kr_data, columns=['kID', 'mappedClass', '#of', 'N', '%purity'])
     kr_pdf.sort_values(by=['%purity', 'N'], inplace=True, ascending=[False, False])
