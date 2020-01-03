@@ -671,6 +671,22 @@ def getVideosToLabel(detailedLabels, labels_pred, predStr="", labelNames=None):
 
     return pd_cntMat
 
+def calcPurity(labels_k):
+    mappedClass = get_most_frequent(labels_k)
+    try:
+        correctLabelInds = getInds(labels_k, mappedClass)
+    except:
+        print("labels_k = ", labels_k)
+        print("mappedClass = ", mappedClass)
+        sys.exit("Error message")
+
+    purity_k = 0
+    if len(labels_k) > 0:
+        purity_k = 100 * (len(correctLabelInds) / len(labels_k))
+
+    return purity_k, correctLabelInds, mappedClass
+
+
 def countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=None):
     sampleCount = labels_pred.size
     labels_pred2class = labels_pred.copy()
@@ -683,20 +699,11 @@ def countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=None):
         klust_cur = uniq_preds[i]
         inds = getInds(labels_pred, klust_cur)
         labels_k = getIndicedList(labels_true, inds)
-        mappedClass = get_most_frequent(labels_k)
-        try:
-            correctLabelInds = getInds(labels_k, mappedClass)
-        except:
-            print("labels_k = ", labels_k)
-            print("mappedClass = ", mappedClass)
-            sys.exit("Error message")
+
+        purity_k, correctLabelInds, mappedClass = calcPurity(labels_k)
 
         kluster2Classes.append([klust_cur, mappedClass, len(labels_k), correctLabelInds.size])
         labels_pred2class[inds] = mappedClass
-
-        purity_k = 0
-        if len(labels_k) > 0:
-            purity_k = 100 * (len(correctLabelInds) / len(labels_k))
 
         weightedPurity += purity_k * (len(inds) / sampleCount)
 

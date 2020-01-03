@@ -1,8 +1,12 @@
-import time, datetime
+import datetime
 import os
+import time
+
 import numpy as np
-import helperFuncs as funcH
+
 import dataLoaderFuncs as funcD
+import helperFuncs as funcH
+
 
 def updateNMIACCFile(epochID, nmi_cur, acc_cur, nmi_and_acc_file_name):
     if not os.path.isfile(nmi_and_acc_file_name):

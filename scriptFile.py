@@ -6,6 +6,8 @@ import pandas as pd
 import Cluster_Ensembles as CE  # sudo apt-get install metis
 import hmmWrapper as funcHMM
 import ensembleFuncs as funcEnsemble
+import datetime
+import time
 from sklearn.metrics import confusion_matrix
 
 def study02(ep = 3):
@@ -249,8 +251,15 @@ def runScript01(useNZ):
     print(c_pdf)
     print("\r\n")
 
+    t = time.time()
     eci_vec, clusterCounts = funcEnsemble.calc_ensemble_driven_cluster_index(cluster_runs=cluster_runs)
+    elapsed = time.time() - t
+    print('calc_ensemble_driven_cluster_index - elapsedTime(', elapsed, '), ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+    t = time.time()
     lwca_mat = funcEnsemble.create_LWCA_matrix(cluster_runs, eci_vec=eci_vec, verbose=0)
+    elapsed = time.time() - t
+    print('create_LWCA_matrix - elapsedTime(', elapsed, '), ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     results_dir = funcH.getVariableByComputerName("results_dir")
     predictResultFold = os.path.join(results_dir, "predictionResults")
@@ -277,7 +286,78 @@ def runScript01(useNZ):
         kr_pdf_FileName = os.path.join(predictResultFold, kr_pdf_FileName)
         pd.DataFrame.to_csv(pd_comb, path_or_buf=kr_pdf_FileName)
 
-    #lwca_mat = funcEnsemble.create_LWCA_matrix(cluster_runs_cmbn, eci_vec=cluster_runs_cmbn, verbose=1)
+def runScript01_next(useNZ):
+    results_dir = funcH.getVariableByComputerName("results_dir")
+    predictResultFold = os.path.join(results_dir, "predictionResults")
+    resultsToCombine_FileName = "klusterResults.npz"
+    resultsToCombine_FileName = os.path.join(predictResultFold, resultsToCombine_FileName)
+    loadedResults = np.load(resultsToCombine_FileName, allow_pickle=True)
+
+    lwca_mat = loadedResults["lwca_mat"]
+    predictionsDict = loadedResults["predictionsDict"]
+    resultsDict = loadedResults["resultsDict"]
+    eci_vec = loadedResults["eci_vec"]
+    clusterCounts = loadedResults["clusterCounts"]
+
+    labelNames, labels_true, _, _ = loadLabelsAndPreds(useNZ)
+    N = resultsDict.shape[0]
+    sampleCntToPick = np.array([10, 15, 20, 25], dtype=int)
+    colCnt = 4
+
+    #cluster_runs_cmbn = []
+    for i in range(0, N):
+        kr_pdf_cur = resultsDict[i]["kr_pdf"]
+        eci_vec_cur = eci_vec[i].copy()
+        predictDefStr = predictionsDict[i]["str"]
+        #cluster_runs_cmbn = funcH.append_to_vstack(cluster_runs_cmbn, predictionsDict[i]["prd"], dtype=int)
+        print(predictDefStr, kr_pdf_cur.shape)
+        predictions_cur = predictionsDict[i]["prd"]
+        unique_preds = np.unique(predictions_cur)
+
+        kr_pdf_cur.sort_index(inplace=True)
+        eci_N = np.array(eci_vec_cur * kr_pdf_cur['N'], dtype=float)
+        eci_pd = pd.DataFrame(eci_vec_cur, columns=['ECi'])
+        eci_N_pd = pd.DataFrame(eci_N, columns=['ECi_n'])
+        pd_comb = pd.concat([kr_pdf_cur, eci_pd, eci_N_pd], axis=1)
+        pd_comb.sort_values(by=['ECi_n', 'N'], inplace=True, ascending=[False, False])
+
+        kr_pdf_FileName = "kluster_evaluations_" + predictDefStr + ".csv"
+        kr_pdf_FileName = os.path.join(predictResultFold, kr_pdf_FileName)
+
+        cols2add = np.zeros((clusterCounts[i], colCnt), dtype=float)
+        cols2add_pd = pd.DataFrame(cols2add, columns=['10', '15', '20', '25'])
+        pd_comb = pd.concat([kr_pdf_cur, eci_pd, eci_N_pd, cols2add_pd], axis=1)
+
+        pd_comb.sort_index(inplace=True)
+        pd.DataFrame.to_csv(pd_comb, path_or_buf=kr_pdf_FileName)
+
+        # pick first 10 15 20 25 samples according to lwca_mat
+        for pi in range(0, clusterCounts[i]):
+            cur_pred = unique_preds[pi]
+            predictedSamples = funcH.getInds(predictions_cur, cur_pred)
+            sampleLabels = labels_true[predictedSamples]
+            lwca_cur = lwca_mat[predictedSamples, :]
+            lwca_cur = lwca_cur[:, predictedSamples]
+            simSum = np.sum(lwca_cur, axis=0) + np.sum(lwca_cur, axis=1).T
+            v, idx = funcH.sortVec(simSum)
+            sortedPredictionsIdx = predictedSamples[idx]
+            sortedLabelIdx = labels_true[sortedPredictionsIdx]
+            curSampleCntInCluster = len(sampleLabels)
+            mappedClassOfKluster = funcH.get_most_frequent(list(sortedLabelIdx))
+
+            for sj in range(0, colCnt):
+                sCnt = sampleCntToPick[sj] if curSampleCntInCluster>sampleCntToPick[sj] else curSampleCntInCluster
+                sampleLabelsPicked = sortedLabelIdx[:sCnt]
+                purity_k, _, mappedClass = funcH.calcPurity(list(sampleLabelsPicked))
+                if mappedClass == mappedClassOfKluster:
+                    cols2add[pi, sj] = purity_k
+                else:
+                    cols2add[pi, sj] = -mappedClass+(mappedClassOfKluster/100)
+
+        cols2add_pd = pd.DataFrame(cols2add, columns=['10', '15', '20', '25'])
+        pd_comb = pd.concat([kr_pdf_cur, eci_pd, eci_N_pd, cols2add_pd], axis=1)
+        pd_comb.sort_index(inplace=True)
+        pd.DataFrame.to_csv(pd_comb, path_or_buf=kr_pdf_FileName)
 
 def runScript_hmm(n_components = 30, transStepAllow = 15, n_iter = 1000, startModel = 'firstOnly', transitionModel = 'lr'):
     numOfSigns = 11
@@ -340,4 +420,7 @@ def runScript_hmm(n_components = 30, transStepAllow = 15, n_iter = 1000, startMo
 # runScript01(useNZ)
 # study01(useNZ)
 
-study02(ep=98)
+# study02(ep=98)
+
+useNZ = True
+runScript01_next(useNZ)
