@@ -21,6 +21,42 @@ import datetime
 
 from collections import Counter
 
+def npy_to_matlab(folderOfNPYFiles, matFileName):
+    #  downloaded from https://github.com/ruitome/npy_to_matlab
+    # npy_to_matlab('/home/doga/Desktop/hgsk', 'm_Hgsk')
+    files = (os.listdir(folderOfNPYFiles))
+    npyFiles = []
+    matStructure = {}
+
+    for f in files:
+        extension = os.path.splitext(f)[1]
+        if extension == '.npy':
+            npyFiles.append(f)
+
+    if not npyFiles:
+        print("Error: There are no .npy files in %s folder".format(folderOfNPYFiles))
+        sys.exit(0)
+
+    for f in npyFiles:
+        currentFile = os.path.join(folderOfNPYFiles, f)
+        variable = os.path.splitext(f)[0]
+
+        # MATLAB only loads variables that start with normal characters
+        variable = variable.lstrip('0123456789.-_ ')
+
+        try:
+            values = np.load(currentFile, allow_pickle=True)
+        except IOError:
+            print("Error: can\'t find file or read data", currentFile)
+
+        else:
+            matStructure[variable] = values
+
+    matFileName = os.path.join(folderOfNPYFiles, matFileName + '.mat')
+
+    if matStructure:
+        scipy.io.savemat(matFileName, matStructure)
+
 def install_package_str(package_name):
     return "!{sys.executable} - m pip install " + package_name
 
