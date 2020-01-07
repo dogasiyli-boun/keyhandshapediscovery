@@ -1,5 +1,6 @@
 import dataLoaderFuncs as funcD
 import helperFuncs as funcH
+import projRelatedScripts as prs
 import numpy as np
 import os
 import pandas as pd
@@ -422,5 +423,11 @@ def runScript_hmm(n_components = 30, transStepAllow = 15, n_iter = 1000, startMo
 
 # study02(ep=98)
 
-useNZ = True
-runScript01_next(useNZ)
+#  useNZ = True
+#  runScript01_next(useNZ)
+
+for nos in [8, 10, 12]:
+    prs.run4All_createData(sign_countArr=[nos])
+    prs.createCombinedDatasets(numOfSigns=nos)
+    prs.runForBaseClusterResults(normMode='', numOfSignsArr=[nos])
+    prs.runForBaseClusterResults(normMode='', numOfSignsArr=[nos], dataToUseArr = ["hog", "skeleton", "sn"])

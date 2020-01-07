@@ -138,9 +138,12 @@ def createPCADimsOfData(data_dir, data2use, sign_count, dimArray = [256, 512, 10
             print('saving pca sn features at : ', npy_PCAFileName)
             np.save(npy_PCAFileName, featsToSave)
 
-def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, numOfSigns, pcaCount, expectedFileType, clusterModels = ['KMeans', 'GMM_diag', 'GMM_full', 'Spectral'], randomSeed=5):
+def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, numOfSigns, pcaCount, expectedFileType, clustCntVec = [64, 128, 256], clusterModels = ['KMeans', 'GMM_diag', 'GMM_full', 'Spectral'], randomSeed=5):
     seed(randomSeed)
-    tf.set_random_seed(seed=randomSeed)
+    try:
+        tf.set_random_seed(seed=randomSeed)
+    except:
+        tf.random.set_seed(seed=randomSeed)
     prevPrintOpts = np.get_printoptions()
     np.set_printoptions(precision=4, suppress=True)
 
@@ -162,7 +165,7 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, numOfSign
     print('*-*-*-*-*-*-*running for : ', featsFileName, '*-*-*-*-*-*-*')
     print('featSet(', featSet.shape, '), detailedLabels(', detailedLabels_all.shape, '), labels_All(', labels_all.shape, '), labels_nonzero(', non_zero_labels.shape, ')')
 
-    clustCntVec = [64, 128, 256] #[32, 64, 128, 256, 512]
+    # clustCntVec = [64, 128, 256] #[32, 64, 128, 256, 512]
     if os.path.isfile(baseResultFileNameFull):
         print('resultDict will be loaded from(', baseResultFileNameFull, ')')
         resultDict = list(np.load(baseResultFileNameFull, allow_pickle=True))

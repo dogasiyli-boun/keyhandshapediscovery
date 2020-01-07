@@ -722,7 +722,6 @@ def calcPurity(labels_k):
 
     return purity_k, correctLabelInds, mappedClass
 
-
 def countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=None):
     sampleCount = labels_pred.size
     labels_pred2class = labels_pred.copy()

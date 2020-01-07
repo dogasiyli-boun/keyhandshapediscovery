@@ -83,7 +83,7 @@ def runForBaseClusterResults(normMode, randomSeed=5, clusterModels=['KMeans', 'G
             for dims in dimArray:
                 funcHP.runClusteringOnFeatSet(data_dir=data_dir, results_dir=results_dir, dataToUse=dataToUse,
                                               normMode=normMode, numOfSigns=numOfSigns, pcaCount=dims,
-                                              expectedFileType='Data', clusterModels=clusterModels,
+                                              expectedFileType='Data', clustCntVec=dimArray, clusterModels=clusterModels,
                                               randomSeed=randomSeed)
 
 #
@@ -159,6 +159,6 @@ def createCombinedDatasets(numOfSigns = 11):
 #                                           expectedFileType='Data', clusterModels=['KMeans', 'GMM_diag'], randomSeed=5)
 #  runForBaseClusterResults(normMode='', clusterModels = ['KMeans', 'GMM_diag'])
 #  runForBaseClusterResults_OPTICS(randomSeed = 5, clustCntVec = [32, 64])
-#  run4All_createData()
+#  run4All_createData(sign_countArr=[12])
 #  createCombinedDatasets(numOfSigns = 41)
 #  checkCreateData2Use(41, "snsk", recreate=False, recreate_hog=False)
