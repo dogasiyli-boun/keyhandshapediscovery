@@ -156,62 +156,72 @@ def loadBaseResult(fileName):
     labels_pred = np.asarray(preds['arr_1'], dtype=int)
     return labels_true, labels_pred
 
-def load_label_names():
+def load_label_names(nos):
     data_dir = funcH.getVariableByComputerName('data_dir')
-    labelnames_csv_filename = os.path.join(data_dir, "khsList_0_11_26.csv")
+    if nos == 8:
+        labelnames_csv_filename = os.path.join(data_dir, "khsList_33_41_19.csv")
+    elif nos == 10:
+        labelnames_csv_filename = os.path.join(data_dir, "khsList_23_33_26.csv")
+    elif nos == 11:
+        labelnames_csv_filename = os.path.join(data_dir, "khsList_0_11_26.csv")
+    elif nos == 12:
+        labelnames_csv_filename = os.path.join(data_dir, "khsList_11_23_30.csv")
+    else:
+        os.error(nos)
     labelNames = list(pd.read_csv(labelnames_csv_filename, sep=",")['name'].values.flatten())
     return labelNames
 
-def loadLabelsAndPreds(useNZ):
+def loadLabelsAndPreds(useNZ, nos, rs=1):
     results_dir = funcH.getVariableByComputerName('results_dir')
-    labelNames = load_label_names()
+    labelNames = load_label_names(nos)
+    cosae_hgsk_str = "cosae_pd256_wr1.0_hgsk256_" + str(nos) + "_bs16_rs" + str(rs) + "_cp2_cRM0"
 
     pred01Str = "hgskKmeans" + ("_nz" if useNZ else "")
     pred02Str = "hgskCosae" + ("_nz" if useNZ else "")
-    pred03Str = "sn256Kmeans" + ("_nz" if useNZ else "")
-    pred04Str = "sn256Cosae" + ("_nz" if useNZ else "")
+    #pred03Str = "sn256Kmeans" + ("_nz" if useNZ else "")
+    #pred04Str = "sn256Cosae" + ("_nz" if useNZ else "")
 
-    pred02_fname = os.path.join(results_dir, "results", "cosae_pd256_wr1.0_hgsk256_11_bs16_rs1_cp2_cRM0", "predicted_labels001.npy")
-    pred04_fname = os.path.join(results_dir, "results", "cosae_pd256_wr1.0_sn256_11_bs16_rs1_cp2_cRM0", "predicted_labels049.npy")
+    pred02_fname = os.path.join(results_dir, "results", cosae_hgsk_str, "predicted_labels004.npy")
+    #pred04_fname = os.path.join(results_dir, "results", "cosae_pd256_wr1.0_sn256_11_bs16_rs1_cp2_cRM0", "predicted_labels049.npy")
 
-    labels_true, labels_pred_1 = loadBaseResult("hgsk256_11_KMeans_256")
+    labels_true, labels_pred_1 = loadBaseResult("hgsk256_" + str(nos) + "_KMeans_256")
     labels_pred_2 = np.load(pred02_fname)
-    _, labels_pred_3 = loadBaseResult("sn256_11_KMeans_256")
-    labels_pred_4 = np.load(pred04_fname)
+    #_, labels_pred_3 = loadBaseResult("sn256_" + str(nos) + "_KMeans_256")
+    #labels_pred_4 = np.load(pred04_fname)
 
     print(labelNames, "\r\n", labels_true, "\r\n", labels_pred_1)
 
     labels_true_nz, labels_pred_nz_1, _ = funcH.getNonZeroLabels(labels_true, labels_pred_1)
     _, labels_pred_nz_2, _ = funcH.getNonZeroLabels(labels_true, labels_pred_2)
-    _, labels_pred_nz_3, _ = funcH.getNonZeroLabels(labels_true, labels_pred_3)
-    _, labels_pred_nz_4, _ = funcH.getNonZeroLabels(labels_true, labels_pred_4)
+    #_, labels_pred_nz_3, _ = funcH.getNonZeroLabels(labels_true, labels_pred_3)
+    #_, labels_pred_nz_4, _ = funcH.getNonZeroLabels(labels_true, labels_pred_4)
 
     if useNZ:
         labels_pred_1 = labels_pred_nz_1
         labels_pred_2 = labels_pred_nz_2
-        labels_pred_3 = labels_pred_nz_3
-        labels_pred_4 = labels_pred_nz_4
+        #labels_pred_3 = labels_pred_nz_3
+        #labels_pred_4 = labels_pred_nz_4
         labels_true = labels_true_nz-1
     else:
         labelNames.insert(0, "None")
 
     print(pred01Str)
     print(pred02Str)
-    print(pred03Str)
-    print(pred04Str)
+    #print(pred03Str)
+    #print(pred04Str)
     predictionsDict = []
     predictionsDict.append({"str": pred01Str, "prd": labels_pred_1})
     predictionsDict.append({"str": pred02Str, "prd": labels_pred_2})
-    predictionsDict.append({"str": pred03Str, "prd": labels_pred_3})
-    predictionsDict.append({"str": pred04Str, "prd": labels_pred_4})
-    N = 4
+    #predictionsDict.append({"str": pred03Str, "prd": labels_pred_3})
+    #predictionsDict.append({"str": pred04Str, "prd": labels_pred_4})
+    N = 2
 
     return labelNames, labels_true, predictionsDict, N
 
-def runScript01(useNZ):
+def runScript01(useNZ, nos, rs=1):
     funcH.setPandasDisplayOpts()
 
-    labelNames, labels_true, predictionsDict, N = loadLabelsAndPreds(useNZ)
+    labelNames, labels_true, predictionsDict, N = loadLabelsAndPreds(useNZ, nos, rs=rs)
     print(predictionsDict[0]["str"])
     print(predictionsDict[1]["prd"])
 
@@ -221,7 +231,7 @@ def runScript01(useNZ):
 
     consensus_clustering_labels = CE.cluster_ensembles(cluster_runs, verbose=False, N_clusters_max=256)
 
-    predCombined = "combined" + ("_nz" if useNZ else "")
+    predCombined = "combined" + ("_nz" if useNZ else "") + "_" + str(nos)
     predictionsDict.append({"str": predCombined, "prd": consensus_clustering_labels})
     cluster_runs = funcH.append_to_vstack(cluster_runs, consensus_clustering_labels, dtype=int)
 
@@ -264,33 +274,33 @@ def runScript01(useNZ):
 
     results_dir = funcH.getVariableByComputerName("results_dir")
     predictResultFold = os.path.join(results_dir, "predictionResults")
-    resultsToCombine_FileName = "klusterResults.npz"
+    resultsToCombine_FileName = "klusterResults_" + str(nos) + ".npz"
     resultsToCombine_FileName = os.path.join(predictResultFold, resultsToCombine_FileName)
     np.savez(resultsToCombine_FileName, lwca_mat=lwca_mat, predictionsDict=predictionsDict, resultsDict=resultsDict, eci_vec=eci_vec, clusterCounts=clusterCounts)
 
-    #cluster_runs_cmbn = []
-    for i in range(0, N):
-        kr_pdf_cur = resultsDict[i]["kr_pdf"]
-        eci_vec_cur = eci_vec[i].copy()
-        predictDefStr = predictionsDict[i]["str"]
-        #cluster_runs_cmbn = funcH.append_to_vstack(cluster_runs_cmbn, predictionsDict[i]["prd"], dtype=int)
-        print(predictDefStr, kr_pdf_cur.shape)
+    # #cluster_runs_cmbn = []
+    # for i in range(0, N):
+    #     kr_pdf_cur = resultsDict[i]["kr_pdf"]
+    #     eci_vec_cur = eci_vec[i].copy()
+    #     predictDefStr = predictionsDict[i]["str"]
+    #     #cluster_runs_cmbn = funcH.append_to_vstack(cluster_runs_cmbn, predictionsDict[i]["prd"], dtype=int)
+    #     print(predictDefStr, kr_pdf_cur.shape)
+    #
+    #     kr_pdf_cur.sort_index(inplace=True)
+    #     eci_N = np.array(eci_vec_cur * kr_pdf_cur['N'], dtype=float)
+    #     eci_pd = pd.DataFrame(eci_vec_cur, columns=['ECi'])
+    #     eci_N_pd = pd.DataFrame(eci_N, columns=['ECi_n'])
+    #     pd_comb = pd.concat([kr_pdf_cur, eci_pd, eci_N_pd], axis=1)
+    #     pd_comb.sort_values(by=['ECi_n', 'N'], inplace=True, ascending=[False, False])
+    #
+    #     kr_pdf_FileName = "kluster_evaluations_" + predictDefStr + ".csv"
+    #     kr_pdf_FileName = os.path.join(predictResultFold, kr_pdf_FileName)
+    #     pd.DataFrame.to_csv(pd_comb, path_or_buf=kr_pdf_FileName)
 
-        kr_pdf_cur.sort_index(inplace=True)
-        eci_N = np.array(eci_vec_cur * kr_pdf_cur['N'], dtype=float)
-        eci_pd = pd.DataFrame(eci_vec_cur, columns=['ECi'])
-        eci_N_pd = pd.DataFrame(eci_N, columns=['ECi_n'])
-        pd_comb = pd.concat([kr_pdf_cur, eci_pd, eci_N_pd], axis=1)
-        pd_comb.sort_values(by=['ECi_n', 'N'], inplace=True, ascending=[False, False])
-
-        kr_pdf_FileName = "kluster_evaluations_" + predictDefStr + ".csv"
-        kr_pdf_FileName = os.path.join(predictResultFold, kr_pdf_FileName)
-        pd.DataFrame.to_csv(pd_comb, path_or_buf=kr_pdf_FileName)
-
-def runScript01_next(useNZ):
+def runScript01_next(useNZ, nos):
     results_dir = funcH.getVariableByComputerName("results_dir")
     predictResultFold = os.path.join(results_dir, "predictionResults")
-    resultsToCombine_FileName = "klusterResults.npz"
+    resultsToCombine_FileName = "klusterResults_" + str(nos) + ".npz"
     resultsToCombine_FileName = os.path.join(predictResultFold, resultsToCombine_FileName)
     loadedResults = np.load(resultsToCombine_FileName, allow_pickle=True)
 
@@ -300,7 +310,7 @@ def runScript01_next(useNZ):
     eci_vec = loadedResults["eci_vec"]
     clusterCounts = loadedResults["clusterCounts"]
 
-    labelNames, labels_true, _, _ = loadLabelsAndPreds(useNZ)
+    labelNames, labels_true, _, _ = loadLabelsAndPreds(useNZ, nos)
     N = resultsDict.shape[0]
     sampleCntToPick = np.array([10, 15, 20, 25], dtype=int)
     colCnt = 4
@@ -427,7 +437,13 @@ def runScript_hmm(n_components = 30, transStepAllow = 15, n_iter = 1000, startMo
 #  runScript01_next(useNZ)
 
 for nos in [8, 10, 12]:
-    prs.run4All_createData(sign_countArr=[nos])
-    prs.createCombinedDatasets(numOfSigns=nos)
-    prs.runForBaseClusterResults(normMode='', numOfSignsArr=[nos])
-    prs.runForBaseClusterResults(normMode='', numOfSignsArr=[nos], dataToUseArr = ["hog", "skeleton", "sn"])
+    useNZ = True
+    runScript01(useNZ, nos, rs=10)
+    runScript01_next(useNZ, nos)
+
+# for nos in [10, 12]:
+#     prs.run4All_createData(sign_countArr=[nos], dataToUseArr = ["hog", "skeleton", "sn"])
+#     prs.createCombinedDatasets(numOfSigns=nos)
+#     prs.runForBaseClusterResults(normMode='', numOfSignsArr=[nos])
+#     prs.run4All_createData(sign_countArr=[nos], dataToUseArr=["hgsk"])
+#     prs.runForBaseClusterResults(normMode='', numOfSignsArr=[nos], dataToUseArr=["hgsk"])
