@@ -141,7 +141,7 @@ def calc_cluster_average_entropy(cluster_runs, logType=0, verbose=0):
         fr = to
     return cae_vec
 
-def calc_ensemble_driven_cluster_index(cluster_runs, tetaVal=0.5, verbose=0):
+def calc_ensemble_driven_cluster_index(cluster_runs, tetaVal=0.2, verbose=0):
     clustUncertainity, clusterCounts = calc_uncert_cluster_set(cluster_runs, logType=2, verbose=verbose)
     clustRunCount, sampleCount = cluster_runs.shape
 
@@ -223,7 +223,8 @@ def create_LWCA_matrix(cluster_runs, eci_vec=None, verbose=0):
     lwca_mat = np.zeros((sampleCount, sampleCount), dtype=float)
     for ci in range(0, clustRunCount):
         # check if si&sj falls into same cluster
-        print("eci_vec_cid = ", eci_vec[ci])
+        if verbose > 0:
+            print("eci_vec_cid = ", eci_vec[ci])
         clustCur, clustIDs, uniqClusterCount = getClusterVariablesFromAListOfClusters(cluster_runs, ci, verbose=verbose)
         for ki in range(0, uniqClusterCount):
             clusterIDCur = clustIDs[ki]

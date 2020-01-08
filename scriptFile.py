@@ -176,8 +176,8 @@ def loadLabelsAndPreds(useNZ, nos, rs=1):
     labelNames = load_label_names(nos)
     cosae_hgsk_str = "cosae_pd256_wr1.0_hgsk256_" + str(nos) + "_bs16_rs" + str(rs) + "_cp2_cRM0"
 
-    pred01Str = "hgskKmeans" + ("_nz" if useNZ else "")
-    pred02Str = "hgskCosae" + ("_nz" if useNZ else "")
+    pred01Str = "hgskKmeans" + ("_nz_" if useNZ else "_") + "nos" + str(nos)
+    pred02Str = "hgskCosae" + ("_nz_" if useNZ else "_") + "nos" + str(nos)
     #pred03Str = "sn256Kmeans" + ("_nz" if useNZ else "")
     #pred04Str = "sn256Cosae" + ("_nz" if useNZ else "")
 
@@ -262,42 +262,31 @@ def runScript01(useNZ, nos, rs=1):
     print(c_pdf)
     print("\r\n")
 
+    print('calc_ensemble_driven_cluster_index - started at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     t = time.time()
     eci_vec, clusterCounts = funcEnsemble.calc_ensemble_driven_cluster_index(cluster_runs=cluster_runs)
     elapsed = time.time() - t
     print('calc_ensemble_driven_cluster_index - elapsedTime(', elapsed, '), ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
+    print('create_LWCA_matrix - started at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     t = time.time()
     lwca_mat = funcEnsemble.create_LWCA_matrix(cluster_runs, eci_vec=eci_vec, verbose=0)
     elapsed = time.time() - t
     print('create_LWCA_matrix - elapsedTime(', elapsed, '), ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
+    print('create_quality_vec - started at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    t = time.time()
+    quality_vec = funcEnsemble.calc_quality_weight_basic_clustering(cluster_runs, logType=0, verbose=0)
+    elapsed = time.time() - t
+    print('create_quality_vec - elapsedTime(', elapsed, '), ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
     results_dir = funcH.getVariableByComputerName("results_dir")
     predictResultFold = os.path.join(results_dir, "predictionResults")
     resultsToCombine_FileName = "klusterResults_" + str(nos) + ".npz"
     resultsToCombine_FileName = os.path.join(predictResultFold, resultsToCombine_FileName)
-    np.savez(resultsToCombine_FileName, lwca_mat=lwca_mat, predictionsDict=predictionsDict, resultsDict=resultsDict, eci_vec=eci_vec, clusterCounts=clusterCounts)
+    np.savez(resultsToCombine_FileName, lwca_mat=lwca_mat, predictionsDict=predictionsDict, resultsDict=resultsDict, eci_vec=eci_vec, clusterCounts=clusterCounts, quality_vec=quality_vec)
 
-    # #cluster_runs_cmbn = []
-    # for i in range(0, N):
-    #     kr_pdf_cur = resultsDict[i]["kr_pdf"]
-    #     eci_vec_cur = eci_vec[i].copy()
-    #     predictDefStr = predictionsDict[i]["str"]
-    #     #cluster_runs_cmbn = funcH.append_to_vstack(cluster_runs_cmbn, predictionsDict[i]["prd"], dtype=int)
-    #     print(predictDefStr, kr_pdf_cur.shape)
-    #
-    #     kr_pdf_cur.sort_index(inplace=True)
-    #     eci_N = np.array(eci_vec_cur * kr_pdf_cur['N'], dtype=float)
-    #     eci_pd = pd.DataFrame(eci_vec_cur, columns=['ECi'])
-    #     eci_N_pd = pd.DataFrame(eci_N, columns=['ECi_n'])
-    #     pd_comb = pd.concat([kr_pdf_cur, eci_pd, eci_N_pd], axis=1)
-    #     pd_comb.sort_values(by=['ECi_n', 'N'], inplace=True, ascending=[False, False])
-    #
-    #     kr_pdf_FileName = "kluster_evaluations_" + predictDefStr + ".csv"
-    #     kr_pdf_FileName = os.path.join(predictResultFold, kr_pdf_FileName)
-    #     pd.DataFrame.to_csv(pd_comb, path_or_buf=kr_pdf_FileName)
-
-def runScript01_next(useNZ, nos):
+def runScript01_next(useNZ, nos, rs=1):
     results_dir = funcH.getVariableByComputerName("results_dir")
     predictResultFold = os.path.join(results_dir, "predictionResults")
     resultsToCombine_FileName = "klusterResults_" + str(nos) + ".npz"
@@ -309,10 +298,12 @@ def runScript01_next(useNZ, nos):
     resultsDict = loadedResults["resultsDict"]
     eci_vec = loadedResults["eci_vec"]
     clusterCounts = loadedResults["clusterCounts"]
+    quality_vec = loadedResults["quality_vec"]
 
-    labelNames, labels_true, _, _ = loadLabelsAndPreds(useNZ, nos)
+    labelNames, labels_true, _, _ = loadLabelsAndPreds(useNZ, nos, rs=rs)
     N = resultsDict.shape[0]
-    sampleCntToPick = np.array([10, 15, 20, 25], dtype=int)
+    sampleCntToPick = np.array([1, 3, 5, 10], dtype=int)
+    columns = ['1', '3', '5', '10']
     colCnt = 4
 
     #cluster_runs_cmbn = []
@@ -321,7 +312,7 @@ def runScript01_next(useNZ, nos):
         eci_vec_cur = eci_vec[i].copy()
         predictDefStr = predictionsDict[i]["str"]
         #cluster_runs_cmbn = funcH.append_to_vstack(cluster_runs_cmbn, predictionsDict[i]["prd"], dtype=int)
-        print(predictDefStr, kr_pdf_cur.shape)
+        print(predictDefStr, "Quality of cluster = {:6.4f}".format(quality_vec[i]), "number of clusters : ", kr_pdf_cur.shape)
         predictions_cur = predictionsDict[i]["prd"]
         unique_preds = np.unique(predictions_cur)
 
@@ -336,7 +327,7 @@ def runScript01_next(useNZ, nos):
         kr_pdf_FileName = os.path.join(predictResultFold, kr_pdf_FileName)
 
         cols2add = np.zeros((clusterCounts[i], colCnt), dtype=float)
-        cols2add_pd = pd.DataFrame(cols2add, columns=['10', '15', '20', '25'])
+        cols2add_pd = pd.DataFrame(cols2add, columns=columns)
         pd_comb = pd.concat([kr_pdf_cur, eci_pd, eci_N_pd, cols2add_pd], axis=1)
 
         pd_comb.sort_index(inplace=True)
@@ -365,7 +356,7 @@ def runScript01_next(useNZ, nos):
                 else:
                     cols2add[pi, sj] = -mappedClass+(mappedClassOfKluster/100)
 
-        cols2add_pd = pd.DataFrame(cols2add, columns=['10', '15', '20', '25'])
+        cols2add_pd = pd.DataFrame(cols2add, columns=columns)
         pd_comb = pd.concat([kr_pdf_cur, eci_pd, eci_N_pd, cols2add_pd], axis=1)
         pd_comb.sort_index(inplace=True)
         pd.DataFrame.to_csv(pd_comb, path_or_buf=kr_pdf_FileName)
@@ -436,10 +427,10 @@ def runScript_hmm(n_components = 30, transStepAllow = 15, n_iter = 1000, startMo
 #  useNZ = True
 #  runScript01_next(useNZ)
 
-for nos in [8, 10, 12]:
+for nos in [12]: #8, 10, 11, 12
     useNZ = True
     runScript01(useNZ, nos, rs=10)
-    runScript01_next(useNZ, nos)
+    runScript01_next(useNZ, nos, rs=10)
 
 # for nos in [10, 12]:
 #     prs.run4All_createData(sign_countArr=[nos], dataToUseArr = ["hog", "skeleton", "sn"])
