@@ -5,7 +5,7 @@ from keras.callbacks import EarlyStopping
 import lossFuncs as funcL
 import tensorflow as tf
 from keras import backend as K
-
+#nice one
 def createModel(data_dim, modelParams):
     posterior_dim = modelParams["posterior_dim"]
     weight_of_regularizer = modelParams["weight_of_regularizer"]
