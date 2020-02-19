@@ -22,11 +22,22 @@ import datetime
 from collections import Counter
 
 def appendZerosSampleToConfMat(_confMat, toEnd=True, classNames=None):
+    # a = np.array([[2, 1, 0, 0],
+    #               [1, 2, 0, 0],
+    #               [0, 0, 1, 0],
+    #               [0, 0, 0, 1]])
+    # b0, cn_b0 = appendZerosSampleToConfMat(a, toEnd=True, classNames=None)
+    # b1, cn_b1 = appendZerosSampleToConfMat(b0, toEnd=False, classNames=cn_b0)
     B = np.zeros((1 + np.shape(_confMat)[0], 1 + np.shape(_confMat)[1]))
+    if classNames is None:
+        classNames = ["c{:02d}".format(x+1) for x in range(np.shape(_confMat)[0])]
     if toEnd:
         B[:-1, :-1] = _confMat
+        classNames = classNames + ['empty']
     else:
         B[1:, 1:] = _confMat
+        classNames = ['empty'] + classNames
+    return B, classNames
 
 def npy_to_matlab(folderOfNPYFiles, matFileName):
     #  downloaded from https://github.com/ruitome/npy_to_matlab
@@ -266,20 +277,20 @@ def getAccFromConf(labels, predictions):
         for eph in range(1000):
             sess.run(optimizer)
         W = sess.run((W_softMax))
-    W_discrete, Kluster2Classes = discretizeW(W)
-    confMat = inputConfMat @ W_discrete;
+    W_discrete, kluster2Classes = discretizeW(W)
+    _confMat = inputConfMat @ W_discrete;
     # print("Confusion Mat:\n",confMat)
     # for n in range(1,expectedClassCount+1):
     #   Kn = np.where(Kluster2Classes == n)[0]+1
     #   print(("K{} "*Kn.size).format(*Kn), "<--", " C", n)
     # rowLabels, colLabels = createLabelsForConfMat(inputConfMat)
 
-    acc = np.sum(np.diag(confMat)) / np.sum(np.sum(confMat))
+    acc = np.sum(np.diag(_confMat)) / np.sum(np.sum(_confMat))
     # acc = np.trace(confMat) / np.einsum('ij->', confMat)
 
     # nmiAr  = nmi(colLabels,rowLabels,average_method='arithmetic')
     # nmiGeo = nmi(colLabels,rowLabels,average_method='geometric')
-    return acc
+    return acc, _confMat, kluster2Classes
     # print('confAcc(', acc ,'),nmiAr(', nmiAr,')nmiGeo(',nmiGeo ,')')
 
 def get_nmi_only(l, p, average_method='geometric'):
@@ -288,7 +299,7 @@ def get_nmi_only(l, p, average_method='geometric'):
 
 def get_NMI_Acc(non_zero_labels, non_zero_predictions, average_method='geometric'):
     nmi_cur = get_nmi_only(non_zero_labels, non_zero_predictions, average_method=average_method)
-    acc_cur = getAccFromConf(non_zero_labels, non_zero_predictions)
+    acc_cur, _, _ = getAccFromConf(non_zero_labels, non_zero_predictions)
     return nmi_cur, acc_cur
 
 def get_nmi_deepCluster(featVec, labVec, n_clusters, clusterModel='KMeans', normMode='', applyPca=True):
@@ -506,7 +517,12 @@ def plot_confusion_matrix(conf_mat,
                           show_absolute=True,
                           show_normed=False,
                           class_names=None,
-                          saveConfFigFileName=''):
+                          add_true_cnt=True,
+                          add_pred_cnt=True,
+                          saveConfFigFileName='',
+                          figMulCnt=None,
+                          confusionTreshold=0.3,
+                          rotVal = 30):
     """Plot a confusion matrix via matplotlib.
     Parameters
     -----------
@@ -545,18 +561,21 @@ def plot_confusion_matrix(conf_mat,
     For usage examples, please see
     http://rasbt.github.io/mlxtend/user_guide/plotting/plot_confusion_matrix/
     """
+
     if not (show_absolute or show_normed):
         raise AssertionError('Both show_absolute and show_normed are False')
     if class_names is not None and len(class_names) != len(conf_mat):
         raise AssertionError('len(class_names) should be equal to number of'
                              'classes in the dataset')
 
-    figMulCnt = 0.5 + 0.25*int(show_absolute) + 0.25*int(show_normed)
-    print("figMulCnt = ", figMulCnt)
+    if figMulCnt is None:
+        figMulCnt = 0.5 + 0.25*int(show_absolute) + 0.25*int(show_normed)
+        print("figMulCnt = ", figMulCnt)
     if figsize is None:
         figsize = ((len(conf_mat))*figMulCnt, (len(conf_mat))*figMulCnt)
 
     total_samples = conf_mat.sum(axis=1)[:, np.newaxis]
+    total_preds = conf_mat.sum(axis=0)[:, np.newaxis]
     normed_conf_mat = conf_mat.astype('float') / total_samples
 
     fig, ax = plt.subplots(figsize=figsize)
@@ -577,31 +596,34 @@ def plot_confusion_matrix(conf_mat,
             cell_text = ""
             if show_absolute and conf_mat[i, j] > 0:
                 cell_text += format(conf_mat[i, j], 'd')
-                if show_normed:
+                if show_normed and normed_conf_mat[i, j] > 0.005:
                     cell_text += "\n" + '('
                     cell_text += format(normed_conf_mat[i, j], '.2f') + ')'
-            elif conf_mat[i, j] > 0:
+            elif conf_mat[i, j] > 0 and normed_conf_mat[i, j] > 0.005:
                 cell_text += format(normed_conf_mat[i, j], '.2f')
-            if show_normed:
-                ax.text(x=j,
-                        y=i,
-                        s=cell_text,
-                        va='center',
-                        ha='center',
-                        color="white" if normed_conf_mat[i, j] > 0.5
-                        else "black")
+
+            if (i!=j and normed_conf_mat[i, j]>confusionTreshold):
+                text_color = "red"
+            elif show_normed:
+                text_color ="white" if normed_conf_mat[i, j] > 0.5 else "black"
             else:
-                ax.text(x=j,
-                        y=i,
-                        s=cell_text,
-                        va='center',
-                        ha='center',
-                        color="white" if conf_mat[i, j] > np.max(conf_mat)/2
-                        else "black")
+                text_color = "white" if conf_mat[i, j] > np.max(conf_mat)/2 else "black"
+            ax.text(x=j, y=i,
+                    s=cell_text,
+                    va='center', ha='center',
+                    color=text_color)
     if class_names is not None:
         tick_marks = np.arange(len(class_names))
-        plt.xticks(tick_marks, class_names, rotation=45)
-        plt.yticks(tick_marks, class_names)
+        class_names_x_preds = class_names.copy()
+        class_names_y_true = class_names.copy()
+        if add_true_cnt:
+            for i in range(len(class_names_x_preds)):
+                class_names_x_preds[i] += '\n({:.0f})'.format(total_preds[i, 0])
+        if add_pred_cnt:
+            for i in range(len(class_names_y_true)):
+                class_names_y_true[i] += '\n({:.0f})'.format(total_samples[i, 0])
+        plt.xticks(tick_marks, class_names_x_preds, rotation=rotVal)
+        plt.yticks(tick_marks, class_names_y_true)
 
     if hide_spines:
         ax.spines['right'].set_visible(False)
@@ -614,13 +636,23 @@ def plot_confusion_matrix(conf_mat,
         ax.axes.get_yaxis().set_ticks([])
         ax.axes.get_xaxis().set_ticks([])
 
+    acc = np.sum(np.diag(conf_mat)) / np.sum(np.sum(conf_mat))
+
     plt.xlabel('predicted label')
     plt.ylabel('true label')
+    plot_title_str = saveConfFigFileName.split(os.path.sep)[-1]
+    plot_title_str = plot_title_str.split('.')[0]
+    plot_title_str += '_accuracy<{:4.2f}>_'.format(acc)
+    plt.title(plot_title_str[0:-1])
 
-    if saveConfFigFileName=='':
+    if saveConfFigFileName == '':
         plt.show()
     else:
         plt.tight_layout()
+        saveConfFigFileName = saveConfFigFileName.replace(".", "_acc(" + '{:.0f}'.format(acc*100) + ").")
+        saveConfFigFileName = saveConfFigFileName.replace(".", "_rot(" + str(rotVal) + ").")
+        saveConfFigFileName = saveConfFigFileName.replace(".", "_ctv(" + '{:.0f}'.format(confusionTreshold*100) + ").")
+        saveConfFigFileName = saveConfFigFileName.replace(".", "_fmc(" + '{:.2f}'.format(figMulCnt) + ").")
         plt.savefig(saveConfFigFileName)
 
     return fig, ax

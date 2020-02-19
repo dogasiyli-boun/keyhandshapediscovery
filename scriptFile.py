@@ -4,6 +4,7 @@ from sklearn.metrics import confusion_matrix
 
 import helperFuncs as funcH
 import projRelatedHelperFuncs as prHF
+import importlib as impL
 import numpy as np
 import os
 import pandas as pd
@@ -351,38 +352,44 @@ def runScript_hmm(n_components = 30, transStepAllow = 15, n_iter = 1000, startMo
 
     return labels_true, labels_pred, predHMM
 
-# n_components = 30
-# transStepAllow = 15
-# n_iter = 1000
-# startModel = 'decreasing'  # 'firstOnly' 'decreasing'
-# transitionModel = 'lr'  # 'random' 'lr' 'circular'
-# print("n_components({:d}),n_components({:d}),n_iter({:d}),startModel({}),transitionModel({})".format(n_components,transStepAllow,n_iter,startModel,transitionModel))
-# labels_true, labels_pred, predHMM = runScript_hmm(n_components=n_components, transStepAllow=transStepAllow, n_iter=n_iter, startModel = startModel, transitionModel = transitionModel)
-# labelNames = load_label_names()
-#
-# labels_true_nz, predHMM_nz = funcH.getNonZeroLabels(labels_true, predHMM)
-# klusRet_nz_hmm, classRet_nz_hmm, _confMat_nz_hmm, c_pdf_nz_hmm, kr_pdf_nz_hmm = runForPred(labels_true_nz-1, predHMM_nz, labelNames, "hgsk256_KMeans_NZ_hmm")
+def runConfMatScript01(figMulCnt=None, confCalcMethod = 'dnn', confusionTreshold=0.3, dataSlctID=0, numOfSigns = 11, pcaCount = 256, posterior_dim=256):
+    #fs.runConfMatScript01(figMulCnt=0.60, confCalcMethod = 'count', confusionTreshold=0.2)
+    #fs.runConfMatScript01(figMulCnt=0.60, confCalcMethod = 'count', confusionTreshold=0.2, dataSlctID=1, posterior_dim=256)
+    results_dir = funcH.getVariableByComputerName('results_dir')
+    dataToUse = 'hog'
+    if dataSlctID == 0:
+        predDefStr = dataToUse + str(pcaCount) + "_" + str(numOfSigns) + "_cp2_048_cosae"
+        saveConfFigFileName = predDefStr + ".png"
+        labels_pred = os.path.join(results_dir,
+                                   'results/cosae_pd256_wr1.0_hog256_11_bs16_rs1_cp2_cRM0/predicted_labels048.npy')
+    elif dataSlctID == 1:
+        predDefStr = dataToUse + str(pcaCount) + "_pd" + str(posterior_dim) + "_" + str(numOfSigns) + "_base"
+        saveConfFigFileName = predDefStr + ".png"
+        _, labels_pred = prHF.loadBaseResult(dataToUse + str(pcaCount) + "_" + str(numOfSigns) + "_KMeans_" + str(posterior_dim))
 
-# labels_true_nz, labels_pred_nz = funcH.getNonZeroLabels(labels_true, labels_pred)
-# klusRet_nz, classRet_nz, _confMat_nz, c_pdf_nz, kr_pdf_nz = runForPred(labels_true_nz-1, labels_pred_nz, labelNames, "hgsk256_KMeans_NZ")
+    else:
+        return
+    prHF.analayzePredictionResults(labels_pred, dataToUse, pcaCount, numOfSigns,
+                                   saveConfFigFileName=saveConfFigFileName, predDefStr=predDefStr,
+                                   figMulCnt=figMulCnt, confCalcMethod=confCalcMethod, confusionTreshold=confusionTreshold)
 
-# labelNames.insert(0, "None")
-# klusRet, classRet, _confMat, c_pdf, kr_pdf = runForPred(labels_true, predHMM, labelNames, "hgsk256_KMeans_hmm")
+def runConfMatScript02():
+    _conf_mat_ = np.array([[199,  1,   0,  0],
+                           [  2, 198,  0,  0],
+                           [  0,  0,  97,  3],
+                           [  0,  2,   2, 96]])
+    class_names = ['class a', 'class b', 'class c', 'class d']
+    funcH.plot_confusion_matrix(conf_mat=_conf_mat_,
+                                colorbar=True,
+                                show_absolute=True,
+                                show_normed=True,
+                                class_names=class_names,
+                                saveConfFigFileName='classNames.png')
 
-# useNZ = True
-# runScript01(useNZ)
-# study01(useNZ)
-
-# study02(ep=98)
-
-#  useNZ = True
-#  runScript01_next(useNZ)
-
-for nos in [12]: #8, 10, 11, 12
-    useNZ = True
-    runScript01(useNZ, nos, rs=10)
-    runScript01_next(useNZ, nos, rs=10)
-
+# for nos in [12]: #8, 10, 11, 12
+#     useNZ = True
+#     runScript01(useNZ, nos, rs=10)
+#     runScript01_next(useNZ, nos, rs=10)
 # for nos in [10, 12]:
 #     prs.run4All_createData(sign_countArr=[nos], dataToUseArr = ["hog", "skeleton", "sn"])
 #     prs.createCombinedDatasets(numOfSigns=nos)

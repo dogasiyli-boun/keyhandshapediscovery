@@ -8,7 +8,6 @@ import pandas as pd
 import matplotlib as plt
 import time
 import datetime
-from mlxtend.plotting import plot_confusion_matrix
 
 def createExperimentName(trainParams, modelParams, rnnParams):
 
@@ -485,7 +484,10 @@ def runForPred(labels_true, labels_pred, labelNames, predictDefStr):
     print("*-*-*end-", predictDefStr, "-end*-*-*\r\n")
     return klusRet, classRet, _confMat, c_pdf, kr_pdf
 
-def analayzePredictionResults(labels_pred, dataToUse, pcaCount, numOfSigns, saveConfFigFileName='', predDefStr="predictionUnknown", useNZ=True):
+def analayzePredictionResults(labels_pred, dataToUse, pcaCount, numOfSigns,
+                              saveConfFigFileName='', predDefStr="predictionUnknown",
+                              useNZ=True, confCalcMethod = 'dnn', confusionTreshold=0.3,
+                              figMulCnt=None):
     data_dir = funcH.getVariableByComputerName('data_dir')
     results_dir = funcH.getVariableByComputerName("results_dir")
     predictResultFold = os.path.join(results_dir, "predictionResults")
@@ -526,9 +528,15 @@ def analayzePredictionResults(labels_pred, dataToUse, pcaCount, numOfSigns, save
     kr_pdf_FileName = os.path.join(predictResultFold, kr_pdf_FileName)
     pd.DataFrame.to_csv(klusRet, path_or_buf=kr_pdf_FileName)
 
-    _confMat, kluster2Classes = funcH.countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=labelNames)
+    print("confCalcMethod=", confCalcMethod)
+    if confCalcMethod == 'dnn':
+        acc, _confMat, kluster2Classes = funcH.getAccFromConf(labels_true, labels_pred)
+    else:
+        _confMat, kluster2Classes = funcH.countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=labelNames)
 
-    saveConfFigFileName = saveConfFigFileName if saveConfFigFileName == '' else os.path.join(predictResultFold, saveConfFigFileName)
+    if saveConfFigFileName != '':
+        saveConfFigFileName = saveConfFigFileName.replace(".", "_ccm(" + confCalcMethod + ").")
+        saveConfFigFileName = os.path.join(predictResultFold, saveConfFigFileName)
 
     #iterID = -1
     #normalizeByAxis = -1
@@ -538,9 +546,11 @@ def analayzePredictionResults(labels_pred, dataToUse, pcaCount, numOfSigns, save
     #                  saveFileName=saveConfFigFileName, iterID=iterID,
     #                  normalizeByAxis=normalizeByAxis, add2XLabel=add2XLabel, add2YLabel=add2YLabel)
     fig, ax = funcH.plot_confusion_matrix(conf_mat=_confMat,
-                                    colorbar=True,
-                                    show_absolute=True,
-                                    show_normed=True,
-                                    class_names=labelNames,
-                                    saveConfFigFileName=saveConfFigFileName)
+                                          colorbar=False,
+                                          show_absolute=True,
+                                          show_normed=True,
+                                          class_names=labelNames,
+                                          saveConfFigFileName=saveConfFigFileName,
+                                          figMulCnt=figMulCnt,
+                                          confusionTreshold=confusionTreshold)
 #displayDataResults(method='sae', dataToUse='skeleton', posteriorDim=256, pcaCount=32, numOfSigns=11, weightReg = 1.0, batchSize = 16)
