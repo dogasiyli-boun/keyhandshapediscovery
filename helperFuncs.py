@@ -21,6 +21,13 @@ import datetime
 
 from collections import Counter
 
+def appendZerosSampleToConfMat(_confMat, toEnd=True, classNames=None):
+    B = np.zeros((1 + np.shape(_confMat)[0], 1 + np.shape(_confMat)[1]))
+    if toEnd:
+        B[:-1, :-1] = _confMat
+    else:
+        B[1:, 1:] = _confMat
+
 def npy_to_matlab(folderOfNPYFiles, matFileName):
     #  downloaded from https://github.com/ruitome/npy_to_matlab
     # npy_to_matlab('/home/doga/Desktop/hgsk', 'm_Hgsk')
