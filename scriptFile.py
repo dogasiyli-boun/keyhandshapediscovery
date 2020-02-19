@@ -1,6 +1,9 @@
 import dataLoaderFuncs as funcD
-import helperFuncs as funcH
 import projRelatedScripts as prs
+from sklearn.metrics import confusion_matrix
+
+import helperFuncs as funcH
+import projRelatedHelperFuncs as prHF
 import numpy as np
 import os
 import pandas as pd
@@ -9,7 +12,6 @@ import hmmWrapper as funcHMM
 import ensembleFuncs as funcEnsemble
 import datetime
 import time
-from sklearn.metrics import confusion_matrix
 
 def study02(ep = 3):
     funcH.setPandasDisplayOpts()
@@ -39,8 +41,8 @@ def study02(ep = 3):
     predictionsTr = savedStuff['predictionsTr']
     print('ep{:03d}, acc_lab({:.5f}), acc_lab_nonzero({:.5f})'.format(ep + 1, acc_lab, acc_lab_nonzero))
 
-    labelNames_nz = load_label_names()
-    labels_true, _ = loadBaseResult("hgsk256_11_KMeans_256")
+    labelNames_nz = prHF.load_label_names()
+    labels_true, _ = prHF.loadBaseResult("hgsk256_11_KMeans_256")
     labels_true_nz, predClusters_nz, _ = funcH.getNonZeroLabels(labels_true, predClusters)
     labels_true_nz = labels_true_nz - 1
     labelNames = labelNames_nz.copy()
@@ -51,8 +53,8 @@ def study02(ep = 3):
     expIdentStr = "resnet18_cosae256_ep{:03d}".format(ep)
     expIdentStr_tr = "resnet18_cosae256_ep{:03d}_tr".format(ep)
     # klusRet, classRet, _confMat, c_pdf, kr_pdf = runForPred(labels_true, predClusters, labelNames, expIdentStr)
-    klusRet_nz, classRet_nz, _confMat_nz, c_pdf_nz, kr_pdf_nz = runForPred(labels_true_nz, predClusters_nz, labelNames_nz, expIdentStr+"_nz")
-    klusRet_nz, classRet_nz, _confMat_nz, c_pdf_nz, kr_pdf_nz = runForPred(labels_true_nz, predictionsTr_nz, labelNames_nz, expIdentStr_tr+"_nz")
+    klusRet_nz, classRet_nz, _confMat_nz, c_pdf_nz, kr_pdf_nz = prHF.runForPred(labels_true_nz, predClusters_nz, labelNames_nz, expIdentStr+"_nz")
+    klusRet_nz, classRet_nz, _confMat_nz, c_pdf_nz, kr_pdf_nz = prHF.runForPred(labels_true_nz, predictionsTr_nz, labelNames_nz, expIdentStr_tr+"_nz")
 
     #the question is what is we only used the matched samples from predictionsTr_nz==predClusters_nz
     _confMat_preds, kluster2Classes = funcH.countPredictionsForConfusionMat(predictionsTr_nz, predClusters_nz, labelNames=None)
@@ -69,7 +71,7 @@ def study01(useNZ):
     preds = np.load(os.path.join(results_dir, 'baseResults', fileName + '.npz'))
     labels_true = np.asarray(preds['arr_0'], dtype=int)
     labels_pred = np.asarray(preds['arr_1'], dtype=int)
-    labelNames = load_label_names()
+    labelNames = prHF.load_label_names()
 
     fileName_DetailedLabels = 'detailedLabels' + '_' + str(numOfSigns) + '.npy'
     detailedLabelsFileName = os.path.join(data_dir, fileName_DetailedLabels)
@@ -101,9 +103,9 @@ def runExamplePred():
     labels_pred_3 = np.array(
         [1, 1, 1, 1, 1, 1, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 5, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]) - 1
 
-    klusRet_1, classRet_1, _confMat_1, c_pdf_1, kr_pdf_1 = runForPred(labels_true, labels_pred_1, labelNames)
-    klusRet_2, classRet_2, _confMat_2, c_pdf_2, kr_pdf_2 = runForPred(labels_true, labels_pred_2, labelNames)
-    klusRet_3, classRet_3, _confMat_3, c_pdf_3, kr_pdf_3 = runForPred(labels_true, labels_pred_3, labelNames)
+    klusRet_1, classRet_1, _confMat_1, c_pdf_1, kr_pdf_1 = prHF.runForPred(labels_true, labels_pred_1, labelNames)
+    klusRet_2, classRet_2, _confMat_2, c_pdf_2, kr_pdf_2 = prHF.runForPred(labels_true, labels_pred_2, labelNames)
+    klusRet_3, classRet_3, _confMat_3, c_pdf_3, kr_pdf_3 = prHF.runForPred(labels_true, labels_pred_3, labelNames)
 
     klusRet = klusRet_1.copy().rename(columns={"value": "pred01"})
     klusRet.insert(2, "pred02", klusRet_2['value'], True)
@@ -120,60 +122,9 @@ def runExamplePred():
     c_pdf.insert(3, "pred03", c_pdf_3[['%f1']].sort_index(), True)
     print(c_pdf)
 
-def runForPred(labels_true, labels_pred, labelNames, predictDefStr):
-    print("\r\n*-*-*start-", predictDefStr, "-end*-*-*\r\n")
-    print("\r\n\r\n*-*-", predictDefStr, "calcClusterMetrics-*-*\r\n\r\n")
-    klusRet = funcH.calcClusterMetrics(labels_true, labels_pred, removeZeroLabels=False, labelNames=labelNames)
-
-    print("\r\n\r\n*-*-", predictDefStr, "calcCluster2ClassMetrics-*-*\r\n\r\n")
-    classRet, _confMat, c_pdf, kr_pdf = funcH.calcCluster2ClassMetrics(labels_true, labels_pred, removeZeroLabels=False, labelNames=labelNames, predictDefStr=predictDefStr)
-
-    results_dir = funcH.getVariableByComputerName('results_dir')
-    predictResultFold = os.path.join(results_dir, "predictionResults")
-    funcH.createDirIfNotExist(predictResultFold)
-
-    confMatFileName = predictDefStr + ".csv"
-    confMatFileName = os.path.join(predictResultFold, confMatFileName)
-    _confMat_df = pd.DataFrame(data=_confMat, index=labelNames, columns=labelNames)
-    # _confMat_df = _confMat_df[(_confMat_df.T != 0).any()]
-    pd.DataFrame.to_csv(_confMat_df, path_or_buf=confMatFileName)
-
-    kr_pdf_FileName = "kluster_evaluations_" + predictDefStr + ".csv"
-    kr_pdf_FileName = os.path.join(predictResultFold, kr_pdf_FileName)
-    pd.DataFrame.to_csv(kr_pdf, path_or_buf=kr_pdf_FileName)
-
-    c_pdf_FileName = "class_evaluations_" + predictDefStr + ".csv"
-    c_pdf_FileName = os.path.join(predictResultFold, c_pdf_FileName)
-    pd.DataFrame.to_csv(c_pdf, path_or_buf=c_pdf_FileName)
-
-    print("*-*-*end-", predictDefStr, "-end*-*-*\r\n")
-    return klusRet, classRet, _confMat, c_pdf, kr_pdf
-
-def loadBaseResult(fileName):
-    results_dir = funcH.getVariableByComputerName('results_dir')
-    preds = np.load(os.path.join(results_dir, 'baseResults', fileName + '.npz'))
-    labels_true = np.asarray(preds['arr_0'], dtype=int)
-    labels_pred = np.asarray(preds['arr_1'], dtype=int)
-    return labels_true, labels_pred
-
-def load_label_names(nos):
-    data_dir = funcH.getVariableByComputerName('data_dir')
-    if nos == 8:
-        labelnames_csv_filename = os.path.join(data_dir, "khsList_33_41_19.csv")
-    elif nos == 10:
-        labelnames_csv_filename = os.path.join(data_dir, "khsList_23_33_26.csv")
-    elif nos == 11:
-        labelnames_csv_filename = os.path.join(data_dir, "khsList_0_11_26.csv")
-    elif nos == 12:
-        labelnames_csv_filename = os.path.join(data_dir, "khsList_11_23_30.csv")
-    else:
-        os.error(nos)
-    labelNames = list(pd.read_csv(labelnames_csv_filename, sep=",")['name'].values.flatten())
-    return labelNames
-
 def loadLabelsAndPreds(useNZ, nos, rs=1):
     results_dir = funcH.getVariableByComputerName('results_dir')
-    labelNames = load_label_names(nos)
+    labelNames = prHF.load_label_names(nos)
     cosae_hgsk_str = "cosae_pd256_wr1.0_hgsk256_" + str(nos) + "_bs16_rs" + str(rs) + "_cp2_cRM0"
 
     pred01Str = "hgskKmeans" + ("_nz_" if useNZ else "_") + "nos" + str(nos)
@@ -184,7 +135,7 @@ def loadLabelsAndPreds(useNZ, nos, rs=1):
     pred02_fname = os.path.join(results_dir, "results", cosae_hgsk_str, "predicted_labels004.npy")
     #pred04_fname = os.path.join(results_dir, "results", "cosae_pd256_wr1.0_sn256_11_bs16_rs1_cp2_cRM0", "predicted_labels049.npy")
 
-    labels_true, labels_pred_1 = loadBaseResult("hgsk256_" + str(nos) + "_KMeans_256")
+    labels_true, labels_pred_1 = funcH.loadBaseResult("hgsk256_" + str(nos) + "_KMeans_256")
     labels_pred_2 = np.load(pred02_fname)
     #_, labels_pred_3 = loadBaseResult("sn256_" + str(nos) + "_KMeans_256")
     #labels_pred_4 = np.load(pred04_fname)
@@ -237,7 +188,7 @@ def runScript01(useNZ, nos, rs=1):
 
     resultsDict = []
     for i in range(0, N+1):
-        klusRet, classRet, _confMat, c_pdf, kr_pdf = runForPred(labels_true, predictionsDict[i]["prd"], labelNames, predictionsDict[i]["str"])
+        klusRet, classRet, _confMat, c_pdf, kr_pdf = prHF.runForPred(labels_true, predictionsDict[i]["prd"], labelNames, predictionsDict[i]["str"])
         resultsDict.append({"klusRet": klusRet, "classRet": classRet,
                             "_confMat": _confMat, "c_pdf": c_pdf, "kr_pdf": kr_pdf})
 

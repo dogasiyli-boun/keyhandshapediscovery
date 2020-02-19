@@ -8,6 +8,7 @@ import pandas as pd
 import matplotlib as plt
 import time
 import datetime
+from mlxtend.plotting import plot_confusion_matrix
 
 def createExperimentName(trainParams, modelParams, rnnParams):
 
@@ -313,6 +314,21 @@ def runOPTICSClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, pca
     np.set_printoptions(prevPrintOpts)
     return resultDict
 
+def load_label_names(nos):
+    data_dir = funcH.getVariableByComputerName('data_dir')
+    if nos == 8:
+        labelnames_csv_filename = os.path.join(data_dir, "khsList_33_41_19.csv")
+    elif nos == 10:
+        labelnames_csv_filename = os.path.join(data_dir, "khsList_23_33_26.csv")
+    elif nos == 11:
+        labelnames_csv_filename = os.path.join(data_dir, "khsList_0_11_26.csv")
+    elif nos == 12:
+        labelnames_csv_filename = os.path.join(data_dir, "khsList_11_23_30.csv")
+    else:
+        os.error(nos)
+    labelNames = list(pd.read_csv(labelnames_csv_filename, sep=",")['name'].values.flatten())
+    return labelNames
+
 def loadData(model_params, numOfSigns, data_dir):
     featsFileName = funcD.getFileName(dataToUse=model_params["dataToUse"], normMode=str(model_params["normMode"]), pcaCount=model_params["pcaCount"],
                                       numOfSigns=numOfSigns, expectedFileType='Data')
@@ -334,6 +350,13 @@ def loadData(model_params, numOfSigns, data_dir):
     labels_all = funcD.loadFileIfExist(data_dir, fileName_labels)
 
     return feat_set, labels_all, detailed_labels_all
+
+def loadBaseResult(fileName):
+    results_dir = funcH.getVariableByComputerName('results_dir')
+    preds = np.load(os.path.join(results_dir, 'baseResults', fileName + '.npz'))
+    labels_true = np.asarray(preds['arr_0'], dtype=int)
+    labels_pred = np.asarray(preds['arr_1'], dtype=int)
+    return labels_true, labels_pred
 
 def getBaseResults(dataToUse, normMode, pcaCount, numOfSigns, displayResults=True, baseResultFileName=''):
     if baseResultFileName == '':
@@ -433,4 +456,91 @@ def displayDataResults(method, dataToUse, normMode, pcaCount, numOfSigns, poster
     ax = df.plot.bar(x='lab', y='val', rot=45)
     plt.pyplot.show()
 
+def runForPred(labels_true, labels_pred, labelNames, predictDefStr):
+    print("\r\n*-*-*start-", predictDefStr, "-end*-*-*\r\n")
+    print("\r\n\r\n*-*-", predictDefStr, "calcClusterMetrics-*-*\r\n\r\n")
+    klusRet = funcH.calcClusterMetrics(labels_true, labels_pred, removeZeroLabels=False, labelNames=labelNames)
+
+    print("\r\n\r\n*-*-", predictDefStr, "calcCluster2ClassMetrics-*-*\r\n\r\n")
+    classRet, _confMat, c_pdf, kr_pdf = funcH.calcCluster2ClassMetrics(labels_true, labels_pred, removeZeroLabels=False, labelNames=labelNames, predictDefStr=predictDefStr)
+
+    results_dir = funcH.getVariableByComputerName('results_dir')
+    predictResultFold = os.path.join(results_dir, "predictionResults")
+    funcH.createDirIfNotExist(predictResultFold)
+
+    confMatFileName = predictDefStr + ".csv"
+    confMatFileName = os.path.join(predictResultFold, confMatFileName)
+    _confMat_df = pd.DataFrame(data=_confMat, index=labelNames, columns=labelNames)
+    # _confMat_df = _confMat_df[(_confMat_df.T != 0).any()]
+    pd.DataFrame.to_csv(_confMat_df, path_or_buf=confMatFileName)
+
+    kr_pdf_FileName = "kluster_evaluations_" + predictDefStr + ".csv"
+    kr_pdf_FileName = os.path.join(predictResultFold, kr_pdf_FileName)
+    pd.DataFrame.to_csv(kr_pdf, path_or_buf=kr_pdf_FileName)
+
+    c_pdf_FileName = "class_evaluations_" + predictDefStr + ".csv"
+    c_pdf_FileName = os.path.join(predictResultFold, c_pdf_FileName)
+    pd.DataFrame.to_csv(c_pdf, path_or_buf=c_pdf_FileName)
+
+    print("*-*-*end-", predictDefStr, "-end*-*-*\r\n")
+    return klusRet, classRet, _confMat, c_pdf, kr_pdf
+
+def analayzePredictionResults(labels_pred, dataToUse, pcaCount, numOfSigns, saveConfFigFileName='', predDefStr="predictionUnknown", useNZ=True):
+    data_dir = funcH.getVariableByComputerName('data_dir')
+    results_dir = funcH.getVariableByComputerName("results_dir")
+    predictResultFold = os.path.join(results_dir, "predictionResults")
+
+    fileName_detailedLabels = funcD.getFileName(dataToUse=dataToUse, normMode="", pcaCount=pcaCount, numOfSigns=numOfSigns,expectedFileType='DetailedLabels')
+    fileName_labels = funcD.getFileName(dataToUse=dataToUse, normMode="", pcaCount=pcaCount, numOfSigns=numOfSigns, expectedFileType='Labels')
+    detailed_labels_all = funcD.loadFileIfExist(data_dir, fileName_detailedLabels)
+    labels_true = funcD.loadFileIfExist(data_dir, fileName_labels)
+    labelNames = load_label_names(numOfSigns)
+
+    labels_pred = labels_pred if not isinstance(labels_pred, str) else np.load(labels_pred)
+    labels_true_nz, labels_pred_nz, _ = funcH.getNonZeroLabels(labels_true, labels_pred)
+
+    if useNZ:
+        labels_pred = labels_pred_nz
+        labels_true = labels_true_nz-1
+    else:
+        labelNames.insert(0, "None")
+
+    print(predDefStr)
+
+    klusRet, classRet, _confMat, c_pdf, kr_pdf = runForPred(labels_true, labels_pred, labelNames, predDefStr)
+
+    print("\r\ncluster metrics comparison\r\n")
+    print(klusRet)
+    print("\r\n")
+
+    print("\r\nclassification metrics comparison\r\n")
+    print(classRet)
+    print("\r\n")
+
+    print("\r\nf1 score comparisons for classes\r\n")
+    print(c_pdf)
+    print("\r\n")
+
+    klusRet.sort_index(inplace=True)
+    kr_pdf_FileName = "kluster_evaluations_" + predDefStr + ".csv"
+    kr_pdf_FileName = os.path.join(predictResultFold, kr_pdf_FileName)
+    pd.DataFrame.to_csv(klusRet, path_or_buf=kr_pdf_FileName)
+
+    _confMat, kluster2Classes = funcH.countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=labelNames)
+
+    saveConfFigFileName = saveConfFigFileName if saveConfFigFileName == '' else os.path.join(predictResultFold, saveConfFigFileName)
+
+    #iterID = -1
+    #normalizeByAxis = -1
+    #add2XLabel = ''
+    #add2YLabel = ''
+    #funcH.plotConfMat(_confMat, labelNames, addCntXTicks=False, addCntYTicks=False, tickSize=10,
+    #                  saveFileName=saveConfFigFileName, iterID=iterID,
+    #                  normalizeByAxis=normalizeByAxis, add2XLabel=add2XLabel, add2YLabel=add2YLabel)
+    fig, ax = funcH.plot_confusion_matrix(conf_mat=_confMat,
+                                    colorbar=True,
+                                    show_absolute=True,
+                                    show_normed=True,
+                                    class_names=labelNames,
+                                    saveConfFigFileName=saveConfFigFileName)
 #displayDataResults(method='sae', dataToUse='skeleton', posteriorDim=256, pcaCount=32, numOfSigns=11, weightReg = 1.0, batchSize = 16)
