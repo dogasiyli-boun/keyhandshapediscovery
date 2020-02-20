@@ -26,7 +26,8 @@ def createExperimentName(trainParams, modelParams, rnnParams):
                     '_dM' + str(rnnParams["dataMode"]) + \
                     '_ts' + str(rnnParams["timesteps"]) + \
                     '_cp' + str(trainParams["applyCorr"]) + \
-                    '_cRM' + str(trainParams["corr_randMode"])
+                    '_cRM' + str(trainParams["corr_randMode"]) + \
+                    '_cSM' + str(trainParams["corr_swapMode"])
         if rnnParams["dropout"] > 0:
             exp_name += '_do' + str(rnnParams["dropout"])
     elif modelParams["trainMode"] == "rsa":
@@ -42,7 +43,8 @@ def createExperimentName(trainParams, modelParams, rnnParams):
     elif modelParams["trainMode"] == "cosae":
         exp_name  = allInitStr + \
                     '_cp' + str(trainParams["applyCorr"]) + \
-                    '_cRM' + str(trainParams["corr_randMode"])
+                    '_cRM' + str(trainParams["corr_randMode"]) + \
+                    '_cSM' + str(trainParams["corr_swapMode"])
     elif modelParams["trainMode"] == "sae":
         exp_name  = allInitStr
     return exp_name

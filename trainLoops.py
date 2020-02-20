@@ -37,7 +37,8 @@ def getCorrespondanceIDs(sampleCount, trainParams, epochID):
             outIdx = corrFramesAll[0][1 - a_inds, col_idx]
             corr_indis_a = a_inds[0:5]
         else:
-            corr_indis_a = np.mod(corr_indis_a + 1, 2)  # switches between 0 and 1
+            # switches between 0 and 1 if trainParams["corr_swapMode"] is true
+            corr_indis_a = corr_indis_a if not trainParams["corr_swapMode"] else np.mod(corr_indis_a + 1, 2)
             inIdx = corrFramesAll[0][corr_indis_a, :]
             outIdx = corrFramesAll[0][1 - corr_indis_a, :]
             trainParams["corr_indis_a"] = corr_indis_a

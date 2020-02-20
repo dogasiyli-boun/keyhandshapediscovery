@@ -47,6 +47,7 @@ def parseArgs(argv):
     # --epochs 50 --appendEpochBinary 0 --batch_size 64 --applyCorr 0 --corr_randMode 0
     # --epochs 50 --appendEpochBinary 0 --batch_size 64 --applyCorr 2 --corr_randMode 0
     # --epochs 50 --appendEpochBinary 0 --batch_size 64 --applyCorr 2 --corr_randMode 1
+    # --epochs 50 --appendEpochBinary 0 --batch_size 64 --applyCorr 2 --corr_randMode 0 --corr_swapMode 0
     param05 = {"paramName": "epochs", "possibleValues": "{50,200,500}",
                "vs": "-ep", "defaultVal": 50, "dvSet": True, "paramType": "int"}
     param06 = {"paramName": "corr_randMode", "possibleValues": "{0-False,1-True}",
@@ -59,7 +60,9 @@ def parseArgs(argv):
                "vs": "-ea", "defaultVal": 0, "dvSet": True, "paramType": "int"}
     param15 = {"paramName": "randomSeed", "possibleValues": "{some integer}",
                "vs": "-rs", "defaultVal": 1, "dvSet": True, "paramType": "int"}
-    paramsTrain = [param05, param06, param11, param12, param13, param15]
+    param19 = {"paramName": "corr_swapMode", "possibleValues": "{0-False,1-True}",
+               "vs": "-pd", "defaultVal": 1, "dvSet": True, "paramType": "bool"}
+    paramsTrain = [param05, param06, param11, param12, param13, param15, param19]
 
     # rnn parameters
     # --rnnDataMode 0 --rnnTimesteps 10
@@ -189,6 +192,7 @@ def parseArgs(argv):
         "batch_size": valuesParamsCur["batch_size"],
         "applyCorr": valuesParamsCur["applyCorr"],
         "corr_randMode": valuesParamsCur["corr_randMode"],
+        "corr_swapMode": valuesParamsCur["corr_swapMode"],
         "randomSeed": valuesParamsCur["randomSeed"]
     }
     rnnParams = {
@@ -221,17 +225,17 @@ def getInitParams(trainParams, modelParams, rnnParams):
 
     return exp_name, subEpochs, trainParams, rnnParams
 
-def initEpochIDsModelParams(trainFromScratch, appendEpochBinary, model, model_name, predictionLabelsDir):
+def initEpochIDsModelParams(trainFromScratch, trainParams, model, model_name, predictionLabelsDir):
     if not trainFromScratch and os.path.isfile(model_name):
         model.load_weights(model_name, by_name=True)
         predictedLabelsFileCount = len([f for f in os.listdir(predictionLabelsDir)
                                         if f.startswith('predicted_labels') and f.endswith('.npy') and os.path.isfile(
                 os.path.join(predictionLabelsDir, f))])
         epochFr = predictedLabelsFileCount
-        epochTo = epochCnt + appendEpochBinary*predictedLabelsFileCount
+        epochTo = trainParams["epochs"] + trainParams["appendEpochBinary"]*predictedLabelsFileCount
     else:
         epochFr = 0
-        epochTo = epochCnt
+        epochTo = trainParams["epochs"]
 
     print("model will run epoch from(", str(epochFr), ") to(", str(epochTo), ")")
     return model, epochFr, epochTo
@@ -246,58 +250,63 @@ config.gpu_options.per_process_gpu_memory_fraction = 0.5
 # Create a session with the above options specified. 
 K.tensorflow_backend.set_session(tf.Session(config=config))
 
-base_dir = funcH.getVariableByComputerName('base_dir')
-data_dir = funcH.getVariableByComputerName('data_dir')
-results_dir = funcH.getVariableByComputerName('results_dir')
+def main(argv):
+    base_dir = funcH.getVariableByComputerName('base_dir')
+    data_dir = funcH.getVariableByComputerName('data_dir')
+    results_dir = funcH.getVariableByComputerName('results_dir')
+    print(argv)
 
-modelParams, trainParams, rnnParams = parseArgs(argv)
+    modelParams, trainParams, rnnParams = parseArgs(argv)
 
-seed(trainParams["randomSeed"])
-tf.set_random_seed(seed=trainParams["randomSeed"])
+    seed(trainParams["randomSeed"])
+    tf.set_random_seed(seed=trainParams["randomSeed"])
 
-numOfSigns = modelParams["numOfSigns"]
-feat_set, labels_all, detailed_labels_all = funcPRH.loadData(modelParams, numOfSigns, data_dir)
-data_dim = feat_set.shape[1]
+    numOfSigns = modelParams["numOfSigns"]
+    feat_set, labels_all, detailed_labels_all = funcPRH.loadData(modelParams, numOfSigns, data_dir)
+    data_dim = feat_set.shape[1]
 
-exp_name, subEpochs, trainParams, rnnParams = getInitParams(trainParams, modelParams, rnnParams)
-csv_name, model_name, outdir = funcPRH.createExperimentDirectories(results_dir, exp_name)
-model, modelTest, ES = funcM.getModels(data_dim=data_dim, modelParams=modelParams, rnnParams=rnnParams)
+    exp_name, subEpochs, trainParams, rnnParams = getInitParams(trainParams, modelParams, rnnParams)
+    csv_name, model_name, outdir = funcPRH.createExperimentDirectories(results_dir, exp_name)
+    model, modelTest, ES = funcM.getModels(data_dim=data_dim, modelParams=modelParams, rnnParams=rnnParams)
 
-checkpointer = ModelCheckpoint(filepath=model_name, verbose=0, save_best_only=False, period=1)
-csv_logger = CSVLogger(csv_name, append=True, separator=';')
-callbacks = [csv_logger, ES, checkpointer]
+    checkpointer = ModelCheckpoint(filepath=model_name, verbose=0, save_best_only=False, period=1)
+    csv_logger = CSVLogger(csv_name, append=True, separator=';')
+    callbacks = [csv_logger, ES, checkpointer]
 
-#%%
-trainFromScratch = False
-epochCnt = trainParams["epochs"]
-predictionLabelsDir = results_dir + os.sep + 'results' + os.sep + exp_name
-model, epochFr, epochTo = initEpochIDsModelParams(trainFromScratch, trainParams["appendEpochBinary"], model, model_name, predictionLabelsDir)
+    #%%
+    trainFromScratch = False
+    epochCnt = trainParams["epochs"]
+    predictionLabelsDir = results_dir + os.sep + 'results' + os.sep + exp_name
+    model, epochFr, epochTo = initEpochIDsModelParams(trainFromScratch, trainParams, model, model_name, predictionLabelsDir)
 
-if epochFr == epochTo:
-    print("+*-+*-+*-+*-epochs completed+*-+*-+*-+*-")
-    exit(12)
+    if epochFr == epochTo:
+        print("+*-+*-+*-+*-epochs completed+*-+*-+*-+*-")
+        exit(12)
 
-modelParams["callbacks"] = [csv_logger, checkpointer]
-modelParams["model_name"] = model_name
-trainParams["subEpochs"] = subEpochs
-trainParams["epochFr"] = epochFr
-trainParams["epochTo"] = epochTo
-trainParams["corr_indis_a"] = np.mod(epochFr, 2)
-if trainParams["applyCorr"] >= 2:
-    trainParams["corrFramesAll"] = funcD.getCorrespondentFrames(base_dir=base_dir, data_dir=data_dir, featType=modelParams["dataToUse"],
-                                                                normMode=modelParams["normMode"], pcaCount=modelParams["pcaCount"], numOfSigns=numOfSigns,
-                                                                expectedFileType='Data')
+    modelParams["callbacks"] = [csv_logger, checkpointer]
+    modelParams["model_name"] = model_name
+    trainParams["subEpochs"] = subEpochs
+    trainParams["epochFr"] = epochFr
+    trainParams["epochTo"] = epochTo
+    trainParams["corr_indis_a"] = np.mod(epochFr, 2)
+    if trainParams["applyCorr"] >= 2:
+        trainParams["corrFramesAll"] = funcD.getCorrespondentFrames(base_dir=base_dir, data_dir=data_dir, featType=modelParams["dataToUse"],
+                                                                    normMode=modelParams["normMode"], pcaCount=modelParams["pcaCount"], numOfSigns=numOfSigns,
+                                                                    expectedFileType='Data')
 
-print('started training')
+    print('started training')
 
-directoryParams = {
-    "outdir": outdir,
-    "data_dir" : data_dir,
-    "predictionLabelsDir": predictionLabelsDir,
-    "nmi_and_acc_file_name": outdir + os.sep + exp_name + '_nmi_acc.txt'
-}
+    directoryParams = {
+        "outdir": outdir,
+        "data_dir" : data_dir,
+        "predictionLabelsDir": predictionLabelsDir,
+        "nmi_and_acc_file_name": outdir + os.sep + exp_name + '_nmi_acc.txt'
+    }
 
-if modelParams["trainMode"] == "rsa" or modelParams["trainMode"] == "corsa":
-    funcTL.trainRNN(trainParams, modelParams, rnnParams, detailed_labels_all, model, modelTest, feat_set, labels_all, directoryParams)
-else:
-    funcTL.trainFramewise(trainParams, modelParams, model, modelTest, feat_set, labels_all, directoryParams)
+    if modelParams["trainMode"] == "rsa" or modelParams["trainMode"] == "corsa":
+        funcTL.trainRNN(trainParams, modelParams, rnnParams, detailed_labels_all, model, modelTest, feat_set, labels_all, directoryParams)
+    else:
+        funcTL.trainFramewise(trainParams, modelParams, model, modelTest, feat_set, labels_all, directoryParams)
+
+if __name__ == '__main__':
+    main(sys.argv)
