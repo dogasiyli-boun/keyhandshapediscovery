@@ -363,10 +363,10 @@ def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='K
     curTol = 0.0001 if clusterModel == 'KMeans' else 0.01
     max_iter = 300 if clusterModel == 'KMeans' else 200
 
-    t = time.time()
     numOf_1_sample_bins = 1
     expCnt = 0
-    while numOf_1_sample_bins > 0 and expCnt < 5:
+    while numOf_1_sample_bins-expCnt > 0 and expCnt < 5:
+        t = time.time()
         if expCnt > 0:
             print("running ", clusterModel, " for the ", str(expCnt), " time due to numOf_1_sample_bins(",
                   str(numOf_1_sample_bins), ")")
