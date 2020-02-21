@@ -288,8 +288,8 @@ def main(argv):
     trainParams["subEpochs"] = subEpochs
     trainParams["epochFr"] = epochFr
     trainParams["epochTo"] = epochTo
-    trainParams["corr_indis_a"] = np.mod(epochFr, 2)
-    if trainParams["applyCorr"] >= 2:
+    trainParams["corr_indis_a"] = np.mod(epochFr, 2) if epochFr != 0 else np.mod(int(trainParams["corr_swapMode"]) + int(trainParams["corr_randMode"]), 2)
+    if trainParams["applyCorr"] >= 1:
         trainParams["corrFramesAll"] = funcD.getCorrespondentFrames(base_dir=base_dir, data_dir=data_dir, featType=modelParams["dataToUse"],
                                                                     normMode=modelParams["normMode"], pcaCount=modelParams["pcaCount"], numOfSigns=numOfSigns,
                                                                     expectedFileType='Data')

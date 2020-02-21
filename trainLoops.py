@@ -27,7 +27,7 @@ def getCorrespondanceIDs(sampleCount, trainParams, epochID):
     corr_indis_a = trainParams["corr_indis_a"]
     applyCorr = trainParams["applyCorr"]
 
-    corrMode = applyCorr >= 2 and np.mod(epochID + 1, applyCorr) == 0
+    corrMode = applyCorr >= 1 and np.mod(epochID + 1, applyCorr) == 0
     if corrMode:
         corrFramesAll = trainParams["corrFramesAll"]
         if trainParams["corr_randMode"]:
