@@ -1,6 +1,7 @@
 import dataLoaderFuncs as funcD
 import projRelatedScripts as prs
 from sklearn.metrics import confusion_matrix
+import aeCluster as ae
 
 import helperFuncs as funcH
 import projRelatedHelperFuncs as prHF
@@ -218,19 +219,19 @@ def runScript01(useNZ, nos, rs=1):
     t = time.time()
     eci_vec, clusterCounts = funcEnsemble.calc_ensemble_driven_cluster_index(cluster_runs=cluster_runs)
     elapsed = time.time() - t
-    print('calc_ensemble_driven_cluster_index - elapsedTime(', elapsed, '), ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    print('calc_ensemble_driven_cluster_index - elapsedTime({:4.2f})'.format(elapsed), ' ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     print('create_LWCA_matrix - started at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     t = time.time()
     lwca_mat = funcEnsemble.create_LWCA_matrix(cluster_runs, eci_vec=eci_vec, verbose=0)
     elapsed = time.time() - t
-    print('create_LWCA_matrix - elapsedTime(', elapsed, '), ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    print('create_LWCA_matrix - elapsedTime({:4.2f})'.format(elapsed), ' ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     print('create_quality_vec - started at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     t = time.time()
     quality_vec = funcEnsemble.calc_quality_weight_basic_clustering(cluster_runs, logType=0, verbose=0)
     elapsed = time.time() - t
-    print('create_quality_vec - elapsedTime(', elapsed, '), ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    print('create_quality_vec - elapsedTime({:4.2f})'.format(elapsed), ' ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     results_dir = funcH.getVariableByComputerName("results_dir")
     predictResultFold = os.path.join(results_dir, "predictionResults")
@@ -385,6 +386,19 @@ def runConfMatScript02():
                                 show_normed=True,
                                 class_names=class_names,
                                 saveConfFigFileName='classNames.png')
+
+def runForPostDim(postDim=256, start_i=1, end_i=10):
+    for rand_seed_x in range(start_i, end_i):
+        ae.main(["aeCluster.py",
+                 "--trainMode", "cosae",
+                 "--dataToUse", "hgsk",
+                 "--epochs", "20",
+                 "--posterior_dim", str(postDim),
+                 "--pcaCount", "256",
+                 "--randomSeed", str(rand_seed_x),
+                 "--corr_randMode", "0",
+                 "--applyCorr", "2",
+                 "--corr_swapMode", "1"])
 
 # for nos in [12]: #8, 10, 11, 12
 #     useNZ = True
