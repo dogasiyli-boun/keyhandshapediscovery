@@ -519,6 +519,9 @@ def plot_confusion_matrix(conf_mat,
                           class_names=None,
                           add_true_cnt=True,
                           add_pred_cnt=True,
+                          iterID = -1,
+                          add2XLabel = "",
+                          add2YLabel = "",
                           saveConfFigFileName='',
                           figMulCnt=None,
                           confusionTreshold=0.3,
@@ -638,8 +641,12 @@ def plot_confusion_matrix(conf_mat,
 
     acc = np.sum(np.diag(conf_mat)) / np.sum(np.sum(conf_mat))
 
-    plt.xlabel('predicted label')
-    plt.ylabel('true label')
+    if iterID != -1:
+        plt.xlabel('Predicted - iter {:03d}'.format(iterID + 1) + ' ' + add2XLabel)
+    else:
+        plt.xlabel('Predicted - ' + ' ' + add2XLabel)
+    plt.xlabel('True - ' + ' ' + add2YLabel)
+
     plot_title_str = saveConfFigFileName.split(os.path.sep)[-1]
     plot_title_str = plot_title_str.split('.')[0]
     plot_title_str += '_accuracy<{:4.2f}>_'.format(acc)
@@ -1010,7 +1017,10 @@ def calcCluster2ClassMetrics(labels_true, labels_pred, removeZeroLabels=False, l
 
     print(predictDefStr, "-c_pdf:\r\n", c_pdf, "\r\n\r\n")
     # print("classRet:\r\n",json.dumps(classRet, indent = 2),"\r\n\r\n")
-    plotConfMat(_confMat, labelNames, addCntXTicks=False, addCntYTicks=False, tickSize=10)
+    # plotConfMat(_confMat, labelNames, addCntXTicks=False, addCntYTicks=False, tickSize=10)
+    plot_confusion_matrix(_confMat, class_names=labelNames,
+                          show_absolute=True, show_normed=True,
+                          add_true_cnt=True, add_pred_cnt=True)
     print(predictDefStr, "-_confMat:\r\n", pd_df(_confMat.T, columns=labelNames, index=labelNames), "\r\n\r\n")
 
     return classRet, _confMat, c_pdf, kr_pdf

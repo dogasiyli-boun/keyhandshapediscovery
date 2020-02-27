@@ -1,5 +1,6 @@
 import helperFuncs as funcH
 import dataLoaderFuncs as funcD
+import ensembleFuncs as funcEns
 import numpy as np
 import os
 from numpy.random import seed
@@ -555,4 +556,216 @@ def analayzePredictionResults(labels_pred, dataToUse, pcaCount, numOfSigns,
                                           saveConfFigFileName=saveConfFigFileName,
                                           figMulCnt=figMulCnt,
                                           confusionTreshold=confusionTreshold)
-#displayDataResults(method='sae', dataToUse='skeleton', posteriorDim=256, pcaCount=32, numOfSigns=11, weightReg = 1.0, batchSize = 16)
+
+
+def load_labels_pred_for_ensemble(useNZ=True, nos=11, featUsed="hgsk256",
+                                  labels_preds_fold_name='/home/doga/Desktop/forBurak/wr1.0_hgsk256_11_bs16_cp2_cRM0_cSM1'):
+    # load labels
+    labelNames = load_label_names(nos)
+
+    labels_filename = os.path.join(labels_preds_fold_name, "labels_" + str(nos) + ".npy")
+    labels = np.load(labels_filename)
+    labels_nz, _, _ = funcH.getNonZeroLabels(labels, labels)
+
+    print("labels loaded of size", labels.shape)
+
+    # load predictions as a list from a folder
+    predFileList = funcH.getFileList(labels_preds_fold_name, startString="pd", endString=".npy", sortList=True)
+    print(predFileList)
+
+    predictionsDict = []
+    N = predFileList.shape[0]
+    for p in predFileList:
+        predStr = featUsed + "_" + str(nos) + "_" + p.replace(".npy", "")
+
+        preds_filename = os.path.join(labels_preds_fold_name, p)
+        preds = np.load(preds_filename)
+        print("preds(", predStr, ") loaded of size", preds.shape)
+        if useNZ:
+            _, preds, _ = funcH.getNonZeroLabels(labels, preds)
+            print("preds = preds_nz of size", preds.shape)
+
+        predictionsDict.append({"str": predStr, "prd": preds})
+
+    if useNZ:
+        labels = labels_nz - 1
+        print("labels", labels.shape, " = labels_nz-1 because useNZ==True")
+    else:
+        labelNames.insert(0, "None")
+        print("None is inserted at the beginning of labelNames because useNZ==False")
+
+    print("labelNames = ")
+    for x in range(len(labelNames)):
+        print(x, ".", labelNames[x]),
+
+    cluster_runs = None
+    for i in range(0, N):
+        cluster_runs = funcH.append_to_vstack(cluster_runs, predictionsDict[i]["prd"], dtype=int)
+
+    return labelNames, labels, predictionsDict, cluster_runs, N
+
+
+def ensemble_cluster_analysis(cluster_runs, predictionsDict, labels,
+                     consensus_clustering_max_k=256, useNZ=True, nos=11,
+                     resultsToCombineDescriptorStr="",
+                     labelNames = None, verbose=False):
+    N = cluster_runs.shape[0]
+
+    # 1.run cluster_ensembles
+    t = time.time()
+    consensus_clustering_labels = funcEns.get_consensus_labels(cluster_runs,
+                                                       consensus_clustering_max_k=consensus_clustering_max_k,
+                                                       verbose=verbose)
+    elapsed_cluster_ensembles = time.time() - t
+    print('cluster_ensembles - elapsedTime({:4.2f})'.format(elapsed_cluster_ensembles), ', ended at ',
+          datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+    # 2.append ensembled consensus_clustering_labels into cluster_runs dictionary
+    if resultsToCombineDescriptorStr == "":
+        resultsToCombineDescriptorStr = "klusterResults_" + str(nos) + ("_nz_" if useNZ else "_") + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    resultsToCombineDescriptorStr = "klusterResults_" + str(nos) + ("_nz_" if useNZ else "_") + resultsToCombineDescriptorStr
+
+    predictionsDict.append({"str": resultsToCombineDescriptorStr, "prd": consensus_clustering_labels})
+    cluster_runs = funcH.append_to_vstack(cluster_runs, consensus_clustering_labels, dtype=int)
+
+    # 3.for all clusterings run analysis of clusters and classes
+    resultsDict = []
+    for i in range(0, N + 1):
+        t = time.time()
+        klusRet, classRet, _confMat, c_pdf, kr_pdf = runForPred(labels, predictionsDict[i]["prd"], labelNames,
+                                                                predictionsDict[i]["str"])
+        elapsed_runForPred = time.time() - t
+        print('runForPred(', predictionsDict[i]["str"], ') - elapsedTime({:4.2f})'.format(elapsed_runForPred),
+              ' ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+        resultsDict.append({"klusRet": klusRet, "classRet": classRet,
+                            "_confMat": _confMat, "c_pdf": c_pdf, "kr_pdf": kr_pdf})
+
+    klusRet = resultsDict[0]["klusRet"].copy().rename(columns={"value": predictionsDict[0]["str"]})
+    for i in range(1, N + 1):
+        klusRet.insert(i + 1, predictionsDict[i]["str"], resultsDict[i]["klusRet"]['value'], True)
+    print("\r\ncluster metrics comparison\r\n")
+    print(klusRet)
+    print("\r\n")
+
+    classRet = resultsDict[0]["classRet"].copy().rename(columns={"value": predictionsDict[0]["str"]})
+    for i in range(1, N + 1):
+        classRet.insert(i + 1, predictionsDict[i]["str"], resultsDict[i]["classRet"]['value'], True)
+    print("\r\nclassification metrics comparison\r\n")
+    print(classRet)
+    print("\r\n")
+
+    c_pdf = resultsDict[0]["c_pdf"][['class', '%f1']].sort_index().rename(
+        columns={"class": "f1Score", "%f1": predictionsDict[0]["str"]})
+    for i in range(1, N + 1):
+        c_pdf.insert(i + 1, predictionsDict[i]["str"], resultsDict[i]["c_pdf"][['%f1']].sort_index(), True)
+    print("\r\nf1 score comparisons for classes\r\n")
+    print(c_pdf)
+    print("\r\n")
+
+    print('calc_ensemble_driven_cluster_index - started at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    t = time.time()
+    eci_vec, clusterCounts = funcEns.calc_ensemble_driven_cluster_index(cluster_runs=cluster_runs)
+    elapsed = time.time() - t
+    print('calc_ensemble_driven_cluster_index - elapsedTime({:4.2f})'.format(elapsed), ' ended at ',
+          datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+    print('create_LWCA_matrix - started at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    t = time.time()
+    lwca_mat = funcEns.create_LWCA_matrix(cluster_runs, eci_vec=eci_vec, verbose=0)
+    elapsed = time.time() - t
+    print('create_LWCA_matrix - elapsedTime({:4.2f})'.format(elapsed), ' ended at ',
+          datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+    print('create_quality_vec - started at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    t = time.time()
+    quality_vec = funcEns.calc_quality_weight_basic_clustering(cluster_runs, logType=0, verbose=0)
+    elapsed = time.time() - t
+    print('create_quality_vec - elapsedTime({:4.2f})'.format(elapsed), ' ended at ',
+          datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+    results_dir = funcH.getVariableByComputerName("results_dir")
+    predictResultFold = os.path.join(results_dir, "predictionResults")
+
+    sampleCntToPick = np.array([1, 3, 5, 10], dtype=int)
+    columns = ['1', '3', '5', '10']
+    columns_2 = ['c1', 'c3', 'c5', 'c10']
+    colCnt = len(columns)
+
+    resultTable_mat = np.zeros((colCnt+2,N+1))
+    resultTable_pd_columns = ['c1', 'c3', 'c5', 'c10', 'All', 'sum']
+    resultTable_pd_index = []
+    resultTable_FileName = os.path.join(predictResultFold, resultsToCombineDescriptorStr.replace("klusterResults", "resultTable") + ".csv")
+
+    #cluster_runs_cmbn = []
+    for i in range(0, N+1):
+        kr_pdf_cur = resultsDict[i]["kr_pdf"]
+        eci_vec_cur = eci_vec[i].copy()
+        predictDefStr = predictionsDict[i]["str"]
+        resultTable_pd_index.append(predictDefStr)
+        #cluster_runs_cmbn = funcH.append_to_vstack(cluster_runs_cmbn, predictionsDict[i]["prd"], dtype=int)
+        print(predictDefStr, "Quality of cluster = {:6.4f}".format(quality_vec[i]), "number of clusters : ", kr_pdf_cur.shape)
+        predictions_cur = predictionsDict[i]["prd"]
+        unique_preds = np.unique(predictions_cur)
+
+        kr_pdf_cur.sort_index(inplace=True)
+        eci_N = np.array(eci_vec_cur * kr_pdf_cur['N'], dtype=float)
+        eci_pd = pd.DataFrame(eci_vec_cur, columns=['ECi'])
+        eci_N_pd = pd.DataFrame(eci_N, columns=['ECi_n'])
+        pd_comb = pd.concat([kr_pdf_cur, eci_pd, eci_N_pd], axis=1)
+        pd_comb.sort_values(by=['ECi_n', 'N'], inplace=True, ascending=[False, False])
+
+        kr_pdf_FileName = "kluster_evaluations_" + predictDefStr + ".csv"
+        kr_pdf_FileName = os.path.join(predictResultFold, kr_pdf_FileName)
+
+        cols2add = np.zeros((clusterCounts[i], colCnt), dtype=float)
+        cols2add_pd = pd.DataFrame(cols2add, columns=columns)
+        cols2add_2 = np.zeros((clusterCounts[i], colCnt), dtype=float)
+        cols2add_2_pd = pd.DataFrame(cols2add_2, columns=columns_2)
+        pd_comb = pd.concat([kr_pdf_cur, eci_pd, eci_N_pd, cols2add_pd, cols2add_2_pd], axis=1)
+
+        pd_comb.sort_index(inplace=True)
+        pd.DataFrame.to_csv(pd_comb, path_or_buf=kr_pdf_FileName)
+
+        # pick first 10 15 20 25 samples according to lwca_mat
+        for pi in range(0, clusterCounts[i]):
+            cur_pred = unique_preds[pi]
+            predictedSamples = funcH.getInds(predictions_cur, cur_pred)
+            sampleLabels = labels[predictedSamples]
+            lwca_cur = lwca_mat[predictedSamples, :]
+            lwca_cur = lwca_cur[:, predictedSamples]
+            simSum = np.sum(lwca_cur, axis=0) + np.sum(lwca_cur, axis=1).T
+            v, idx = funcH.sortVec(simSum)
+            sortedPredictionsIdx = predictedSamples[idx]
+            sortedLabelIdx = labels[sortedPredictionsIdx]
+            curSampleCntInCluster = len(sampleLabels)
+            mappedClassOfKluster = funcH.get_most_frequent(list(sortedLabelIdx))
+
+            for sj in range(0, colCnt):
+                sCnt = sampleCntToPick[sj] if curSampleCntInCluster>sampleCntToPick[sj] else curSampleCntInCluster
+                sampleLabelsPicked = sortedLabelIdx[:sCnt]
+                purity_k, correctLabelInds, mappedClass = funcH.calcPurity(list(sampleLabelsPicked))
+                if mappedClass == mappedClassOfKluster:
+                    cols2add[pi, sj] = purity_k
+                else:
+                    cols2add[pi, sj] = -mappedClass+(mappedClassOfKluster/100)
+                cols2add_2[pi, sj] = np.sum(sortedLabelIdx == mappedClass)
+
+        cols2add_pd = pd.DataFrame(cols2add, columns=columns)
+        cols2add_2_pd = pd.DataFrame(cols2add_2, columns=columns_2)
+        pd_comb = pd.concat([kr_pdf_cur, eci_pd, eci_N_pd, cols2add_pd, cols2add_2_pd], axis=1)
+        pd_comb.sort_index(inplace=True)
+        pd.DataFrame.to_csv(pd_comb, path_or_buf=kr_pdf_FileName)
+
+        allPredCorrectSum = np.asarray(np.sum(kr_pdf_cur.iloc[:,2:3]))
+        numOfSamples = np.asarray(np.sum(kr_pdf_cur.iloc[:, 3:4]))
+        precidtCols = np.sum(cols2add_2, axis=0, keepdims=True)
+        resultTable_mat[0:colCnt, i] = precidtCols.T.squeeze()
+        resultTable_mat[colCnt, i] = allPredCorrectSum
+        resultTable_mat[colCnt+1, i] = numOfSamples
+
+    resultTable_mat[:-1, :] = resultTable_mat[:-1, :] / resultTable_mat[-1, :]
+    resultTable_pd = pd.DataFrame(resultTable_mat, index=resultTable_pd_columns, columns=resultTable_pd_index)
+    pd.DataFrame.to_csv(resultTable_pd, path_or_buf=resultTable_FileName)
+
+    #displayDataResults(method='sae', dataToUse='skeleton', posteriorDim=256, pcaCount=32, numOfSigns=11, weightReg = 1.0, batchSize = 16)

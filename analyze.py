@@ -43,9 +43,7 @@ def analyzeResultByFolder():
     for iterID in range(completedEpochCnt):
         clusterFileName = clusterFolderNameBase + os.sep + 'labels_{:03d}.npz'.format(iterID+1)
         fName_clusterCnt_sorted = clusterFolderNameBase + os.sep + 'clusSorted_{:03d}.png'.format(iterID+1)
-        fName_conf_normNot = clusterFolderNameBase + os.sep + 'confNormNot_{:03d}.png'.format(iterID+1)
-        fName_conf_normRow = clusterFolderNameBase + os.sep + 'confNormRow_{:03d}.png'.format(iterID+1)
-        fName_conf_normCol = clusterFolderNameBase + os.sep + 'confNormCol_{:03d}.png'.format(iterID+1)
+        fName_conf = clusterFolderNameBase + os.sep + 'conf_{:03d}.png'.format(iterID+1)
         clusterResults = np.load(clusterFileName)
         print(clusterResults.files)
         labelsTrInit = clusterResults['labelsTrInit']
@@ -70,9 +68,10 @@ def analyzeResultByFolder():
         #plt.savefig(fName_clusterCnt_sorted)
 
         _confMat, kluster2Classes = funcH.confusionFromKluster(nonZeroLabs, nonZeroPred)
-        funcH.plotConfMat(_confMat, labels, saveFileName=fName_conf_normNot, iterID=iterID)
-        funcH.plotConfMat(_confMat, labels, saveFileName=fName_conf_normCol, iterID=iterID, normalizeByAxis=0, add2XLabel='normalized')
-        funcH.plotConfMat(_confMat, labels, saveFileName=fName_conf_normRow, iterID=iterID, normalizeByAxis=1, add2YLabel='normalized')
+        funcH.plot_confusion_matrix(conf_mat=_confMat, class_names=labels, saveConfFigFileName=fName_conf, iterID=iterID)
+        #funcH.plotConfMat(_confMat, labels, saveFileName=fName_conf_normNot, iterID=iterID)
+        #funcH.plotConfMat(_confMat, labels, saveFileName=fName_conf_normCol, iterID=iterID, normalizeByAxis=0, add2XLabel='normalized')
+        #funcH.plotConfMat(_confMat, labels, saveFileName=fName_conf_normRow, iterID=iterID, normalizeByAxis=1, add2YLabel='normalized')
 
         #n, bins, _ = plt.hist(kluster2Classes, bins=np.unique(kluster2Classes), facecolor='red', alpha=0.5)
         #sortedClusterCounts, idx = funcH.sortVec(n)

@@ -1,7 +1,7 @@
 import numpy as np
-import os
 import pandas as pd
 import helperFuncs as funcH
+import Cluster_Ensembles as CE  # sudo apt-get install metis
 
 #np.set_printoptions(precision=2)
 def printIndicesPerCluster(cluster_runs):
@@ -32,33 +32,16 @@ def getClusterVariablesFromAListOfClusters(cluster_runs, clusterID, verbose=0):
     clustIDs, uniqClusterCount = getClusterVariables(clustVec)
     return clustVec, clustIDs, uniqClusterCount
 
-# F_04
-def calc_uncert_samples_ci_cj(clust_indices_i, clust_indices_j, logType=0, verbose=0):
-    i_j = set(clust_indices_i).intersection(set(clust_indices_j))
-    p_ci_cj = len(i_j) / len(clust_indices_i)
-    if verbose > 6:
-        print("++++calc_uncert_samples_ci_cj - intersect set({}), p_ci_cj({:.4f})".format(i_j, p_ci_cj))
-    #retVal = np.log(p_ci_cj) if logType == 0 else np.log2(p_ci_cj)
-    return 0 if len(i_j) == 0 else -p_ci_cj * (np.log(p_ci_cj) if logType == 0 else np.log2(p_ci_cj))
-
 # F_03
 def calc_uncert_cluster_i_j(klust_i, klust_j, logType=0, verbose=0):
-    clustIDs_i, uniqClusterCount_i = getClusterVariables(klust_i)
-    clustIDs_j, uniqClusterCount_j = getClusterVariables(klust_j)
-    H_i = np.zeros([uniqClusterCount_i, uniqClusterCount_j], dtype=float)
-    for ii in range(0, uniqClusterCount_i):
-        clust_indices_i = funcH.getInds(klust_i, clustIDs_i[ii]);
-        for ji in range(0, uniqClusterCount_j):
-            clust_indices_j = funcH.getInds(klust_j, clustIDs_j[ji]);
-            ij_un = calc_uncert_samples_ci_cj(clust_indices_i, clust_indices_j, logType=logType, verbose=verbose)
-            if verbose > 5:
-                print("+++calc_uncert_cluster_i_j - input:klust_i({}),klust_j({})".format(klust_i, klust_j))
-                print(
-                    "                             var:clust_indices_i({})-clustIDs_i[ii]({}), clust_indices_j({})-clustIDs_j[ji]({}) ".format(
-                        clust_indices_i, clustIDs_i[ii], clust_indices_j, clustIDs_j[ji]))
-                print("                             out:ij_un({:.4f})".format(ij_un))
-            H_i[ii, ji] = ij_un
-    return H_i.squeeze()
+    df = pd.DataFrame({"i": klust_i, "j": klust_j})
+    # count by kluster id
+    h_i = pd.crosstab(df['i'], df["j"]).values
+    # normalize by row
+    h_i = h_i / np.sum(h_i, axis=1, keepdims=True)
+    #
+    h_i = -h_i * (np.log(h_i, out=np.zeros_like(h_i), where=(h_i!=0)) if logType == 0 else np.log2(h_i, out=np.zeros_like(h_i), where=(h_i!=0)))
+    return h_i.squeeze()
 
 # F_02
 def calc_uncert_cluster_i(klust_id_i, cluster_runs, logType=0, verbose=0):
@@ -173,7 +156,7 @@ def calc_quality_weight_basic_clustering(cluster_runs, logType=0, verbose=0):
     cae_vec = calc_cluster_average_entropy(cluster_runs, logType=logType, verbose=verbose)
     return np.exp(-cae_vec)
 
-def createSamples(paperID, verbose=0):
+def createSamples(paperID, verbose=0, **kwargs):
     if paperID == 1:
         # cl_00 = np.array([1,2,3,4,5,6,7,8,9,0])
         cl_01 = np.array([1, 2, 1, 3, 2, 2, 3, 3, 1, 2])
@@ -187,6 +170,16 @@ def createSamples(paperID, verbose=0):
         cl_01_2 = np.array([1, 1, 2, 2, 1, 1, 2, 1, 1, 1, 3, 1, 3, 3, 3, 3])
         cl_02_2 = np.array([1, 1, 1, 1, 2, 2, 1, 2, 3, 3, 3, 3, 3, 3, 3, 3])
         cl_03_2 = np.array([1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3])
+        cluster_runs = cl_01_2
+        cluster_runs = np.asarray(np.vstack((cluster_runs, cl_02_2)), dtype=int)
+        cluster_runs = np.asarray(np.vstack((cluster_runs, cl_03_2)), dtype=int)
+    elif paperID == 3:
+        # createSamples(paperID, verbose, sample_size=1000, num_cluster=12)
+        n = kwargs["sample_size"] if "sample_size" in kwargs else 25000
+        c = kwargs["num_cluster"] if "num_cluster" in kwargs else 256
+        cl_01_2 = np.random.randint(c, size=n)
+        cl_02_2 = np.random.randint(c, size=n)
+        cl_03_2 = np.random.randint(c, size=n)
         cluster_runs = cl_01_2
         cluster_runs = np.asarray(np.vstack((cluster_runs, cl_02_2)), dtype=int)
         cluster_runs = np.asarray(np.vstack((cluster_runs, cl_03_2)), dtype=int)
@@ -239,6 +232,10 @@ def create_LWCA_matrix(cluster_runs, eci_vec=None, verbose=0):
     #print(pd.DataFrame(lwca_mat))
     return lwca_mat
 
+def get_consensus_labels(cluster_runs, consensus_clustering_max_k, verbose=False):
+    consensus_clustering_labels = CE.cluster_ensembles(cluster_runs, verbose=verbose,
+                                                       N_clusters_max=consensus_clustering_max_k)
+    return consensus_clustering_labels
 # quality_weights = calc_quality_weight_basic_clustering(cluster_runs,logType=0,verbose=3)
 # print("quality_weights = {}".format(quality_weights))
 # calc_cluster_average_entropy(cluster_runs_2,logType=2,verbose=2)
@@ -252,3 +249,32 @@ def create_LWCA_matrix(cluster_runs, eci_vec=None, verbose=0):
 #quality_weights, clusterCounts = calc_ensemble_driven_cluster_index(cluster_runs, tetaVal=0.5, verbose=1)
 #create_CA_matrix(cluster_runs, verbose=0)
 #create_LWCA_matrix(cluster_runs, eci_vec=None, verbose=0)
+
+# detailed slow functions
+# F_04
+def calc_uncert_samples_ci_cj_deprecated(clust_indices_i, clust_indices_j, logType=0, verbose=0):
+    i_j = set(clust_indices_i).intersection(set(clust_indices_j))
+    p_ci_cj = len(i_j) / len(clust_indices_i)
+    if verbose > 6:
+        print("++++calc_uncert_samples_ci_cj - intersect set({}), p_ci_cj({:.4f})".format(i_j, p_ci_cj))
+    #retVal = np.log(p_ci_cj) if logType == 0 else np.log2(p_ci_cj)
+    return 0 if len(i_j) == 0 else -p_ci_cj * (np.log(p_ci_cj) if logType == 0 else np.log2(p_ci_cj))
+
+# F_03
+def calc_uncert_cluster_i_j_deprecated(klust_i, klust_j, logType=0, verbose=0):
+    clustIDs_i, uniqClusterCount_i = getClusterVariables(klust_i)
+    clustIDs_j, uniqClusterCount_j = getClusterVariables(klust_j)
+    H_i = np.zeros([uniqClusterCount_i, uniqClusterCount_j], dtype=float)
+    for ii in range(0, uniqClusterCount_i):
+        clust_indices_i = funcH.getInds(klust_i, clustIDs_i[ii]);
+        for ji in range(0, uniqClusterCount_j):
+            clust_indices_j = funcH.getInds(klust_j, clustIDs_j[ji]);
+            ij_un = calc_uncert_samples_ci_cj_deprecated(clust_indices_i, clust_indices_j, logType=logType, verbose=verbose)
+            if verbose > 5:
+                print("+++calc_uncert_cluster_i_j - input:klust_i({}),klust_j({})".format(klust_i, klust_j))
+                print(
+                    "                             var:clust_indices_i({})-clustIDs_i[ii]({}), clust_indices_j({})-clustIDs_j[ji]({}) ".format(
+                        clust_indices_i, clustIDs_i[ii], clust_indices_j, clustIDs_j[ji]))
+                print("                             out:ij_un({:.4f})".format(ij_un))
+            H_i[ii, ji] = ij_un
+    return H_i.squeeze()

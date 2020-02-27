@@ -171,150 +171,23 @@ def loadLabelsAndPreds(useNZ, nos, rs=1):
 
     return labelNames, labels_true, predictionsDict, N
 
-def runScript01(useNZ, nos, rs=1):
+def run_script_combine_predictions(useNZ, nos, featUsed="hgsk256",
+                     consensus_clustering_max_k = 256, verbose = False,
+                     resultsToCombineDescriptorStr = "256-512-1024-9",
+                     labels_preds_fold_name='/home/doga/Desktop/forBurak/wr1.0_hgsk256_11_bs16_cp2_cRM0_cSM1'):
+
     funcH.setPandasDisplayOpts()
 
-    labelNames, labels_true, predictionsDict, N = loadLabelsAndPreds(useNZ, nos, rs=rs)
-    print(predictionsDict[0]["str"])
-    print(predictionsDict[1]["prd"])
+    labelNames, labels, predictionsDict, cluster_runs, N = prHF.load_labels_pred_for_ensemble(useNZ=useNZ, nos=nos,
+                                                                                         featUsed=featUsed,
+                                                                                         labels_preds_fold_name=labels_preds_fold_name)
 
-    cluster_runs = None
-    for i in range(0, N):
-        cluster_runs = funcH.append_to_vstack(cluster_runs, predictionsDict[i]["prd"], dtype=int)
+    prHF.ensemble_cluster_analysis(cluster_runs, predictionsDict, labels,
+                     consensus_clustering_max_k=consensus_clustering_max_k, useNZ=useNZ, nos=nos,
+                     resultsToCombineDescriptorStr=resultsToCombineDescriptorStr,
+                     labelNames=labelNames, verbose=verbose)
 
-    consensus_clustering_labels = CE.cluster_ensembles(cluster_runs, verbose=False, N_clusters_max=256)
-
-    predCombined = "combined" + ("_nz" if useNZ else "") + "_" + str(nos)
-    predictionsDict.append({"str": predCombined, "prd": consensus_clustering_labels})
-    cluster_runs = funcH.append_to_vstack(cluster_runs, consensus_clustering_labels, dtype=int)
-
-    resultsDict = []
-    for i in range(0, N+1):
-        klusRet, classRet, _confMat, c_pdf, kr_pdf = prHF.runForPred(labels_true, predictionsDict[i]["prd"], labelNames, predictionsDict[i]["str"])
-        resultsDict.append({"klusRet": klusRet, "classRet": classRet,
-                            "_confMat": _confMat, "c_pdf": c_pdf, "kr_pdf": kr_pdf})
-
-    klusRet = resultsDict[0]["klusRet"].copy().rename(columns={"value": predictionsDict[0]["str"]})
-    for i in range(1, N+1):
-        klusRet.insert(i+1, predictionsDict[i]["str"], resultsDict[i]["klusRet"]['value'], True)
-    print("\r\ncluster metrics comparison\r\n")
-    print(klusRet)
-    print("\r\n")
-
-    classRet = resultsDict[0]["classRet"].copy().rename(columns={"value": predictionsDict[0]["str"]})
-    for i in range(1, N+1):
-        classRet.insert(i+1, predictionsDict[i]["str"], resultsDict[i]["classRet"]['value'], True)
-    print("\r\nclassification metrics comparison\r\n")
-    print(classRet)
-    print("\r\n")
-
-    c_pdf = resultsDict[0]["c_pdf"][['class', '%f1']].sort_index().rename(columns={"class": "f1Score", "%f1": predictionsDict[0]["str"]})
-    for i in range(1, N+1):
-        c_pdf.insert(i+1, predictionsDict[i]["str"], resultsDict[i]["c_pdf"][['%f1']].sort_index(), True)
-    print("\r\nf1 score comparisons for classes\r\n")
-    print(c_pdf)
-    print("\r\n")
-
-    print('calc_ensemble_driven_cluster_index - started at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    t = time.time()
-    eci_vec, clusterCounts = funcEnsemble.calc_ensemble_driven_cluster_index(cluster_runs=cluster_runs)
-    elapsed = time.time() - t
-    print('calc_ensemble_driven_cluster_index - elapsedTime({:4.2f})'.format(elapsed), ' ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-
-    print('create_LWCA_matrix - started at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    t = time.time()
-    lwca_mat = funcEnsemble.create_LWCA_matrix(cluster_runs, eci_vec=eci_vec, verbose=0)
-    elapsed = time.time() - t
-    print('create_LWCA_matrix - elapsedTime({:4.2f})'.format(elapsed), ' ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-
-    print('create_quality_vec - started at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    t = time.time()
-    quality_vec = funcEnsemble.calc_quality_weight_basic_clustering(cluster_runs, logType=0, verbose=0)
-    elapsed = time.time() - t
-    print('create_quality_vec - elapsedTime({:4.2f})'.format(elapsed), ' ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-
-    results_dir = funcH.getVariableByComputerName("results_dir")
-    predictResultFold = os.path.join(results_dir, "predictionResults")
-    resultsToCombine_FileName = "klusterResults_" + str(nos) + ".npz"
-    resultsToCombine_FileName = os.path.join(predictResultFold, resultsToCombine_FileName)
-    np.savez(resultsToCombine_FileName, lwca_mat=lwca_mat, predictionsDict=predictionsDict, resultsDict=resultsDict, eci_vec=eci_vec, clusterCounts=clusterCounts, quality_vec=quality_vec)
-
-def runScript01_next(useNZ, nos, rs=1):
-    results_dir = funcH.getVariableByComputerName("results_dir")
-    predictResultFold = os.path.join(results_dir, "predictionResults")
-    resultsToCombine_FileName = "klusterResults_" + str(nos) + ".npz"
-    resultsToCombine_FileName = os.path.join(predictResultFold, resultsToCombine_FileName)
-    loadedResults = np.load(resultsToCombine_FileName, allow_pickle=True)
-
-    lwca_mat = loadedResults["lwca_mat"]
-    predictionsDict = loadedResults["predictionsDict"]
-    resultsDict = loadedResults["resultsDict"]
-    eci_vec = loadedResults["eci_vec"]
-    clusterCounts = loadedResults["clusterCounts"]
-    quality_vec = loadedResults["quality_vec"]
-
-    labelNames, labels_true, _, _ = loadLabelsAndPreds(useNZ, nos, rs=rs)
-    N = resultsDict.shape[0]
-    sampleCntToPick = np.array([1, 3, 5, 10], dtype=int)
-    columns = ['1', '3', '5', '10']
-    colCnt = 4
-
-    #cluster_runs_cmbn = []
-    for i in range(0, N):
-        kr_pdf_cur = resultsDict[i]["kr_pdf"]
-        eci_vec_cur = eci_vec[i].copy()
-        predictDefStr = predictionsDict[i]["str"]
-        #cluster_runs_cmbn = funcH.append_to_vstack(cluster_runs_cmbn, predictionsDict[i]["prd"], dtype=int)
-        print(predictDefStr, "Quality of cluster = {:6.4f}".format(quality_vec[i]), "number of clusters : ", kr_pdf_cur.shape)
-        predictions_cur = predictionsDict[i]["prd"]
-        unique_preds = np.unique(predictions_cur)
-
-        kr_pdf_cur.sort_index(inplace=True)
-        eci_N = np.array(eci_vec_cur * kr_pdf_cur['N'], dtype=float)
-        eci_pd = pd.DataFrame(eci_vec_cur, columns=['ECi'])
-        eci_N_pd = pd.DataFrame(eci_N, columns=['ECi_n'])
-        pd_comb = pd.concat([kr_pdf_cur, eci_pd, eci_N_pd], axis=1)
-        pd_comb.sort_values(by=['ECi_n', 'N'], inplace=True, ascending=[False, False])
-
-        kr_pdf_FileName = "kluster_evaluations_" + predictDefStr + ".csv"
-        kr_pdf_FileName = os.path.join(predictResultFold, kr_pdf_FileName)
-
-        cols2add = np.zeros((clusterCounts[i], colCnt), dtype=float)
-        cols2add_pd = pd.DataFrame(cols2add, columns=columns)
-        pd_comb = pd.concat([kr_pdf_cur, eci_pd, eci_N_pd, cols2add_pd], axis=1)
-
-        pd_comb.sort_index(inplace=True)
-        pd.DataFrame.to_csv(pd_comb, path_or_buf=kr_pdf_FileName)
-
-        # pick first 10 15 20 25 samples according to lwca_mat
-        for pi in range(0, clusterCounts[i]):
-            cur_pred = unique_preds[pi]
-            predictedSamples = funcH.getInds(predictions_cur, cur_pred)
-            sampleLabels = labels_true[predictedSamples]
-            lwca_cur = lwca_mat[predictedSamples, :]
-            lwca_cur = lwca_cur[:, predictedSamples]
-            simSum = np.sum(lwca_cur, axis=0) + np.sum(lwca_cur, axis=1).T
-            v, idx = funcH.sortVec(simSum)
-            sortedPredictionsIdx = predictedSamples[idx]
-            sortedLabelIdx = labels_true[sortedPredictionsIdx]
-            curSampleCntInCluster = len(sampleLabels)
-            mappedClassOfKluster = funcH.get_most_frequent(list(sortedLabelIdx))
-
-            for sj in range(0, colCnt):
-                sCnt = sampleCntToPick[sj] if curSampleCntInCluster>sampleCntToPick[sj] else curSampleCntInCluster
-                sampleLabelsPicked = sortedLabelIdx[:sCnt]
-                purity_k, _, mappedClass = funcH.calcPurity(list(sampleLabelsPicked))
-                if mappedClass == mappedClassOfKluster:
-                    cols2add[pi, sj] = purity_k
-                else:
-                    cols2add[pi, sj] = -mappedClass+(mappedClassOfKluster/100)
-
-        cols2add_pd = pd.DataFrame(cols2add, columns=columns)
-        pd_comb = pd.concat([kr_pdf_cur, eci_pd, eci_N_pd, cols2add_pd], axis=1)
-        pd_comb.sort_index(inplace=True)
-        pd.DataFrame.to_csv(pd_comb, path_or_buf=kr_pdf_FileName)
-
-def runScript_hmm(n_components = 30, transStepAllow = 15, n_iter = 1000, startModel = 'firstOnly', transitionModel = 'lr'):
+def run_script_hmm(n_components = 30, transStepAllow = 15, n_iter = 1000, startModel = 'firstOnly', transitionModel = 'lr'):
     numOfSigns = 11
     results_dir = funcH.getVariableByComputerName('results_dir')
     data_dir = funcH.getVariableByComputerName('data_dir')
@@ -353,7 +226,7 @@ def runScript_hmm(n_components = 30, transStepAllow = 15, n_iter = 1000, startMo
 
     return labels_true, labels_pred, predHMM
 
-def runConfMatScript01(figMulCnt=None, confCalcMethod = 'dnn', confusionTreshold=0.3, dataSlctID=0, numOfSigns = 11, pcaCount = 256, posterior_dim=256):
+def run_draw_confusion_script_01(figMulCnt=None, confCalcMethod = 'dnn', confusionTreshold=0.3, dataSlctID=0, numOfSigns = 11, pcaCount = 256, posterior_dim=256):
     #fs.runConfMatScript01(figMulCnt=0.60, confCalcMethod = 'count', confusionTreshold=0.2)
     #fs.runConfMatScript01(figMulCnt=0.60, confCalcMethod = 'count', confusionTreshold=0.2, dataSlctID=1, posterior_dim=256)
     results_dir = funcH.getVariableByComputerName('results_dir')
@@ -374,7 +247,7 @@ def runConfMatScript01(figMulCnt=None, confCalcMethod = 'dnn', confusionTreshold
                                    saveConfFigFileName=saveConfFigFileName, predDefStr=predDefStr,
                                    figMulCnt=figMulCnt, confCalcMethod=confCalcMethod, confusionTreshold=confusionTreshold)
 
-def runConfMatScript02():
+def run_draw_confusion_script_02():
     _conf_mat_ = np.array([[199,  1,   0,  0],
                            [  2, 198,  0,  0],
                            [  0,  0,  97,  3],
@@ -410,3 +283,5 @@ def runForPostDim(postDim=256, start_i=1, end_i=10):
 #     prs.runForBaseClusterResults(normMode='', numOfSignsArr=[nos])
 #     prs.run4All_createData(sign_countArr=[nos], dataToUseArr=["hgsk"])
 #     prs.runForBaseClusterResults(normMode='', numOfSignsArr=[nos], dataToUseArr=["hgsk"])
+
+run_script_combine_predictions(useNZ=True, nos=11)
