@@ -305,7 +305,7 @@ def setEpochBounds(result_csv_file, num_epochs, appendEpochBinary):
         completedEpochCnt = 0
     else:
         a = pd.read_csv(filepath_or_buffer=result_csv_file, delimiter='*')
-        completedEpochCnt = np.size(a, 0)
+        completedEpochCnt = np.size(a, 0) - 1
     epochFr = completedEpochCnt
     epochTo = num_epochs + appendEpochBinary*completedEpochCnt
     if epochFr >= epochTo:
