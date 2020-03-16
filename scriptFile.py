@@ -14,6 +14,10 @@ import hmmWrapper as funcHMM
 import ensembleFuncs as funcEnsemble
 import datetime
 import time
+from fastai.vision import *
+from zipfile import ZipFile
+from glob import glob
+import wget
 
 def study02(ep = 3):
     funcH.setPandasDisplayOpts()
@@ -284,4 +288,31 @@ def runForPostDim(postDim=256, start_i=1, end_i=10):
 #     prs.run4All_createData(sign_countArr=[nos], dataToUseArr=["hgsk"])
 #     prs.runForBaseClusterResults(normMode='', numOfSignsArr=[nos], dataToUseArr=["hgsk"])
 
-run_script_combine_predictions(useNZ=True, nos=11)
+def run_untar(remove_zip=False):
+    data_path_base = "neuralNetHandImages_nos11_rs224"
+    filename = data_path_base + ".zip"
+    url = "ftp://dogasiyli:Doga.Siyli@dogasiyli.com/hospisign.dogasiyli.com/extractedData/" + filename
+    data_dir = funcH.getVariableByComputerName("base_dir")
+    zip_file_name = os.path.join(data_dir,filename)
+    if not os.path.isfile(zip_file_name):
+        print(zip_file_name, " will be downloaded from url = ", url)
+        filename = wget.download(url, out=zip_file_name)
+        print("Download completed..")
+
+    if not os.path.isdir(os.path.join(data_dir, data_path_base)):
+        print(zip_file_name, " will be unzipped into = ", data_dir, " as ", data_path_base)
+        with ZipFile(filename, 'r') as zipObj:
+            # Extract all the contents of zip file in different directory
+            zipObj.extractall(data_dir)
+    if remove_zip:
+        print(zip_file_name, " will be deleted.")
+        os.remove(filename)
+        print(zip_file_name, " is deleted.")
+    listOfFiles_downloaded = glob(os.path.join(data_dir, data_path_base, "imgs", "**", "*.png"))
+    list_of_file_name = os.path.join(data_dir, data_path_base, "imgs", "listOfFiles.txt")
+    with open(list_of_file_name) as f:
+        listOfFiles_in_folder = [line.rstrip() for line in f]
+    # check if they match
+
+run_untar()
+#  run_script_combine_predictions(useNZ=True, nos=11)
