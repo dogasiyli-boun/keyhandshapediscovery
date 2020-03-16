@@ -397,16 +397,19 @@ def validate_downloaded_data(data_path):
     img_counts_matches = True
     targets = funcH.getFolderList(dir2Search=data_path, sortList=True).tolist()
     csv_file = funcH.getFileList(dir2Search=data_path, startString="cnt_table", endString=".csv")
-    cnt_pd = pd.read_csv(filepath_or_buffer=os.path.join(data_path,csv_file[0]), delimiter=',')
-    file_targets = cnt_pd[cnt_pd.columns[0]].values[:-1]
-    file_counts = cnt_pd[cnt_pd.columns[1]].values[:-1]
-    folder_counts = np.zeros(np.shape(file_counts))
+    csv_file_exist = csv_file != []
+    if csv_file_exist:
+        cnt_pd = pd.read_csv(filepath_or_buffer=os.path.join(data_path, csv_file[0]), delimiter=',')
+        file_targets = cnt_pd[cnt_pd.columns[0]].values[:-1]
+        file_counts = cnt_pd[cnt_pd.columns[1]].values[:-1]
+    folder_counts = np.zeros((len(targets),), dtype=int)
     for i, t in enumerate(targets):
         source_path = os.path.join(data_path, t)
         samples = os.listdir(source_path)
         folder_counts[i] = len(samples)
-        img_counts_matches = img_counts_matches and (folder_counts[i] == file_counts[i])
-        assert (file_targets[i] == t), "{:s}!={:s}".format(file_targets[i], t)
+        if csv_file_exist:
+            img_counts_matches = img_counts_matches and (folder_counts[i] == file_counts[i])
+            assert (file_targets[i] == t), "{:s}!={:s}".format(file_targets[i], t)
 
     return img_counts_matches, targets, folder_counts
 
@@ -430,17 +433,22 @@ def create_dataset(path_dict, user_id_dict, params_dict):
         cnt_table[col].values[:] = 0
 
     if os.path.isdir(train_path) and os.path.isdir(valid_path) and os.path.isdir(test_path):
-        targets_tr, img_cnt_tr = count_data_in_folder(train_path)
-        cnt_table["train"].values[:-1] = img_cnt_tr
-        targets_va, img_cnt_va = count_data_in_folder(valid_path)
-        cnt_table["validation"].values[:-1] = img_cnt_va
-        targets_te, img_cnt_te = count_data_in_folder(test_path)
-        cnt_table["test"].values[:-1] = img_cnt_te
-        cnt_table["total"].values[:-1] = img_cnt_tr + img_cnt_va + img_cnt_te
-        cnt_table[-1:].values[:] = np.sum(cnt_table[:-1].values[:], axis=0)
-        if np.sum(cnt_vec_all - img_cnt_tr - img_cnt_va - img_cnt_te)==0:
-            return cnt_table
-        else:
+        try:
+            targets_tr, img_cnt_tr = count_data_in_folder(train_path)
+            cnt_table["train"].values[:-1] = img_cnt_tr
+            targets_va, img_cnt_va = count_data_in_folder(valid_path)
+            cnt_table["validation"].values[:-1] = img_cnt_va
+            targets_te, img_cnt_te = count_data_in_folder(test_path)
+            cnt_table["test"].values[:-1] = img_cnt_te
+            cnt_table["total"].values[:-1] = img_cnt_tr + img_cnt_va + img_cnt_te
+            cnt_table[-1:].values[:] = np.sum(cnt_table[:-1].values[:], axis=0)
+            if np.sum(cnt_vec_all - img_cnt_tr - img_cnt_va - img_cnt_te)==0:
+                return cnt_table
+            else:
+                os.removedirs(train_path)
+                os.removedirs(valid_path)
+                os.removedirs(test_path)
+        except:
             os.removedirs(train_path)
             os.removedirs(valid_path)
             os.removedirs(test_path)
@@ -492,7 +500,7 @@ def get_create_folders(params_dict):
     data_path_train = os.path.join(data_path_fill, data_path_base + '_' + exp_ident_str + '_tr')
     data_path_valid = os.path.join(data_path_fill, data_path_base + '_' + exp_ident_str + '_va')
     data_path_test = os.path.join(data_path_fill, data_path_base + '_' + exp_ident_str + '_te')
-    data_path_base = os.path.join(base_dir, data_path_base)
+    data_path_base = os.path.join(base_dir, data_path_base, "imgs")
 
     path_dict = {
         "results": results_dir,
