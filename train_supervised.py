@@ -331,26 +331,29 @@ def getModel(params_dict, path_dict, expName, num_classes):
         print('model(', useModelName, ') is being loaded from downloadedModelFile')
         model = torch.load(f=downloadedModelFile)
         print('model(', useModelName, ') has been loaded from downloadedModelFile')
+        print('final layer will be changed from (', str(model.fc.in_features), ') to ', str(num_classes))
+        model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
         print('final layer has (', str(model.fc.in_features), ') classes ?= ', str(num_classes))
-    elif useModelName == 'resnet18' or useModelName == 'resnet34' or useModelName == 'resnet50' or useModelName == 'resnet101':
-        if useModelName == 'resnet18':
-            model = models.resnet18(pretrained=True)
-        elif useModelName == 'resnet34':
-            model = models.resnet34(pretrained=True)
-        elif useModelName == 'resnet50':
-            model = models.resnet50(pretrained=True)
-        elif useModelName == 'resnet101':
-            model = models.resnet101(pretrained=True)
-        print('final layer will be changed from (', str(model.fc.in_features), ') to ', str(num_classes))
-        model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
-        print('model(', useModelName, ') has been downloaded and being saved to ', downloadedModelFile)
-        torch.save(model, f=downloadedModelFile)
-    elif useModelName == 'vgg16':
-        model = models.vgg16(pretrained=True)
-        print('final layer will be changed from (', str(model.fc.in_features), ') to ', str(num_classes))
-        model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
-        print('model(', useModelName, ') has been downloaded and being saved to ', downloadedModelFile)
-        torch.save(model, f=downloadedModelFile)
+    else:
+        if useModelName == 'resnet18' or useModelName == 'resnet34' or useModelName == 'resnet50' or useModelName == 'resnet101':
+            if useModelName == 'resnet18':
+                model = models.resnet18(pretrained=True)
+            elif useModelName == 'resnet34':
+                model = models.resnet34(pretrained=True)
+            elif useModelName == 'resnet50':
+                model = models.resnet50(pretrained=True)
+            elif useModelName == 'resnet101':
+                model = models.resnet101(pretrained=True)
+            print('model(', useModelName, ') has been downloaded and being saved to ', downloadedModelFile)
+            torch.save(model, f=downloadedModelFile)
+            print('final layer will be changed from (', str(model.fc.in_features), ') to ', str(num_classes))
+            model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
+        elif useModelName == 'vgg16':
+            model = models.vgg16(pretrained=True)
+            print('model(', useModelName, ') has been downloaded and being saved to ', downloadedModelFile)
+            torch.save(model, f=downloadedModelFile)
+            print('final layer will be changed from (', str(model.fc.in_features), ') to ', str(num_classes))
+            model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
 
     freeze_layers(model, False)  # To freeze training weights or not
 
@@ -375,6 +378,38 @@ def create_sub_folders(targets, dir_path):
     for t in targets:
         funcH.createDirIfNotExist(os.path.join(dir_path, t))
 
+def count_data_in_folder(data_path):
+    if not os.path.isdir(data_path):
+        print("data_path({:s}) doesnt exist".format(data_path))
+        return [], []
+    targets = funcH.getFolderList(dir2Search=data_path, sortList=True)
+    img_cnt = np.zeros(np.shape(targets))
+    for i, t in enumerate(targets):
+        source_path = os.path.join(data_path, t)
+        samples = funcH.getFileList(dir2Search=source_path, endString=".png")
+        img_cnt[i] = len(samples)
+    return targets, img_cnt
+
+def validate_downloaded_data(data_path):
+    if not os.path.isdir(data_path):
+        print("data_path({:s}) doesnt exist".format(data_path))
+        return False, [], []
+    img_counts_matches = True
+    targets = funcH.getFolderList(dir2Search=data_path, sortList=True).tolist()
+    csv_file = funcH.getFileList(dir2Search=data_path, startString="cnt_table", endString=".csv")
+    cnt_pd = pd.read_csv(filepath_or_buffer=os.path.join(data_path,csv_file[0]), delimiter=',')
+    file_targets = cnt_pd[cnt_pd.columns[0]].values[:-1]
+    file_counts = cnt_pd[cnt_pd.columns[1]].values[:-1]
+    folder_counts = np.zeros(np.shape(file_counts))
+    for i, t in enumerate(targets):
+        source_path = os.path.join(data_path, t)
+        samples = os.listdir(source_path)
+        folder_counts[i] = len(samples)
+        img_counts_matches = img_counts_matches and (folder_counts[i] == file_counts[i])
+        assert (file_targets[i] == t), "{:s}!={:s}".format(file_targets[i], t)
+
+    return img_counts_matches, targets, folder_counts
+
 def create_dataset(path_dict, user_id_dict, params_dict):
     data_path = path_dict["data_base"]  # original path of data to load
     train_path = path_dict["train"]  # train data to create
@@ -383,11 +418,10 @@ def create_dataset(path_dict, user_id_dict, params_dict):
     cnt_table_fileName = os.path.join(os.path.abspath(os.path.join(path_dict["train"], os.pardir)), "cnt_table" +
                                       params_dict["exp_ident"] + ".csv")
 
-    targets = sorted(os.listdir(data_path))
-
-    create_sub_folders(targets, train_path)
-    create_sub_folders(targets, valid_path)
-    create_sub_folders(targets, test_path)
+    img_cnt_ok_all, targets, cnt_vec_all = validate_downloaded_data(data_path)
+    if not img_cnt_ok_all:
+        print("download the data again!!")
+        sys.exit(21)
 
     table_rows = targets.copy()
     table_rows.append("total")
@@ -395,8 +429,28 @@ def create_dataset(path_dict, user_id_dict, params_dict):
     for col in cnt_table.columns:
         cnt_table[col].values[:] = 0
 
+    if os.path.isdir(train_path) and os.path.isdir(valid_path) and os.path.isdir(test_path):
+        targets_tr, img_cnt_tr = count_data_in_folder(train_path)
+        cnt_table["train"].values[:-1] = img_cnt_tr
+        targets_va, img_cnt_va = count_data_in_folder(valid_path)
+        cnt_table["validation"].values[:-1] = img_cnt_va
+        targets_te, img_cnt_te = count_data_in_folder(test_path)
+        cnt_table["test"].values[:-1] = img_cnt_te
+        cnt_table["total"].values[:-1] = img_cnt_tr + img_cnt_va + img_cnt_te
+        cnt_table[-1:].values[:] = np.sum(cnt_table[:-1].values[:], axis=0)
+        if np.sum(cnt_vec_all - img_cnt_tr - img_cnt_va - img_cnt_te)==0:
+            return cnt_table
+        else:
+            os.removedirs(train_path)
+            os.removedirs(valid_path)
+            os.removedirs(test_path)
+
+    create_sub_folders(targets, train_path)
+    create_sub_folders(targets, valid_path)
+    create_sub_folders(targets, test_path)
+
     for t in targets:
-        print(f"Start moving target {t}.")
+        print(f"Start copying target {t} -->")
         source_path = os.path.join(data_path, t)
         samples = os.listdir(source_path)
         #according to user_id_dict
