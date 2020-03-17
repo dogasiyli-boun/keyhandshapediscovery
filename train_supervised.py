@@ -14,7 +14,7 @@ from torchvision import transforms
 import helperFuncs as funcH
 from khs_dataset import khs_dataset
 
-from shutil import copyfile
+from shutil import copyfile, rmtree
 import pandas as pd
 
 # Freeze layers
@@ -196,30 +196,29 @@ def parseArgs(argv):
                "vs": "-mn", "defaultVal": "resnet18", "dvSet": True, "paramType": "str"}
     param02 = {"paramName": "use_updated_model", "possibleValues": "{True or False",
                "vs": "-ua", "defaultVal": 1, "dvSet": True, "paramType": "bool"}
-    param04 = {"paramName": "epochs", "possibleValues": "{50,200,500}",
+    param03 = {"paramName": "epochs", "possibleValues": "{50,200,500}",
                "vs": "-ep", "defaultVal": 50, "dvSet": True, "paramType": "int"}
-    param05 = {"paramName": "batch_size", "possibleValues": "{0-B}",
+    param04 = {"paramName": "batch_size", "possibleValues": "{0-B}",
                "vs": "-bs", "defaultVal": 16, "dvSet": True, "paramType": "int"}
-    param06 = {"paramName": "appendEpochBinary", "possibleValues": "{0, 1}",
+    param05 = {"paramName": "appendEpochBinary", "possibleValues": "{0, 1}",
                "vs": "-ea", "defaultVal": 0, "dvSet": True, "paramType": "int"}
-    param07 = {"paramName": "randomSeed", "possibleValues": "{some integer}",
+    param06 = {"paramName": "randomSeed", "possibleValues": "{some integer}",
                "vs": "-rs", "defaultVal": 1, "dvSet": True, "paramType": "int"}
-    param08 = {"paramName": "data_path_base", "possibleValues": "{'any folder in DataFolder'}",
+    param07 = {"paramName": "data_path_base", "possibleValues": "{'any folder in DataFolder'}",
                "vs": "-dp", "defaultVal": None, "dvSet": True, "paramType": "str"}
-    param09 = {"paramName": "userIDTest", "possibleValues": "{2-3-4-5-6-7}",
+    param08 = {"paramName": "userIDTest", "possibleValues": "{2-3-4-5-6-7}",
                "vs": "-ut", "defaultVal": 4, "dvSet": True, "paramType": "int"}
-    param10 = {"paramName": "userIDValid", "possibleValues": "{2-3-4-5-6-7}",
-               "vs": "-uv", "defaultVal": 3, "dvSet": True, "paramType": "int"}
+    param09 = {"paramName": "crossValidID", "possibleValues": "{1-2-3-4-5}",
+               "vs": "-cv", "defaultVal": 1, "dvSet": True, "paramType": "int"}
 
     # model and data parameters
-    paramsAll = [param01, param02, param04, param05,
-                 param06, param07, param08, param09, param10
-                 ]
+    paramsAll = [param01, param02, param03, param04, param05,
+                 param06, param07, param08, param09]
 
     parse_args_helper_01(paramsAll, argv)
     valuesParamsCur, dvSetParamsCur = parse_args_helper_02(paramsAll)
 
-    exp_ident = "_va{:d}_te{:d}_".format(valuesParamsCur["userIDValid"], valuesParamsCur["userIDTest"]) + \
+    exp_ident = "_te{:d}_cv{:d}_".format(valuesParamsCur["userIDTest"], valuesParamsCur["crossValidID"]) + \
                 valuesParamsCur["modelName"] + \
                 valuesParamsCur["data_path_base"]
 
@@ -235,7 +234,7 @@ def parseArgs(argv):
         "hostName": socket.gethostname(),
     }
     user_id_dict = {
-        "valid": valuesParamsCur["userIDValid"],
+        "cross_valid_id": valuesParamsCur["crossValidID"],
         "test": valuesParamsCur["userIDTest"],
     }
 
@@ -445,18 +444,22 @@ def create_dataset(path_dict, user_id_dict, params_dict):
             if np.sum(cnt_vec_all - img_cnt_tr - img_cnt_va - img_cnt_te)==0:
                 return cnt_table
             else:
-                os.removedirs(train_path)
-                os.removedirs(valid_path)
-                os.removedirs(test_path)
+                rmtree(train_path, ignore_errors=True)
+                rmtree(valid_path, ignore_errors=True)
+                rmtree(test_path, ignore_errors=True)
         except:
-            os.removedirs(train_path)
-            os.removedirs(valid_path)
-            os.removedirs(test_path)
+            rmtree(train_path, ignore_errors=True)
+            rmtree(valid_path, ignore_errors=True)
+            rmtree(test_path, ignore_errors=True)
 
     create_sub_folders(targets, train_path)
     create_sub_folders(targets, valid_path)
     create_sub_folders(targets, test_path)
+    for col in cnt_table.columns:
+        cnt_table[col].values[:] = 0
 
+    np.random.seed(seed=params_dict["randomSeed"])
+    spaces_list = []
     for t in targets:
         print(f"Start copying target {t} -->")
         source_path = os.path.join(data_path, t)
@@ -464,6 +467,7 @@ def create_dataset(path_dict, user_id_dict, params_dict):
         #according to user_id_dict
         cnt_table["total"][t] = len(samples)
         cnt_table["total"]["total"] += len(samples)
+        train_samples = []
         for s in samples:
             sample_dict = s.split(sep="_")
             # <3 signID><1 userID><2 repID>
@@ -471,20 +475,35 @@ def create_dataset(path_dict, user_id_dict, params_dict):
             # user_id = ((int_id - int_id.__mod__(100))/100).__mod__(10)
             # user_id_str = sample_dict[1][3]
             user_id_int = int(sample_dict[1][3])
-            if user_id_dict["valid"] == user_id_int:
-                copyfile(os.path.join(source_path, s), os.path.join(valid_path, t, s))
-                cnt_table["validation"][t] += 1
-            elif user_id_dict["test"] == user_id_int:
+            #if user_id_dict["valid"] == user_id_int:
+            #    copyfile(os.path.join(source_path, s), os.path.join(valid_path, t, s))
+            #    cnt_table["validation"][t] += 1
+            if user_id_dict["test"] == user_id_int:
                 copyfile(os.path.join(source_path, s), os.path.join(test_path, t, s))
                 cnt_table["test"][t] += 1
             else:
                 copyfile(os.path.join(source_path, s), os.path.join(train_path, t, s))
+                train_samples.append(os.path.join(train_path, t, s))
                 cnt_table["train"][t] += 1
+        # deal with validation samples
+        num_of_train_samples = len(train_samples)
+        perm_list = np.random.permutation(num_of_train_samples)
+        spaces = np.array(np.floor(np.linspace(0.0, num_of_train_samples, num=6)), dtype=int)
+        fr, to = spaces[user_id_dict["cross_valid_id"]-1], spaces[user_id_dict["cross_valid_id"]]
+        spaces_list.append(list(np.array([fr, to])) + list(spaces))
+        for i in range(fr, to):
+            sample_to_move = train_samples[perm_list[i]]
+            sample_new_name = sample_to_move.replace(train_path, valid_path)
+            os.rename(sample_to_move, sample_new_name)
+            cnt_table["train"][t] -= 1
+            cnt_table["validation"][t] += 1
+
         cnt_table["train"]["total"] += cnt_table["train"][t]
         cnt_table["validation"]["total"] += cnt_table["validation"][t]
         cnt_table["test"]["total"] += cnt_table["test"][t]
 
     pd.DataFrame.to_csv(cnt_table, path_or_buf=cnt_table_fileName)
+    print(spaces_list)
 
     return cnt_table
 

@@ -1,20 +1,11 @@
-import dataLoaderFuncs as funcD
-import projRelatedScripts as prs
-from sklearn.metrics import confusion_matrix
 import aeCluster as ae
-
 import helperFuncs as funcH
 import projRelatedHelperFuncs as prHF
 import importlib as impL
 import numpy as np
 import os
 import pandas as pd
-import Cluster_Ensembles as CE  # sudo apt-get install metis
 import hmmWrapper as funcHMM
-import ensembleFuncs as funcEnsemble
-import datetime
-import time
-from fastai.vision import *
 from zipfile import ZipFile
 from glob import glob
 import wget
@@ -314,5 +305,20 @@ def run_untar(remove_zip=False):
         listOfFiles_in_folder = [line.rstrip() for line in f]
     # check if they match
 
-run_untar()
+def run_dataset_paper_script(data_path_base = 'neuralNetHandImages_nos11_rs224', epochs = 30):
+    error_calls = []
+    for userIDTest in {2, 3, 4, 5, 6, 7}:
+        for crossValidID in {1, 2, 3, 4}:  # 32
+            try :
+                runString = "python train_supervised.py" + \
+                            " --data_path_base " + str(data_path_base) + \
+                            " --epochs " + str(epochs) + \
+                            " --userIDTest " + str(userIDTest) + \
+                            " --crossValidID " + str(crossValidID)
+                print(runString)
+                os.system(runString)
+            except :
+                error_calls.append(runString)
+    print("erroneous calls : ", error_calls)
+#  run_untar()
 #  run_script_combine_predictions(useNZ=True, nos=11)
