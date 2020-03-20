@@ -305,10 +305,10 @@ def run_untar(remove_zip=False):
         listOfFiles_in_folder = [line.rstrip() for line in f]
     # check if they match
 
-def run_dataset_paper_script(data_path_base = 'neuralNetHandImages_nos11_rs224', epochs = 30):
+def run_dataset_paper_script(data_path_base = 'neuralNetHandImages_nos11_rs224', epochs = 60):
     error_calls = []
-    for userIDTest in {2, 3, 4, 5, 6, 7}:
-        for crossValidID in {1, 2, 3, 4}:  # 32
+    for crossValidID in [1, 2, 3, 4, 5]:
+        for userIDTest in [2, 3, 4, 5, 6, 7]:
             try :
                 runString = "python train_supervised.py" + \
                             " --data_path_base " + str(data_path_base) + \

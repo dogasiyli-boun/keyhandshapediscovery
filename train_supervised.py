@@ -67,9 +67,15 @@ def runTrainDs(model, optimizer, dsLoad_train):
         optimizer.step()
 
         _, indices = outputs.max(1)
+        #try:
         acc = ((indices == labels).cpu().numpy().astype(dtype=np.float))
         for x in acc:
             running_acc.append(x)
+        #except:
+        #    print("cnt:", cnt, ", labels:", labels, ", indices:", indices)
+        #    print("Unexpected error:", sys.exc_info()[0])
+        #    raise
+        #    os.exit(1)
         idShuffle = idShuffle + ids.tolist()
 
     tr_acc_run = (np.sum(np.array(running_acc)) / len(np.array(running_acc))).astype(dtype=np.float)
@@ -80,12 +86,13 @@ def runTrainDs(model, optimizer, dsLoad_train):
 
     return tr_acc_run, idShuffle
 
-def runValidDs(model, dsLoad_valid_test, return_feats=True, layerSize=512):
+def runValidDs(model, dsLoad_valid_test, return_feats=True, layerSize=512, dataIdentStr=""):
     epoc_acc = []
     features_avgPool = []
     predictions = []
+    labels_all = []
 
-    print("running --> runValidDs(return_feats=", str(return_feats), ", layerSize=", str(layerSize), ")", datetime.datetime.now().strftime("%H:%M:%S"))
+    print("running --> runValidDs(", dataIdentStr, "return_feats=", str(return_feats), ", layerSize=", str(layerSize), ")", datetime.datetime.now().strftime("%H:%M:%S"))
     t = time.time()
 
     for sample in dsLoad_valid_test:
@@ -104,6 +111,7 @@ def runValidDs(model, dsLoad_valid_test, return_feats=True, layerSize=512):
             feats = extract_features(layerSize=layerSize, model=model, feature_layer_string='avgpool', images=images)
             features_avgPool = features_avgPool + feats
         predictions += indices.tolist()
+        labels_all += labels.tolist()
 
     elapsed = time.time() - t
     acc = (np.sum(np.array(epoc_acc)) / len(np.array(epoc_acc))).astype(dtype=np.float)
@@ -111,7 +119,7 @@ def runValidDs(model, dsLoad_valid_test, return_feats=True, layerSize=512):
     funcH.removeLastLine()
     print('runValidDs(return_feats=', str(return_feats), ' completed (', funcH.getElapsedTimeFormatted(elapsed), '), ended at ', datetime.datetime.now().strftime("%H:%M:%S"))
 
-    return acc, predictions, features_avgPool
+    return acc, predictions, labels_all, features_avgPool
 
 def parse_args_helper_01(paramsAll, argv):
     argSetDescriptions = ""
@@ -261,16 +269,27 @@ def initSomeVals(params_dict):
 
     return input_initial_resize, input_size, batch_size, num_workers
 
-def iterate_1(model, ds_loader, num_ftrs, ep, epochTo, epochStartTime):
+def iterate_1(model, ds_loader, num_ftrs, ep, epochTo, epochStartTime, path_dict):
     model.eval()  # Set model to evaluation mode
-    acc_tra, pred_tra, _ = runValidDs(model, ds_loader["train_te"], return_feats=False, layerSize=num_ftrs)
-    acc_val, pred_val, _ = runValidDs(model, ds_loader["valid"], return_feats=False, layerSize=num_ftrs)
-    acc_tes, pred_tes, _ = runValidDs(model, ds_loader["test"],  return_feats=False, layerSize=num_ftrs)
+    acc_tra, pred_tra, labels_tra, _ = runValidDs(model, ds_loader["train_te"], return_feats=False, layerSize=num_ftrs, dataIdentStr="train")
+    acc_val, pred_val, labels_val, _ = runValidDs(model, ds_loader["valid"], return_feats=False, layerSize=num_ftrs, dataIdentStr="validation")
+    acc_tes, pred_tes, labels_tes, _ = runValidDs(model, ds_loader["test"],  return_feats=False, layerSize=num_ftrs, dataIdentStr="test")
 
     result_row = np.array([ep, acc_tra, acc_val, acc_tes])
     print('ep={:d}/{:d}, acc_tra={:0.5f}, acc_val={:0.2f}, acc_tes={:0.2f}'.format(ep, epochTo, acc_tra, acc_val, acc_tes))
     print('Epoch done in (', funcH.getElapsedTimeFormatted(time.time() - epochStartTime), '), ended at ', datetime.datetime.now().strftime("%H:%M:%S"))
     print('*-*-*-*-*-*-*')
+
+    results_dict = {
+        "labels_tra": labels_tra,
+        "labels_val": labels_val,
+        "labels_tes": labels_tes,
+        "pred_tra": pred_tra,
+        "pred_val": pred_val,
+        "pred_tes": pred_tes,
+    }
+    resultFileNameFull = os.path.join(path_dict["result_fold"], "ep{:03d}.npy".format(ep))
+    np.save(resultFileNameFull, results_dict, allow_pickle=True)
 
     return result_row
 
@@ -290,8 +309,8 @@ def getTransformFuncs(input_size, input_initial_resize):
                              std=[0.229, 0.224, 0.225])
     ])
     valid_data_transform = transforms.Compose([
-        transforms.Resize(input_initial_resize),
-        transforms.RandomSizedCrop(input_size),
+        transforms.Resize(input_size),
+        #transforms.RandomSizedCrop(input_size),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                              std=[0.229, 0.224, 0.225])
@@ -303,8 +322,8 @@ def setEpochBounds(result_csv_file, num_epochs, appendEpochBinary):
     if not os.path.isfile(result_csv_file):
         completedEpochCnt = 0
     else:
-        a = pd.read_csv(filepath_or_buffer=result_csv_file, delimiter='*')
-        completedEpochCnt = np.size(a, 0) - 1
+        result_pd = pd.read_csv(result_csv_file, header=0, sep="*", names=["epoch", "train", "validation", "test"])
+        completedEpochCnt = int(result_pd["epoch"].values[-1]+1)
     epochFr = completedEpochCnt
     epochTo = num_epochs + appendEpochBinary*completedEpochCnt
     if epochFr >= epochTo:
@@ -490,7 +509,7 @@ def create_dataset(path_dict, user_id_dict, params_dict):
         perm_list = np.random.permutation(num_of_train_samples)
         spaces = np.array(np.floor(np.linspace(0.0, num_of_train_samples, num=6)), dtype=int)
         fr, to = spaces[user_id_dict["cross_valid_id"]-1], spaces[user_id_dict["cross_valid_id"]]
-        spaces_list.append(list(np.array([fr, to])) + list(spaces))
+        spaces_list.append(list(np.array([fr, to])) + list([-1])+ list(perm_list[fr:to]))
         for i in range(fr, to):
             sample_to_move = train_samples[perm_list[i]]
             sample_new_name = sample_to_move.replace(train_path, valid_path)
@@ -501,9 +520,14 @@ def create_dataset(path_dict, user_id_dict, params_dict):
         cnt_table["train"]["total"] += cnt_table["train"][t]
         cnt_table["validation"]["total"] += cnt_table["validation"][t]
         cnt_table["test"]["total"] += cnt_table["test"][t]
+        print(f"Copied {t} --> train({cnt_table['train'][t]}),valid,({cnt_table['validation'][t]})test({cnt_table['test'][t]})")
 
     pd.DataFrame.to_csv(cnt_table, path_or_buf=cnt_table_fileName)
-    print(spaces_list)
+    print('\n'.join(map(str, spaces_list)))
+    samples_list_filename = cnt_table_fileName.replace(".csv", "_sl.txt")
+    with open(samples_list_filename, 'w') as f:
+        for i, item in enumerate(spaces_list):
+            f.write("%s - %s\n" % (str(targets[i]), str(item)))
 
     return cnt_table
 
@@ -520,6 +544,7 @@ def get_create_folders(params_dict):
     data_path_valid = os.path.join(data_path_fill, data_path_base + '_' + exp_ident_str + '_va')
     data_path_test = os.path.join(data_path_fill, data_path_base + '_' + exp_ident_str + '_te')
     data_path_base = os.path.join(base_dir, data_path_base, "imgs")
+    result_fold = os.path.join(base_dir, 'sup', 'pred' + params_dict["exp_ident"])
 
     path_dict = {
         "results": results_dir,
@@ -528,6 +553,7 @@ def get_create_folders(params_dict):
         "train": data_path_train,  # train data to create
         "valid": data_path_valid,  # valid data to create
         "test": data_path_test,  # test data to create
+        "result_fold": result_fold,  # to save the predictions and labels
     }
 
     funcH.createDirIfNotExist(results_dir)
@@ -535,6 +561,7 @@ def get_create_folders(params_dict):
     funcH.createDirIfNotExist(data_path_train)
     funcH.createDirIfNotExist(data_path_valid)
     funcH.createDirIfNotExist(data_path_test)
+    funcH.createDirIfNotExist(result_fold)
 
     return path_dict
 
@@ -544,19 +571,21 @@ def create_exp_name(params_dict):
     return expName
 
 def get_dataset_variables(path_dict, train_data_transform, valid_data_transform, batch_size, num_workers):
-    train_dataset = khs_dataset(root_dir=path_dict["train"], transform=train_data_transform,
+    train_tr = khs_dataset(root_dir=path_dict["train"], transform=train_data_transform,
+                                datasetname='user_independent_khs')
+    train_va = khs_dataset(root_dir=path_dict["train"], transform=valid_data_transform,
                                 datasetname='user_independent_khs')
     val_dataset = khs_dataset(root_dir=path_dict["valid"], transform=valid_data_transform,
                               datasetname='user_independent_khs')
     test_dataset = khs_dataset(root_dir=path_dict["test"], transform=valid_data_transform,
                                datasetname='user_independent_khs')
     ds = {
-        "train_tr": torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers),
-        "train_te": torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers),
+        "train_tr": torch.utils.data.DataLoader(train_tr, batch_size=batch_size, shuffle=True, num_workers=num_workers),
+        "train_te": torch.utils.data.DataLoader(train_va, batch_size=batch_size, shuffle=False, num_workers=num_workers),
         "valid": torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers),
         "test": torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     }
-    train_labels = train_dataset.labels
+    train_labels = train_va.labels
     num_classes = np.unique(train_labels).size
     return ds, train_labels, num_classes
 
@@ -577,6 +606,7 @@ def main(argv):
     result_csv_file = os.path.join(path_dict["results"], 'rCF' + expName + '.csv')
 
     epochFr, epochTo = setEpochBounds(result_csv_file, params_dict["epochs"], params_dict["appendEpochBinary"])
+    print("epochFr({:d}), epochTo({:d})".format(epochFr, epochTo), flush=True)
 
     ds_loader, train_labels, num_classes = get_dataset_variables(path_dict, train_data_transform, valid_data_transform, batch_size, num_workers)
     print(cnt_table)
@@ -587,23 +617,30 @@ def main(argv):
     print('num_classes = ', num_classes, ', num_ftrs = ', num_ftrs, flush=True)
 
     epochStartTime = time.time()
-    result_row = iterate_1(model, ds_loader, num_ftrs, epochFr-1, epochTo, epochStartTime)
+    result_row = iterate_1(model, ds_loader, num_ftrs, epochFr-1, epochTo, epochStartTime, path_dict)
 
-    result_csv = []
-    result_csv = result_csv + result_row.tolist()
     if not os.path.isfile(result_csv_file):
         np.savetxt(result_csv_file, np.array(result_row).reshape(1, -1), fmt='%4.3f', delimiter='*', newline=os.linesep,
                header='ep * acc_tra * acc_val * acc_tes', footer='', comments='', encoding=None)
     else:
-        saveToResultMatFile(result_csv_file, result_row)
+        result_pd = pd.read_csv(result_csv_file, header=0, sep="*", names=["epoch", "train", "validation", "test"])
+        ep_read = result_pd["epoch"].values[-1]
+        tr_acc_rd = result_pd["train"].values[-1]
+        va_acc_rd = result_pd["validation"].values[-1]
+        te_acc_rd = result_pd["test"].values[-1]
+        good_to_proceed = (epochFr==ep_read+1) and (tr_acc_rd==result_row[1]) and (va_acc_rd==result_row[2]) and (te_acc_rd==result_row[3])
+        if not good_to_proceed:
+            print("result_row=", result_row)
+            print("final row=", result_pd.iloc[[-1]])
+            saveToResultMatFile(result_csv_file, result_row)
+
 
     for ep in range(epochFr, epochTo):
         model.train()  # Set model to training mode
         epochStartTime = time.time()
         _, _ = runTrainDs(model, optimizer, ds_loader["train_tr"])
 
-        result_row = iterate_1(model, ds_loader, num_ftrs, ep, epochTo, epochStartTime)
-        result_csv = result_csv + result_row.tolist()
+        result_row = iterate_1(model, ds_loader, num_ftrs, ep, epochTo, epochStartTime, path_dict)
         saveToResultMatFile(result_csv_file, result_row)
         torch.save(model, f=updatedModelFile)
 
