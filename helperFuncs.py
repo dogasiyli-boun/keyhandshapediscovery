@@ -1074,3 +1074,8 @@ def parse_detailed_labels_obj(detailed_labels_obj, signID):
     lengths = np.array(lengths, dtype=int)
     print("signID:{:d}, frIDs.shape:{}, lengths.shape:{}, labels.shape:{}".format(signID, frIDs.shape, lengths.shape, labels.shape))
     return frIDs, lengths, labels
+
+def pad_array(arr):
+    M = max(len(a) for a in arr)
+    return np.array([np.hstack([a, np.full([M-len(a),], np.nan).squeeze()]) for a in arr])
+

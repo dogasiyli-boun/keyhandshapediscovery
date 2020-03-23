@@ -1,6 +1,7 @@
 import helperFuncs as funcH
 import dataLoaderFuncs as funcD
 import ensembleFuncs as funcEns
+import visualize as funcVis
 import numpy as np
 import os
 from numpy.random import seed
@@ -769,3 +770,45 @@ def ensemble_cluster_analysis(cluster_runs, predictionsDict, labels,
     pd.DataFrame.to_csv(resultTable_pd, path_or_buf=resultTable_FileName)
 
     #displayDataResults(method='sae', dataToUse='skeleton', posteriorDim=256, pcaCount=32, numOfSigns=11, weightReg = 1.0, batchSize = 16)
+
+def plot_supervised_results(fold_name):
+    result_mat = np.zeros((6, 5), dtype=float)
+    # fold_name = "/home/doga/DataFolder/sup_old/results_old_to_check"
+    # fold_name = "/home/doga/DataFolder/sup/results"
+    acc_list = {"ep": [], "tr": [], "va": [], "te": [], }
+    for i, userIDTest in enumerate({2, 3, 4, 5, 6, 7}):
+        for j, crossValidID in enumerate({1, 2, 3, 4, 5}):  # 32
+            file_name = "rCF_te" + str(userIDTest) + "_cv" + str(
+                crossValidID) + "_resnet18neuralNetHandImages_nos11_rs224_rs01.csv"
+            file2read = os.path.join(fold_name, file_name)
+            try:
+                featsMat = pd.read_csv(file2read, header=0, sep="*", names=["epoch", "train", "validation", "test"])
+                max_val = np.max(featsMat["test"].values[:29])
+                acc_list["ep"].append(featsMat["epoch"].values[:])
+                acc_list["tr"].append(featsMat["train"].values[:])
+                acc_list["va"].append(featsMat["validation"].values[:])
+                acc_list["te"].append(featsMat["test"].values[:])
+            except:
+                max_val = np.nan
+            result_mat[i, j] = max_val
+    result_pd = pd.DataFrame(result_mat, columns=["cv1", "cv2", "cv3", "cv4", "cv5"],
+                             index=["u2", "u3", "u4", "u5", "u6", "u7"])
+    print(result_pd)
+    funcVis.stack_fig_disp(result_mat, fold_name)
+
+    mmm_mat = np.column_stack((np.nanmin(result_mat[:, :-1], axis=1).ravel(),
+                               np.nanmean(result_mat[:, :-1], axis=1).ravel(),
+                               np.nanmax(result_mat[:, :-1], axis=1).ravel()))
+    result_mmm = pd.DataFrame(mmm_mat, index=["u2", "u3", "u4", "u5", "u6", "u7"], columns=["min", "mean", "max"])
+    print(result_mmm)
+
+    funcVis.pdf_bar_plot_users(result_mmm, fold_name)
+
+    fig = funcVis.plot_acc_eval(acc_list, "te", "Test Accuracy Range for All Users Cross-Validation")
+    fig.savefig(os.path.join(fold_name, "te_acc_range.png"), bbox_inches='tight')
+
+    fig = funcVis.plot_acc_eval(acc_list, "tr", "Train Accuracy Range for All Users Cross-Validation")
+    fig.savefig(os.path.join(fold_name, "tr_acc_range.png"), bbox_inches='tight')
+
+    fig = funcVis.plot_acc_eval(acc_list, "va", "Validation Accuracy Range for All Users Cross-Validation")
+    fig.savefig(os.path.join(fold_name, "va_acc_range.png"), bbox_inches='tight')
