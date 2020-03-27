@@ -10,6 +10,7 @@ import pandas as pd
 import matplotlib as plt
 import time
 import datetime
+from sklearn.metrics import confusion_matrix
 
 def createExperimentName(trainParams, modelParams, rnnParams):
 
@@ -771,15 +772,20 @@ def ensemble_cluster_analysis(cluster_runs, predictionsDict, labels,
 
     #displayDataResults(method='sae', dataToUse='skeleton', posteriorDim=256, pcaCount=32, numOfSigns=11, weightReg = 1.0, batchSize = 16)
 
-def plot_supervised_results(fold_name):
+def plot_supervised_results(fold_name, model_name="resnet18", random_seed=1, nos=11):
     result_mat = np.zeros((6, 5), dtype=float)
     # fold_name = "/home/doga/DataFolder/sup_old/results_old_to_check"
     # fold_name = "/home/doga/DataFolder/sup/results"
     acc_list = {"ep": [], "tr": [], "va": [], "te": [], }
+    usr_list = {"u2": [], "u3": [], "u5": [], "u6": [], "u7": [], }
     for i, userIDTest in enumerate({2, 3, 4, 5, 6, 7}):
+        user_id_str = "u"+str(userIDTest)
+        usr_list[user_id_str] = {"ep": [], "tr": [], "va": [], "te": [], }
         for j, crossValidID in enumerate({1, 2, 3, 4, 5}):  # 32
-            file_name = "rCF_te" + str(userIDTest) + "_cv" + str(
-                crossValidID) + "_resnet18neuralNetHandImages_nos11_rs224_rs01.csv"
+            file_name = "rCF_te" + str(userIDTest) + "_cv" + str(crossValidID) + \
+                        "_" + model_name + \
+                        "_" + "neuralNetHandImages_nos" + str(nos) + "_rs224" + \
+                        "_rs" + str(random_seed).zfill(2) + ".csv"
             file2read = os.path.join(fold_name, file_name)
             try:
                 featsMat = pd.read_csv(file2read, header=0, sep="*", names=["epoch", "train", "validation", "test"])
@@ -788,13 +794,23 @@ def plot_supervised_results(fold_name):
                 acc_list["tr"].append(featsMat["train"].values[:])
                 acc_list["va"].append(featsMat["validation"].values[:])
                 acc_list["te"].append(featsMat["test"].values[:])
-            except:
+
+                usr_list[user_id_str]["ep"].append(featsMat["epoch"].values[1:])
+                usr_list[user_id_str]["tr"].append(featsMat["train"].values[1:])
+                usr_list[user_id_str]["va"].append(featsMat["validation"].values[1:])
+                usr_list[user_id_str]["te"].append(featsMat["test"].values[1:])
+
+            except Exception as e:
+                print(str(e))
                 max_val = np.nan
             result_mat[i, j] = max_val
     result_pd = pd.DataFrame(result_mat, columns=["cv1", "cv2", "cv3", "cv4", "cv5"],
                              index=["u2", "u3", "u4", "u5", "u6", "u7"])
     print(result_pd)
-    funcVis.stack_fig_disp(result_mat, fold_name)
+
+    save_fig_name = model_name + "_accRange_per_user.png"
+    title_str = model_name + " Accuracy Range for 5-Cross-Validation"
+    funcVis.stack_fig_disp(result_mat, fold_name, save_fig_name, title_str)
 
     mmm_mat = np.column_stack((np.nanmin(result_mat[:, :-1], axis=1).ravel(),
                                np.nanmean(result_mat[:, :-1], axis=1).ravel(),
@@ -802,13 +818,106 @@ def plot_supervised_results(fold_name):
     result_mmm = pd.DataFrame(mmm_mat, index=["u2", "u3", "u4", "u5", "u6", "u7"], columns=["min", "mean", "max"])
     print(result_mmm)
 
-    funcVis.pdf_bar_plot_users(result_mmm, fold_name)
+    save_fig_name = model_name + "_accBar_per_user.png"
+    title_str = model_name + " Accuracy Bar-Plot for 5-Cross-Validation"
+    funcVis.pdf_bar_plot_users(result_mmm, fold_name, save_fig_name, title_str)
 
-    fig = funcVis.plot_acc_eval(acc_list, "te", "Test Accuracy Range for All Users Cross-Validation")
-    fig.savefig(os.path.join(fold_name, "te_acc_range.png"), bbox_inches='tight')
+    fig = funcVis.plot_acc_eval(acc_list, "te", model_name + " Test Accuracy Range for All Users 5-Cross-Validation")
+    fig.savefig(os.path.join(fold_name, model_name + "_te_all_range.png"), bbox_inches='tight')
 
-    fig = funcVis.plot_acc_eval(acc_list, "tr", "Train Accuracy Range for All Users Cross-Validation")
-    fig.savefig(os.path.join(fold_name, "tr_acc_range.png"), bbox_inches='tight')
+    fig = funcVis.plot_acc_eval(acc_list, "tr", model_name + " Train Accuracy Range for All Users 5-Cross-Validation")
+    fig.savefig(os.path.join(fold_name, model_name + "_tr_all_range.png"), bbox_inches='tight')
 
-    fig = funcVis.plot_acc_eval(acc_list, "va", "Validation Accuracy Range for All Users Cross-Validation")
-    fig.savefig(os.path.join(fold_name, "va_acc_range.png"), bbox_inches='tight')
+    fig = funcVis.plot_acc_eval(acc_list, "va", model_name + " Validation Accuracy Range for All Users 5-Cross-Validation")
+    fig.savefig(os.path.join(fold_name, model_name + "_va_all_range.png"), bbox_inches='tight')
+
+    for i, userIDTest in enumerate({2, 3, 4, 5, 6, 7}):
+        title_str = "Model({:s}), User({:d}), 5-Cross-Validation Accuracy Range".format(model_name, userIDTest)
+        filename_2_save = "{:s}_u{:d}_acc_range.png".format(model_name, userIDTest)
+        fig = funcVis.plot_acc_range_for_user(usr_list, userIDTest, title_str)
+        fig.savefig(os.path.join(fold_name, filename_2_save), bbox_inches='tight')
+
+    plt.pyplot.close('all')
+
+def conf_mat_update(old_conf, new_conf, op_name="best_cell"):
+    if len(old_conf)==0:
+        updated_conf = new_conf
+    elif op_name=="best_cell":
+        #  max val stays at diagonal
+        #  min val stays at other places
+        updated_conf = np.minimum(old_conf, new_conf)
+        diag_to_set = np.max([np.diag(old_conf), np.diag(new_conf)], axis=0)
+        np.fill_diagonal(updated_conf, diag_to_set)
+    elif op_name=="worst_cell":
+        #  max val stays at diagonal
+        #  min val stays at other places
+        updated_conf = np.maximum(old_conf, new_conf)
+        diag_to_set = np.min([np.diag(old_conf), np.diag(new_conf)], axis=0)
+        np.fill_diagonal(updated_conf, diag_to_set)
+    return updated_conf
+
+def sup_res_confusion_run(fold_name, model_name="resnet18", random_seed=1, nos=11):
+    # fold_name = "/home/doga/DataFolder/sup/preds_resnet18"
+    for i, userIDTest in enumerate({2, 3, 4, 5, 6, 7}):
+        conf_size = []
+        conf_std = {"tr": [], "va": [], "te": [], }
+        conf_best = {"tr": [], "va": [], "te": [], }
+        conf_worst = {"tr": [], "va": [], "te": [], }
+        lab_cnts = {"tr": [], "va": [], "te": [], }
+        for j, crossValidID in enumerate({1, 2, 3, 4, 5}):  # 32
+            fold_name_uc = "pred_te" + str(userIDTest) + "_cv" + str(crossValidID) + \
+                        "_" + model_name + \
+                        "_" + "neuralNetHandImages_nos" + str(nos) + "_rs224" + \
+                        "_rs" + str(random_seed).zfill(2)
+            fold_name_uc = os.path.join(fold_name, fold_name_uc)
+            if not os.path.isdir(fold_name_uc):
+                continue
+            ep_file_list = funcH.getFileList(dir2Search=fold_name_uc, endString=".npy", startString="ep", sortList=True)
+            ep_cnt = len(ep_file_list)-1  # remove ep-1
+            conf_list = {"tr": [], "va": [], "te": [], }
+            acc_list = {"tr": [], "va": [], "te": [], }
+            for ep in range(0, ep_cnt):
+                npy_file = os.path.join(fold_name_uc, "ep{:03d}.npy".format(ep))
+                results_dict = np.load(npy_file, allow_pickle=True)
+
+                tra_lab = results_dict.item().get('labels_tra')
+                tra_prd = results_dict.item().get('pred_tra')
+                _confMat_tra = confusion_matrix(tra_lab, tra_prd)
+                acc_tra = np.sum(np.diag(_confMat_tra)) / np.sum(np.sum(_confMat_tra))
+
+                val_lab = results_dict.item().get('labels_val')
+                val_prd = results_dict.item().get('pred_val')
+                _confMat_val = confusion_matrix(val_lab, val_prd)
+                acc_val = np.sum(np.diag(_confMat_val)) / np.sum(np.sum(_confMat_val))
+
+                tes_lab = results_dict.item().get('labels_tes')
+                tes_prd = results_dict.item().get('pred_tes')
+                _confMat_tes = confusion_matrix(tes_lab, tes_prd)
+                acc_tes = np.sum(np.diag(_confMat_tes)) / np.sum(np.sum(_confMat_tes))
+
+                conf_size = _confMat_tes.shape
+
+                acc_list["tr"].append(acc_tra)
+                acc_list["va"].append(acc_val)
+                acc_list["te"].append(acc_tes)
+
+                conf_list["tr"].append(_confMat_tra)
+                conf_list["va"].append(_confMat_val)
+                conf_list["te"].append(_confMat_tes)
+
+                lab_cnts["tr"] = np.sum(_confMat_tra, axis=1)
+                lab_cnts["va"] = np.sum(_confMat_val, axis=1)
+                lab_cnts["te"] = np.sum(_confMat_tes, axis=1)
+
+            conf_std["tr"].append(_confMat_tra.reshape(1, -1).squeeze())
+            conf_std["va"].append(_confMat_val.reshape(1, -1).squeeze())
+            conf_std["te"].append(_confMat_tes.reshape(1, -1).squeeze())
+
+            conf_best["tr"] = conf_mat_update(conf_best["tr"], _confMat_tra, op_name="best_cell")
+            conf_worst["tr"] = conf_mat_update(conf_worst["tr"], _confMat_tra, op_name="worst_cell")
+            conf_best["va"] = conf_mat_update(conf_best["va"], _confMat_val, op_name="best_cell")
+            conf_worst["va"] = conf_mat_update(conf_worst["va"], _confMat_val, op_name="worst_cell")
+            conf_best["te"] = conf_mat_update(conf_best["te"], _confMat_tes, op_name="best_cell")
+            conf_worst["te"] = conf_mat_update(conf_worst["te"], _confMat_tes, op_name="worst_cell")
+
+            # plot conf_worst, conf_std, conf_best for each tr/va/te as sub plots

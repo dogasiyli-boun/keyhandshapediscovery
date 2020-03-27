@@ -9,6 +9,7 @@ import hmmWrapper as funcHMM
 from zipfile import ZipFile
 from glob import glob
 import wget
+import shutil
 
 def study02(ep = 3):
     funcH.setPandasDisplayOpts()
@@ -305,12 +306,15 @@ def run_untar(remove_zip=False):
         listOfFiles_in_folder = [line.rstrip() for line in f]
     # check if they match
 
-def run_dataset_paper_script(data_path_base = 'neuralNetHandImages_nos11_rs224', epochs = 60):
+def run_dataset_paper_script(cvVec=[1, 2, 3, 4, 5], uiVec=[2, 3, 4, 5, 6, 7],
+                             data_path_base='neuralNetHandImages_nos11_rs224',
+                             epochs=60, modelName='squeezenet0'):
     error_calls = []
-    for crossValidID in [1, 2, 3, 4, 5]:
-        for userIDTest in [2, 3, 4, 5, 6, 7]:
+    for crossValidID in cvVec:
+        for userIDTest in uiVec:
             try :
                 runString = "python train_supervised.py" + \
+                            " --modelName " + str(modelName) + \
                             " --data_path_base " + str(data_path_base) + \
                             " --epochs " + str(epochs) + \
                             " --userIDTest " + str(userIDTest) + \
@@ -322,3 +326,45 @@ def run_dataset_paper_script(data_path_base = 'neuralNetHandImages_nos11_rs224',
     print("erroneous calls : ", error_calls)
 #  run_untar()
 #  run_script_combine_predictions(useNZ=True, nos=11)
+
+def change_fold_names(cvVec=[1, 2, 3, 4, 5], uiVec=[2, 3, 4, 5, 6, 7],
+                      data_path_base='neuralNetHandImages_nos11_rs224', epochs=60, random_seed=1,
+                      delete_sub_data_folds=False, execute=False):
+    sup_fold = "/home/doga/DataFolder/sup"
+    for crossValidID in cvVec:
+        for userIDTest in uiVec:
+            pred_fold_old = "pred_" + "te" + str(userIDTest) + "_cv" + str(crossValidID) + "_resnet18" + data_path_base
+            data_fold_old = "data_" + "te" + str(userIDTest) + "_cv" + str(crossValidID) + "_resnet18" + data_path_base
+            # check if there are 61 items under pred_fold_old
+            pred_fold_abs_old = os.path.join(sup_fold, pred_fold_old)
+
+            pred_fold_new = "pred_te" + str(userIDTest) + "_cv" + str(crossValidID) + "_resnet18_" + data_path_base + "_rs" + str(random_seed).zfill(2)
+            data_fold_new = str(data_fold_old + "_rs" + str(random_seed).zfill(2)).replace("resnet18", "")
+
+            if os.path.isdir(pred_fold_abs_old):
+                fl = funcH.getFileList(dir2Search=pred_fold_abs_old, startString="ep", endString=".npy")
+                if len(fl) == epochs+1:
+                    #change pred folder name
+                    pred_fold_abs_to = os.path.join(sup_fold, "pred", pred_fold_new)
+                    print("move -> ", pred_fold_abs_old, "-to-", pred_fold_abs_to)
+                    if execute:
+                        shutil.move(pred_fold_abs_old, pred_fold_abs_to)
+                        print("++moved -> ", pred_fold_abs_old, "-to-", pred_fold_abs_to)
+
+                    data_fold_abs_old = os.path.join(sup_fold, data_fold_old)
+                    data_fold_abs_new = os.path.join(sup_fold, "data", data_fold_new)
+                    if delete_sub_data_folds:
+                        folds_2_del = funcH.getFolderList(dir2Search=data_fold_abs_old, startString="neural")
+                        for f in folds_2_del:
+                            print("delete fold = <", os.path.join(data_fold_abs_old, f), ">")
+                            if execute:
+                                shutil.rmtree(os.path.join(data_fold_abs_old, f))
+                                print("--deleted fold = <", os.path.join(data_fold_abs_old, f), ">")
+                    print("move--> ", data_fold_abs_old, "-to-", data_fold_abs_new)
+                    if execute:
+                        shutil.move(data_fold_abs_old, data_fold_abs_new)
+                        print("++moved--> ", data_fold_abs_old, "-to-", data_fold_abs_new)
+                else:
+                    print(pred_fold_old, "- active")
+            else:
+                print(pred_fold_old, "- ?")

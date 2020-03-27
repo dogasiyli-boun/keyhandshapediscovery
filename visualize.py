@@ -4,29 +4,38 @@ import os
 import matplotlib.pyplot as plt
 from helperFuncs import pad_array, setPandasDisplayOpts
 
-def stack_fig_disp(result_mat, save_fold_name):
+def stack_fig_disp(result_mat, save_fold_name, save_fig_name, title_str, top_bot_lim=0.003):
     mins = np.nanmin(result_mat[:, :-1], axis=1).ravel()
     maxes = np.nanmax(result_mat[:, :-1], axis=1).ravel()
     means = np.nanmean(result_mat[:, :-1], axis=1).ravel()
     std = np.nanstd(result_mat[:, :-1], axis=1).ravel()
 
+    usr_cnt = len(mins)
+    x_ticks = np.linspace(0.0, 1.0, num=usr_cnt + 2)
+    x_lim = (x_ticks[0], x_ticks[-1])
+    x_ticks = x_ticks[1:usr_cnt+1]
+
     # create stacked errorbars:
     fig = plt.clf()
-    plt.errorbar(np.arange(len(mins)), means, std, fmt='ok', lw=4)
-    plt.errorbar(np.arange(len(mins)), means, [means - mins, maxes - means], fmt='.r', ecolor='green', lw=1)
+    plt.errorbar(x_ticks, means, std, fmt='oy', lw=8, zorder=0)
+    plt.errorbar(x_ticks, means, [means - mins, maxes - means], fmt='.b', ecolor='green', lw=2, zorder=5)
+    for u in range(usr_cnt):
+        plt.scatter(x_ticks[u] * np.ones(result_mat[u, :].shape), result_mat[u, :], marker='*', c='r', lw=2, zorder=10)
     plt.xlabel("userIDs")
     plt.ylabel("accuracy")
-    plt.xlim(-1, len(mins))
-    plt.ylim(np.min([mins]), np.max([maxes]))
-    plt.xticks(np.arange(0, len(mins)), ["u2", "u3", "u4", "u5", "u6", "u7"], rotation=20)
-    plt.savefig(os.path.join(save_fold_name, "errBar.png"), bbox_inches='tight')
+    plt.xlim(x_lim)
+    plt.ylim(np.nanmin([mins])-top_bot_lim, top_bot_lim+np.nanmax([maxes]))
+    plt.xticks(x_ticks, ["u2", "u3", "u4", "u5", "u6", "u7"], rotation=20)
+    plt.title(title_str)
+    plt.savefig(os.path.join(save_fold_name, save_fig_name), bbox_inches='tight')
     return fig
 
-def pdf_bar_plot_users(result_mmm, save_fold_name):
+def pdf_bar_plot_users(result_mmm, save_fold_name, save_fig_name, title_str):
     ax = result_mmm.plot.bar(rot=90, color=['r', 'g', 'b'])
     ax.get_legend().set_bbox_to_anchor((1.22, 1.02))
+    ax.set_title(title_str)
     fig = ax.get_figure()
-    fig.savefig(os.path.join(save_fold_name, "triBar.png"), bbox_inches='tight')
+    fig.savefig(os.path.join(save_fold_name, save_fig_name), bbox_inches='tight')
 
 def plot_acc_eval(acc_list, key_list, title_str):
     setPandasDisplayOpts()
@@ -46,3 +55,82 @@ def plot_acc_eval(acc_list, key_list, title_str):
     ax.set_ylabel('acc')
     ax.grid()
     return fig
+
+def plot_acc_range_for_user(usr_list, user_id, title_str):
+    setPandasDisplayOpts()
+
+    print("plotting title = ", title_str)
+    user_id_str = "u" + str(user_id)
+    acc_list = usr_list[user_id_str]
+
+    arr_ep = np.min(pad_array(acc_list["ep"]), axis=0).squeeze()
+
+    tr_arr = np.asarray(acc_list["tr"])
+    tr_min = np.nanmin(pad_array(tr_arr), axis=0).squeeze()
+    tr_max = np.nanmax(pad_array(tr_arr), axis=0).squeeze()
+    # tr_mean = np.nanmean(pad_array(tr_arr), axis=0).squeeze()
+
+    va_arr = np.asarray(acc_list["va"])
+    va_min = np.nanmin(pad_array(va_arr), axis=0).squeeze()
+    va_max = np.nanmax(pad_array(va_arr), axis=0).squeeze()
+    # va_mean = np.nanmean(pad_array(va_arr), axis=0).squeeze()
+
+    te_arr = pad_array(np.asarray(acc_list["te"]))
+    te_min = np.nanmin(te_arr, axis=0).squeeze()
+    te_max = np.nanmax(te_arr, axis=0).squeeze()
+    te_mean = np.nanmean(te_arr, axis=0).squeeze()
+    if te_arr.shape[0]>1:
+        te_max_per_cv = np.nanmax(te_arr, axis=1)
+        idx = np.unravel_index(np.argmax(te_max_per_cv), te_max_per_cv.shape)
+        val = te_max_per_cv[idx]
+        te_max_vec = te_arr[idx].squeeze().reshape(arr_ep.shape)
+    else:
+        te_max_vec = te_arr.squeeze().reshape(arr_ep.shape)
+
+    fig, ax = plt.subplots(1, figsize=(15, 8), dpi=80)
+    ax.set_title(title_str)
+
+    if tr_arr.shape[0] > 1:
+        ax.fill_between(arr_ep, tr_min, tr_max, facecolor='yellow', alpha=0.5, label='train-range', zorder=0)
+    else:
+        ax.plot(arr_ep, tr_arr.squeeze().reshape(arr_ep.shape), lw=2, label='train-single', color='yellow', ls='-', zorder=0)
+
+    if va_arr.shape[0] > 1:
+        ax.fill_between(arr_ep, va_min, va_max, facecolor='blue', alpha=0.5, label='validation-range', zorder=5)
+    else:
+        ax.plot(arr_ep, va_arr.squeeze().reshape(arr_ep.shape), lw=2, label='validation-single', color='blue', ls='-', zorder=5)
+
+    ax.plot(arr_ep, te_mean, lw=2, label='test-mean', color='green', ls='--', zorder=15)
+    if te_arr.shape[0] > 1:
+        ax.fill_between(arr_ep, te_min, te_max, facecolor='green', alpha=0.5, label='test-range', zorder=10)
+        ax.plot(arr_ep, te_max_vec, lw=4, label='test-best-peak', color='#FFA500', ls='-', zorder=13)
+
+    ax.legend(loc='lower right')
+    ax.set_xlabel('epoch')
+    ax.set_ylabel('acc')
+    ax.grid(which='minor', alpha=2)
+    ax.grid(which='major', alpha=10)
+    return fig
+
+def confusion_plot(saveConfFigFileName):
+
+
+    if saveConfFigFileName != '':
+        saveConfFigFileName = saveConfFigFileName.replace(".", "_ccm(" + confCalcMethod + ").")
+        saveConfFigFileName = os.path.join(predictResultFold, saveConfFigFileName)
+
+    #iterID = -1
+    #normalizeByAxis = -1
+    #add2XLabel = ''
+    #add2YLabel = ''
+    #funcH.plotConfMat(_confMat, labelNames, addCntXTicks=False, addCntYTicks=False, tickSize=10,
+    #                  saveFileName=saveConfFigFileName, iterID=iterID,
+    #                  normalizeByAxis=normalizeByAxis, add2XLabel=add2XLabel, add2YLabel=add2YLabel)
+    fig, ax = funcH.plot_confusion_matrix(conf_mat=_confMat,
+                                          colorbar=False,
+                                          show_absolute=True,
+                                          show_normed=True,
+                                          class_names=labelNames,
+                                          saveConfFigFileName=saveConfFigFileName,
+                                          figMulCnt=figMulCnt,
+                                          confusionTreshold=confusionTreshold)
