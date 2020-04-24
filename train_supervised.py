@@ -632,20 +632,19 @@ def main(argv):
 
     params_dict, user_id_dict = parseArgs(argv)
     path_dict = get_create_folders(params_dict)
-    cnt_table = create_dataset(path_dict, user_id_dict, params_dict)
-
-    print('you are running this train function on = <', params_dict["hostName"], '>')
-
-    train_data_transform, valid_data_transform, batch_size, num_workers = getTransformFuncs(params_dict)
 
     expName = params_dict["exp_ident"]
     result_csv_file = os.path.join(path_dict["results"], 'rCF_' + expName + '.csv')
-
     epochFr, epochTo = setEpochBounds(result_csv_file, params_dict["epochs"], params_dict["appendEpochBinary"])
     print("epochFr({:d}), epochTo({:d})".format(epochFr, epochTo), flush=True)
     if epochTo == epochFr:
         print("epochFr==epochTo=={:d} no runs will be executed".format(epochFr, epochTo), flush=True)
         return -1
+
+    cnt_table = create_dataset(path_dict, user_id_dict, params_dict)
+    print('you are running this train function on = <', params_dict["hostName"], '>')
+    train_data_transform, valid_data_transform, batch_size, num_workers = getTransformFuncs(params_dict)
+
 
     ds_loader, train_labels, num_classes = get_dataset_variables(path_dict, train_data_transform, valid_data_transform, batch_size, num_workers)
     print(cnt_table)
@@ -666,12 +665,11 @@ def main(argv):
         tr_acc_rd = result_pd["train"].values[-1]
         va_acc_rd = result_pd["validation"].values[-1]
         te_acc_rd = result_pd["test"].values[-1]
-        good_to_proceed = (epochFr==ep_read+1) and (tr_acc_rd==result_row[1]) and (va_acc_rd==result_row[2]) and (te_acc_rd==result_row[3])
+        good_to_proceed = (epochFr == ep_read+1) and (abs(tr_acc_rd-result_row[1]) <= 0.01) and (abs(va_acc_rd-result_row[2]) <= 0.01) and (abs(te_acc_rd-result_row[3]) <= 0.01)
         if not good_to_proceed:
             print("result_row=", result_row)
             print("final row=", result_pd.iloc[[-1]])
             saveToResultMatFile(result_csv_file, result_row)
-
 
     for ep in range(epochFr, epochTo):
         model.train()  # Set model to training mode
