@@ -807,9 +807,19 @@ def plot_supervised_results(fold_name, model_name="resnet18", random_seed=1, nos
     result_pd = pd.DataFrame(result_mat, columns=["cv1", "cv2", "cv3", "cv4", "cv5"],
                              index=["u2", "u3", "u4", "u5", "u6", "u7"])
     print(result_pd)
+    file_name = "rCF_all" \
+                "_" + model_name + \
+                "_" + "neuralNetHandImages_nos" + str(nos) + "_rs224" + \
+                "_rs" + str(random_seed).zfill(2) + ".csv"
+    fileNameFull_csv = os.path.join(fold_name, file_name)
+    print(fileNameFull_csv)
+    result_pd.to_csv(fileNameFull_csv, index=["u2", "u3", "u4", "u5", "u6", "u7"], header=True)
 
-    save_fig_name = model_name + "_accRange_per_user.png"
-    title_str = model_name + " Accuracy Range for 5-Cross-Validation"
+    data_set_ident_str = "HospiSign Development Dataset" if nos==11 else "HospiSign Expanded Dataset"
+    dev_exp_str = "development" if nos==11 else "expanded"
+
+    save_fig_name = model_name + "_" + dev_exp_str + "_accRange_per_user.png"
+    title_str = "{:s}{:s} Model({:s}){:s} 5-Fold-Cross-Validation Accuracy Range".format(data_set_ident_str, os.linesep, model_name, os.linesep)
     funcVis.stack_fig_disp(result_mat, fold_name, save_fig_name, title_str)
 
     mmm_mat = np.column_stack((np.nanmin(result_mat[:, :-1], axis=1).ravel(),
@@ -819,21 +829,21 @@ def plot_supervised_results(fold_name, model_name="resnet18", random_seed=1, nos
     print(result_mmm)
 
     save_fig_name = model_name + "_accBar_per_user.png"
-    title_str = model_name + " Accuracy Bar-Plot for 5-Cross-Validation"
+    title_str = model_name + " Accuracy Bar-Plot for 5-Fold-Cross-Validation"
     funcVis.pdf_bar_plot_users(result_mmm, fold_name, save_fig_name, title_str)
 
-    fig = funcVis.plot_acc_eval(acc_list, "te", model_name + " Test Accuracy Range for All Users 5-Cross-Validation")
+    fig = funcVis.plot_acc_eval(acc_list, "te", model_name + " Test Accuracy Range for All Users 5-Fold-Cross-Validation")
     fig.savefig(os.path.join(fold_name, model_name + "_te_all_range.png"), bbox_inches='tight')
 
-    fig = funcVis.plot_acc_eval(acc_list, "tr", model_name + " Train Accuracy Range for All Users 5-Cross-Validation")
+    fig = funcVis.plot_acc_eval(acc_list, "tr", model_name + " Train Accuracy Range for All Users 5-Fold-Cross-Validation")
     fig.savefig(os.path.join(fold_name, model_name + "_tr_all_range.png"), bbox_inches='tight')
 
-    fig = funcVis.plot_acc_eval(acc_list, "va", model_name + " Validation Accuracy Range for All Users 5-Cross-Validation")
+    fig = funcVis.plot_acc_eval(acc_list, "va", model_name + " Validation Accuracy Range for All Users 5-Fold-Cross-Validation")
     fig.savefig(os.path.join(fold_name, model_name + "_va_all_range.png"), bbox_inches='tight')
 
     for i, userIDTest in enumerate({2, 3, 4, 5, 6, 7}):
-        title_str = "Model({:s}), User({:d}), 5-Cross-Validation Accuracy Range".format(model_name, userIDTest)
-        filename_2_save = "{:s}_u{:d}_acc_range.png".format(model_name, userIDTest)
+        title_str = data_set_ident_str + os.linesep + "Model({:s}), User({:d}){:s}5-Fold-Cross-Validation Accuracy Range".format(model_name, userIDTest, os.linesep)
+        filename_2_save = "{:s}_u{:d}_{:s}_acc_range.png".format(model_name, userIDTest, dev_exp_str)
         fig = funcVis.plot_acc_range_for_user(usr_list, userIDTest, title_str)
         fig.savefig(os.path.join(fold_name, filename_2_save), bbox_inches='tight')
 

@@ -2,7 +2,11 @@ import pandas as pd
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-from helperFuncs import pad_array, setPandasDisplayOpts
+from matplotlib.offsetbox import OffsetImage,AnnotationBbox
+from helperFuncs import pad_array, setPandasDisplayOpts, sortVec
+import imageio
+import skimage
+from cycler import cycler
 
 def stack_fig_disp(result_mat, save_fold_name, save_fig_name, title_str, top_bot_lim=0.003):
     mins = np.nanmin(result_mat[:, :-1], axis=1).ravel()
@@ -20,13 +24,14 @@ def stack_fig_disp(result_mat, save_fold_name, save_fig_name, title_str, top_bot
     plt.errorbar(x_ticks, means, std, fmt='oy', lw=8, zorder=0)
     plt.errorbar(x_ticks, means, [means - mins, maxes - means], fmt='.b', ecolor='green', lw=2, zorder=5)
     for u in range(usr_cnt):
-        plt.scatter(x_ticks[u] * np.ones(result_mat[u, :].shape), result_mat[u, :], marker='*', c='r', lw=2, zorder=10)
-    plt.xlabel("userIDs")
-    plt.ylabel("accuracy")
+        plt.scatter(x_ticks[u] * np.ones(result_mat[u, :].shape), result_mat[u, :], marker='*', c='m', lw=3, zorder=10)
+    plt.xlabel("Test User IDs", fontsize=20)
+    plt.ylabel("Accuracy", fontsize=20)
     plt.xlim(x_lim)
     plt.ylim(np.nanmin([mins])-top_bot_lim, top_bot_lim+np.nanmax([maxes]))
-    plt.xticks(x_ticks, ["u2", "u3", "u4", "u5", "u6", "u7"], rotation=20)
-    plt.title(title_str)
+    plt.xticks(x_ticks, ["u2", "u3", "u4", "u5", "u6", "u7"], rotation=20, fontsize=16)
+    plt.yticks(fontsize=16)
+    #plt.title(title_str, fontsize=20)
     plt.savefig(os.path.join(save_fold_name, save_fig_name), bbox_inches='tight')
     return fig
 
@@ -111,6 +116,71 @@ def plot_acc_range_for_user(usr_list, user_id, title_str):
     ax.grid(which='minor', alpha=2)
     ax.grid(which='major', alpha=10)
     return fig
+
+def get_khs_im(name, folder_list):
+    im = []
+    for fold in folder_list:
+        fnamefull = os.path.join(fold, name + ".png")
+        if os.path.isfile(fnamefull):
+            # im = plt.imread(fnamefull).copy()
+            im = imageio.imread(fnamefull)
+            im = skimage.img_as_float(im)
+            return im
+    return im
+
+#  https://stackoverflow.com/questions/44246650/automating-bar-charts-plotting-to-show-country-flags-as-ticklabels/44264051#44264051
+def offset_image(coord, ax, img, zoom=0.1):
+    im = OffsetImage(img, zoom=zoom)
+    im.image.axes = ax
+    ab = AnnotationBbox(im, (coord, 0),  xybox=(0., -16.), frameon=False,
+                        xycoords='data',  boxcoords="offset points", pad=0)
+
+    ax.add_artist(ab)
+
+def bar_cnt_plot(nos=11, zoom=0.1, step_xticks = 2, title_str="", fontsize_cnt=8):
+    folder_list = ["/home/doga/Desktop/desktopShit/khsImages/bothHands", "/home/doga/Desktop/desktopShit/khsImages/singleHand"]
+    labelnames_csv_filename = "/home/doga/DataFolder/sup/data/nos" + str(nos) + "_labels.csv"
+    labelNames = list(pd.read_csv(labelnames_csv_filename, sep="*")['khsName'].values.flatten())
+    labelCounts = list(pd.read_csv(labelnames_csv_filename, sep="*")['total'].values.flatten())
+    labelCounts, idx = sortVec(np.asarray(labelCounts))
+    labelNames = [labelNames[i] for i in idx[0]]
+
+    labelPerc = labelCounts*100 / np.sum(labelCounts)
+    print(labelNames)
+    print(labelCounts)
+    x_tick_int = np.arange(start=0, stop=step_xticks*len(labelNames), step=step_xticks)
+    print(x_tick_int)
+
+    fig, ax = plt.subplots(dpi=480)  # figsize=(step_xticks*len(labelNames)*4, 200)
+    ax.bar(x_tick_int, labelCounts, width=step_xticks*.75, align="center")
+    ax.set_xticks(x_tick_int)
+    plt.xticks(rotation=90)
+    ax.set_xticklabels(labelNames)
+    plt.ylim(0, np.max(labelCounts)+500)
+
+    label_color_loop = ['b', 'm', 'g', 'k']
+    ax.tick_params(axis='x', which='major', pad=20)
+    ax.set_title(title_str)
+
+    for i, c in enumerate(labelNames):
+        im = get_khs_im(labelNames[i], folder_list)
+        if len(im) > 0:
+            offset_image(i*step_xticks, ax, im, zoom)
+        else:
+            print("no image for  - {:s}".format(labelNames[i]))
+        row_int = labelCounts[i]
+        col_int = i*step_xticks
+        color_cur = label_color_loop[np.mod(i, 4)]
+        ax.text(y=row_int, x=i*step_xticks,
+                s=str(row_int) + "(%{:.1f})".format(labelPerc[i]),
+                va='bottom', ha='left', rotation=45,
+                color=color_cur, fontsize=fontsize_cnt)
+        ax.get_xticklabels()[i].set_color(color_cur)
+        ax.get_xticklabels()[i].set_fontsize(fontsize_cnt)
+
+    plt.show()
+    fig.savefig("/home/doga/DataFolder/sup/data/khs_cnt_bar_" + str(nos) + ".png", bbox_inches='tight')
+    plt.close('all')
 
 def confusion_plot(saveConfFigFileName):
 
