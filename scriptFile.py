@@ -1,6 +1,7 @@
 import aeCluster as ae
 import helperFuncs as funcH
 import projRelatedHelperFuncs as prHF
+import modelFuncs as moF
 import importlib as impL
 import numpy as np
 import os
@@ -368,3 +369,52 @@ def change_fold_names(cvVec=[1, 2, 3, 4, 5], uiVec=[2, 3, 4, 5, 6, 7],
                     print(pred_fold_old, "- active")
             else:
                 print(pred_fold_old, "- ?")
+
+def mlp_study_01(dataIdent="hgsk", pca_dim=256, nos=11, validUser=3, epochCnt=10, testUser=2, verbose=2, model_= None):
+    ft, lb, lb_sui = prHF.combine_pca_hospisign_data(dataIdent=dataIdent, pca_dim=pca_dim, nos=nos, verbose=verbose)
+    dl_tr, dl_va, dl_te = prHF.prepare_data_4(ft, lb, lb_sui, validUser=validUser, testUser=testUser, useNZ=False)
+    hidCounts = [128, 64]
+    np.random.seed(0)
+    uniqLabs = np.unique(lb)
+    classCount = len(uniqLabs)
+    print("uniqLabs=", uniqLabs, ", classCount_="+dataIdent, classCount)
+
+    if model_ is None:
+        model_ = moF.MLP(ft.shape[1], hidCounts, classCount)
+
+    accvectr, accvecva, accvecte = model_.train_evaluate_trvate(dl_tr, dl_va, dl_te, epochCnt=epochCnt)
+
+    bestVaID = np.argmax(accvecva)
+    bestTeID = np.argmax(accvecte)
+    formatStr = "5.3f"
+    print(("bestVaID({:" + formatStr + "}),vaAcc({:" + formatStr + "}),teAcc({:" + formatStr + "})").format(bestVaID,accvecva[bestVaID],accvecte[bestVaID]))
+    print(("bestTeID({:" + formatStr + "}),vaAcc({:" + formatStr + "}),teAcc({:" + formatStr + "})").format(bestTeID,accvecva[bestTeID],accvecte[bestTeID]))
+    print(("last, vaAcc({:" + formatStr + "}),teAcc({:" + formatStr + "})").format(accvecva[-1], accvecte[-1]))
+
+def mlp_study_02(dataIdent="hgsk", pca_dim=256, nos=11, validUser=3, epochCnt=10, testUser=2, verbose=2, model_= None):
+    ft, lb, lb_sui = prHF.combine_pca_hospisign_data(dataIdent=dataIdent, pca_dim=pca_dim, nos=nos, verbose=verbose)
+    dl_tr, dl_va, dl_te = prHF.prepare_data_4(ft, lb, lb_sui, validUser=validUser, testUser=testUser, useNZ=False)
+
+    hidStateDict_01 = {"dimOut": 128, "initMode": "kaiming_uniform_", "act": "relu"}
+    hidStateDict_02 = {"dimOut": 64, "initMode": "kaiming_uniform_", "act": "relu"}
+    hidStatesDict = {
+        "01": hidStateDict_01,
+        "02": hidStateDict_02,
+    }
+
+    np.random.seed(0)
+    uniqLabs = np.unique(lb)
+    classCount = len(uniqLabs)
+    print("uniqLabs=", uniqLabs, ", classCount_="+dataIdent, classCount)
+
+    if model_ is None:
+        model_ = moF.MLP_Dict(ft.shape[1], hidStatesDict, classCount)
+
+    accvectr, accvecva, accvecte = model_.train_evaluate_trvate(dl_tr, dl_va, dl_te, epochCnt=epochCnt)
+
+    bestVaID = np.argmax(accvecva)
+    bestTeID = np.argmax(accvecte)
+    formatStr = "5.3f"
+    print(("bestVaID({:" + formatStr + "}),vaAcc({:" + formatStr + "}),teAcc({:" + formatStr + "})").format(bestVaID,accvecva[bestVaID],accvecte[bestVaID]))
+    print(("bestTeID({:" + formatStr + "}),vaAcc({:" + formatStr + "}),teAcc({:" + formatStr + "})").format(bestTeID,accvecva[bestTeID],accvecte[bestTeID]))
+    print(("last, vaAcc({:" + formatStr + "}),teAcc({:" + formatStr + "})").format(accvecva[-1], accvecte[-1]))

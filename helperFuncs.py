@@ -508,6 +508,14 @@ def plotConfMat(_confMat, labels, saveFileName='', iterID=-1, normalizeByAxis=-1
         plt.tight_layout()
         plt.savefig(saveFileName)
 
+def del_rows_cols(x, row_ids, col_ids=np.array([])):
+    if row_ids.size > 0:
+        x = np.delete(x, row_ids, axis=0)
+    if col_ids.size > 0:
+        x = np.delete(x, col_ids, axis=1)
+    x = np.squeeze(x)
+    return x
+
 def plot_confusion_matrix(conf_mat,
                           hide_spines=False,
                           hide_ticks=False,
@@ -519,13 +527,14 @@ def plot_confusion_matrix(conf_mat,
                           class_names=None,
                           add_true_cnt=True,
                           add_pred_cnt=True,
-                          iterID = -1,
-                          add2XLabel = "",
-                          add2YLabel = "",
+                          iterID=-1,
+                          add2XLabel="",
+                          add2YLabel="",
                           saveConfFigFileName='',
                           figMulCnt=None,
                           confusionTreshold=0.3,
-                          rotVal = 30):
+                          show_only_confused=False,
+                          rotVal=30):
     """Plot a confusion matrix via matplotlib.
     Parameters
     -----------
@@ -572,14 +581,49 @@ def plot_confusion_matrix(conf_mat,
                              'classes in the dataset')
 
     if figMulCnt is None:
-        figMulCnt = 0.5 + 0.25*int(show_absolute) + 0.25*int(show_normed)
+        figMulCnt = 0.5 + 0.25 * int(show_absolute) + 0.25 * int(show_normed)
         print("figMulCnt = ", figMulCnt)
     if figsize is None:
-        figsize = ((len(conf_mat))*figMulCnt, (len(conf_mat))*figMulCnt)
+        figsize = ((len(conf_mat)) * figMulCnt, (len(conf_mat)) * figMulCnt)
+
+    acc = np.sum(np.diag(conf_mat)) / np.sum(np.sum(conf_mat))
+
+    x_preds_ids = np.arange(conf_mat.shape[0])
+    y_true_ids = np.arange(conf_mat.shape[1])
 
     total_samples = conf_mat.sum(axis=1)[:, np.newaxis]
     total_preds = conf_mat.sum(axis=0)[:, np.newaxis]
     normed_conf_mat = conf_mat.astype('float') / total_samples
+    total_samples = np.squeeze(total_samples)
+    total_preds = np.squeeze(total_preds)
+
+    if class_names is not None:
+        class_names_x_preds = class_names.copy()
+        class_names_y_true = class_names.copy()
+
+    if show_only_confused:
+        ncm = normed_conf_mat.copy()
+        np.fill_diagonal(ncm, 0)
+        confused_cols = np.squeeze(np.where(np.any(ncm > confusionTreshold, axis=0)))
+        confused_rows = np.squeeze(np.where(np.any(ncm > confusionTreshold, axis=1)))
+        all_rows = np.arange(normed_conf_mat.shape[0])
+        all_cols = np.arange(normed_conf_mat.shape[1])
+        ok_rows = del_rows_cols(all_rows, confused_rows)
+        ok_cols = del_rows_cols(all_cols, confused_cols)
+
+        conf_mat = del_rows_cols(conf_mat, ok_rows, ok_cols)
+        normed_conf_mat = del_rows_cols(normed_conf_mat, ok_rows, ok_cols)
+
+        x_preds_ids = x_preds_ids[confused_cols]
+        y_true_ids = y_true_ids[confused_rows]
+
+        total_samples = del_rows_cols(total_samples, ok_rows)
+        total_preds = del_rows_cols(total_preds, ok_cols)
+        figsize = (conf_mat.shape[0] * figMulCnt, conf_mat.shape[1] * figMulCnt * 2)
+        print("figsize=", figsize)
+        if class_names is not None:
+            class_names_x_preds = class_names_x_preds[confused_cols]
+            class_names_y_true = class_names_y_true[confused_rows]
 
     fig, ax = plt.subplots(figsize=figsize)
     ax.grid(False)
@@ -597,6 +641,9 @@ def plot_confusion_matrix(conf_mat,
     for i in range(conf_mat.shape[0]):
         for j in range(conf_mat.shape[1]):
             cell_text = ""
+            class_name_i = class_names_y_true[i]
+            class_name_j = class_names_x_preds[j]
+
             if show_absolute and conf_mat[i, j] > 0:
                 cell_text += format(conf_mat[i, j], 'd')
                 if show_normed and normed_conf_mat[i, j] > 0.005:
@@ -605,28 +652,29 @@ def plot_confusion_matrix(conf_mat,
             elif conf_mat[i, j] > 0 and normed_conf_mat[i, j] > 0.005:
                 cell_text += format(normed_conf_mat[i, j], '.2f')
 
-            if (i!=j and normed_conf_mat[i, j]>confusionTreshold):
+            if (class_name_i != class_name_j and normed_conf_mat[i, j] > confusionTreshold):
                 text_color = "red"
             elif show_normed:
-                text_color ="white" if normed_conf_mat[i, j] > 0.5 else "black"
+                text_color = "white" if normed_conf_mat[i, j] > 0.5 else "black"
             else:
-                text_color = "white" if conf_mat[i, j] > np.max(conf_mat)/2 else "black"
+                text_color = "white" if conf_mat[i, j] > np.max(conf_mat) / 2 else "black"
             ax.text(x=j, y=i,
                     s=cell_text,
                     va='center', ha='center',
-                    color=text_color)
+                    color=text_color, fontsize='x-large')
     if class_names is not None:
-        tick_marks = np.arange(len(class_names))
-        class_names_x_preds = class_names.copy()
-        class_names_y_true = class_names.copy()
+        tick_marks_x = np.arange(len(class_names_x_preds))
+        tick_marks_y = np.arange(len(class_names_y_true))
         if add_true_cnt:
             for i in range(len(class_names_x_preds)):
-                class_names_x_preds[i] += '\n({:.0f})'.format(total_preds[i, 0])
+                class_names_x_preds[i] = str(x_preds_ids[i]) + '.' + class_names_x_preds[i] + '\n({:.0f})'.format(
+                    total_preds[i])
         if add_pred_cnt:
             for i in range(len(class_names_y_true)):
-                class_names_y_true[i] += '\n({:.0f})'.format(total_samples[i, 0])
-        plt.xticks(tick_marks, class_names_x_preds, rotation=rotVal)
-        plt.yticks(tick_marks, class_names_y_true)
+                class_names_y_true[i] = str(y_true_ids[i]) + '.' + class_names_y_true[i] + '\n({:.0f})'.format(
+                    total_samples[i])
+        plt.xticks(tick_marks_x, class_names_x_preds, rotation=rotVal)
+        plt.yticks(tick_marks_y, class_names_y_true)
 
     if hide_spines:
         ax.spines['right'].set_visible(False)
@@ -639,8 +687,6 @@ def plot_confusion_matrix(conf_mat,
         ax.axes.get_yaxis().set_ticks([])
         ax.axes.get_xaxis().set_ticks([])
 
-    acc = np.sum(np.diag(conf_mat)) / np.sum(np.sum(conf_mat))
-
     if iterID != -1:
         plt.xlabel('Predicted - iter {:03d}'.format(iterID + 1) + ' ' + add2XLabel)
     else:
@@ -649,16 +695,17 @@ def plot_confusion_matrix(conf_mat,
 
     plot_title_str = saveConfFigFileName.split(os.path.sep)[-1]
     plot_title_str = plot_title_str.split('.')[0]
-    plot_title_str += '_accuracy<{:4.2f}>_'.format(acc)
+    plot_title_str += '_accuracy<{:4.2f}>_'.format(100*acc)
     plt.title(plot_title_str[0:-1])
 
     if saveConfFigFileName == '':
         plt.show()
     else:
         plt.tight_layout()
-        saveConfFigFileName = saveConfFigFileName.replace(".", "_acc(" + '{:.0f}'.format(acc*100) + ").")
+        saveConfFigFileName = saveConfFigFileName.replace(".", "_acc(" + '{:.0f}'.format(acc * 100) + ").")
         saveConfFigFileName = saveConfFigFileName.replace(".", "_rot(" + str(rotVal) + ").")
-        saveConfFigFileName = saveConfFigFileName.replace(".", "_ctv(" + '{:.0f}'.format(confusionTreshold*100) + ").")
+        saveConfFigFileName = saveConfFigFileName.replace(".",
+                                                          "_ctv(" + '{:.0f}'.format(confusionTreshold * 100) + ").")
         saveConfFigFileName = saveConfFigFileName.replace(".", "_fmc(" + '{:.2f}'.format(figMulCnt) + ").")
         plt.savefig(saveConfFigFileName)
 
@@ -934,6 +981,48 @@ def countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=None):
 
     return _confMat, kluster2Classes
 
+import pycm
+
+def calc_c_pdf(_confMat, labelNames=None):
+    pycm.ConfusionMatrix
+    c_data = []
+    uniq_labels = np.arange(_confMat.shape[0])
+    sampleCount = np.sum(np.sum(_confMat))
+    trueCnt = np.sum(_confMat, axis=1)
+    predCnt = np.sum(_confMat, axis=0)
+    weightedPrecision = 0
+    weightedRecall = 0
+    weightedF1Score = 0
+    for i in range(0, _confMat.shape[0]):
+        class_cur = uniq_labels[i]
+        #mappedKlusters = getInds(kluster2Classes, class_cur)
+
+        correctCnt = _confMat[class_cur, class_cur]
+        if correctCnt==0:
+            recallCur = 0
+            precisionCur = 0
+            f1Cur = 0
+        else:
+            recallCur = 100 * (correctCnt / trueCnt[class_cur])
+            precisionCur = 100 * (correctCnt / predCnt[class_cur])
+            f1Cur = 2 * ((precisionCur * recallCur) / (precisionCur + recallCur))
+        if isNaN(f1Cur):
+            print("****************************None")
+
+        wp = precisionCur * (trueCnt[class_cur] / sampleCount)
+        wr = recallCur * (trueCnt[class_cur] / sampleCount)
+        wf = f1Cur * ((trueCnt[class_cur]) / (sampleCount))
+
+        weightedPrecision += wp
+        weightedRecall += wr
+        weightedF1Score += wf
+
+        cStr = ["c(" + class_cur + ")" if labelNames is None else labelNames[class_cur]]
+        c_data.append([cStr, correctCnt, precisionCur, recallCur, f1Cur, wp, wr, wf])
+    c_pdf = pd.DataFrame(c_data, columns=['class', '#', '%prec', '%recall', '%f1', '%wp', '%wr', '%wf'])
+    c_pdf.sort_values(by=['%f1', '#'], inplace=True, ascending=[False, False])
+    return c_pdf
+
 def calcCluster2ClassMetrics(labels_true, labels_pred, removeZeroLabels=False, labelNames=None, predictDefStr=""):
     # print("This function gets predictions and real labels")
     # print("also a parameter that says either remove 0 labels or not")
@@ -1079,3 +1168,47 @@ def pad_array(arr):
     M = max(len(a) for a in arr)
     return np.array([np.hstack([a, np.full([M-len(a),], np.nan).squeeze()]) for a in arr])
 
+def reset_labels(allLabels, labelIDs, labelStrings, sortBy=None, verbose=0):
+    labelIDs = np.asarray(labelIDs, dtype=int)
+    if verbose > 1:
+        print("1(reset_labels)-len(allLabels) and type=", allLabels.shape, allLabels.dtype)
+        print("2(reset_labels)-unique(allLabels)=", np.unique(allLabels))
+        print("3(reset_labels)-labelIDs.shape=", labelIDs.shape)
+        print("4(reset_labels)-labelStrings.shape=", labelStrings.shape)
+        print("5(reset_labels)-vstack((labelIDs,labelStrings))\n", np.vstack((labelIDs, labelStrings)).T)
+
+    sortedLabelsMap = pd.DataFrame({'labelIDs': labelIDs, 'labelStrings': labelStrings})
+
+    if sortBy == "name":
+        sort_names_khs = np.argsort(np.argsort(labelStrings))
+        sort_vals = np.argsort(labelStrings)  # sort_names_khs.values
+        di = {labelIDs[i]: int(sort_names_khs[i]) for i in range(len(sort_names_khs))}
+        if verbose > 1:
+            print("5.1(reset_labels)-sort_b_name - sort_names_khs:", sort_names_khs)
+            print("6(reset_labels)-sort_b_name - sort_vals:", sort_vals)
+            print("7(reset_labels)-sort_b_name id map : \n", di)
+    else:
+        sort_to_zero_n = np.argsort(labelIDs)
+        sort_vals = sort_to_zero_n
+        di = {int(labelIDs[i]): int(sort_to_zero_n[i]) for i in range(len(labelIDs))}
+        if verbose > 1:
+            print("6(reset_labels)-sort_b_name - sort_vals:", sort_vals)
+            print("7(reset_labels)-sort_to_zero_n id map : \n", di)
+
+    sortedLabelsAll = pd.DataFrame({"labelIDs":allLabels})
+    sortedLabelsAll["labelIDs"].replace(di, inplace=True)
+    if verbose > 1:
+        print("8.1(reset_labels)-sortedLabelsAll.shape=", sortedLabelsAll.shape)
+        print("8.2(reset_labels)-sortedLabelsMap\n", sortedLabelsMap)
+    sortedLabelsMap["labelIDs"].replace(di, inplace=True)
+    if verbose > 1:
+        print("9(reset_labels)-sortedLabelsMap\n", sortedLabelsMap)
+    sortedLabelsMap["labelIDs"] = [sortedLabelsMap["labelIDs"][sort_vals[i]] for i in range(len(sort_vals))]
+    if verbose > 1:
+        print("10(reset_labels)-sortedLabelsMap\n", sortedLabelsMap)
+    sortedLabelsMap["labelStrings"] = [labelStrings[sort_vals[i]] for i in range(len(sort_vals))]
+    if verbose > 1:
+        print("11(reset_labels)-sortedLabelsMap\n", sortedLabelsMap)
+        print("12(reset_labels)***************************\n")
+
+    return sortedLabelsAll, sortedLabelsMap

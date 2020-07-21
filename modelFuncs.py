@@ -1,10 +1,20 @@
 from keras.models import Model #Sequential
 from keras.layers import Dense, Dropout, Input, GRU, SimpleRNN #LSTM, Activation
-from keras.optimizers import Adam
 from keras.callbacks import EarlyStopping
 import lossFuncs as funcL
-import tensorflow as tf
-from keras import backend as K
+
+from torch.nn import Linear
+from torch.nn import ReLU
+from torch.nn import Module
+from torch.nn.init import kaiming_uniform_
+from torch.nn.init import xavier_uniform_
+from torch.nn import Softmax
+from torch.optim import SGD
+from torch.nn import CrossEntropyLoss
+
+import numpy as np
+from sklearn.metrics import accuracy_score
+
 #nice one
 def createModel(data_dim, modelParams):
     posterior_dim = modelParams["posterior_dim"]
@@ -110,3 +120,230 @@ def initialize_RNN_Parameters(valuesParamsCur, dvSetParamsCur):
         assert (rnnDataMode == 0), "rnnDataMode(" + str(rnnDataMode) + ") must be 0"
 
     return valuesParamsCur, dvSetParamsCur
+
+class MLP(Module):
+    # define model elements
+    def __init__(self, dim_of_input, hidCounts, classCount):
+        super(MLP, self).__init__()
+        # input to first hidden layer
+        self.hidden1 = Linear(dim_of_input, hidCounts[0])
+        kaiming_uniform_(self.hidden1.weight, nonlinearity='relu')
+        self.act1 = ReLU()
+        # second hidden layer
+        self.hidden2 = Linear(hidCounts[0], hidCounts[1])
+        kaiming_uniform_(self.hidden2.weight, nonlinearity='relu')
+        self.act2 = ReLU()
+        # third hidden layer and output
+        self.hidden3 = Linear(hidCounts[1], classCount)
+        xavier_uniform_(self.hidden3.weight)
+        #self.act3 = Softmax(dim=1)
+
+    # forward propagate input
+    def forward(self, X):
+        # input to first hidden layer
+        X = self.hidden1(X)
+        X = self.act1(X)
+        # second hidden layer
+        X = self.hidden2(X)
+        X = self.act2(X)
+        # output layer
+        X = self.hidden3(X)
+        #X = self.act3(X)
+        return X
+
+    # train the model
+    def train_model(self, train_dl, epochCnt=500):
+        # define the optimization
+        criterion = CrossEntropyLoss()
+        optimizer = SGD(self.parameters(), lr=0.01, momentum=0.9)
+        # enumerate epochs
+        for epoch in range(epochCnt):
+            # enumerate mini batches
+            for i, (inputs, targets) in enumerate(train_dl):
+                # clear the gradients
+                optimizer.zero_grad()
+                # compute the model output
+                yhat = self.forward(inputs)
+                # calculate loss
+                loss = criterion(yhat, targets)
+                # credit assignment
+                loss.backward()
+                # update model weights
+                optimizer.step()
+
+    # evaluate the model
+    def evaluate_model(self, test_dl):
+        predictions, actuals = list(), list()
+        sm = Softmax(dim=1)
+        for i, (inputs, targets) in enumerate(test_dl):
+            # evaluate the model on the test set
+            yhat = self.forward(inputs)
+            yhat = sm(yhat)
+            # retrieve numpy array
+            yhat = yhat.detach().numpy()
+            actual = targets.numpy()
+            # convert to class labels
+            yhat = np.argmax(yhat, axis=1)
+            # reshape for stacking
+            actual = actual.reshape((len(actual), 1))
+            yhat = yhat.reshape((len(yhat), 1))
+            # store
+            predictions.append(yhat)
+            actuals.append(actual)
+        predictions, actuals = np.vstack(predictions), np.vstack(actuals)
+        # calculate accuracy
+        acc = accuracy_score(actuals, predictions)
+        return acc
+
+    def train_evaluate_trvate(self, train_dl, valid_dl, test_dl, epochCnt=500):
+        # define the optimization
+        criterion = CrossEntropyLoss()
+        optimizer = SGD(self.parameters(), lr=0.01, momentum=0.9)
+        # enumerate epochs
+        accvectr = np.zeros(epochCnt)
+        accvecva = np.zeros(epochCnt)
+        accvecte = np.zeros(epochCnt)
+        for epoch in range(epochCnt):
+            # enumerate mini batches
+            for i, (inputs, targets) in enumerate(train_dl):
+                # clear the gradients
+                optimizer.zero_grad()
+                # compute the model output
+                yhat = self.forward(inputs)
+                # calculate loss
+                loss = criterion(yhat, targets)
+                # credit assignment
+                loss.backward()
+                # update model weights
+                optimizer.step()
+            acc_tr = self.evaluate_model(train_dl)
+            acc_va = self.evaluate_model(valid_dl)
+            acc_te = self.evaluate_model(test_dl)
+            print("epoch ", epoch, "tr: %.3f" % acc_tr, "va: %.3f" % acc_va, "te: %.3f" % acc_te)
+            accvectr[epoch] = acc_tr
+            accvecva[epoch] = acc_va
+            accvecte[epoch] = acc_te
+        return accvectr, accvecva, accvecte
+
+class MLP_Dict(Module):
+    # define model elements
+    def __init__(self, dim_of_input, dict_hidStates, classCount):
+
+        super(MLP_Dict, self).__init__()
+
+        # first fetch the hidden state variables as keys
+        keys = [key for key, value in dict_hidStates.items()]
+        print(keys)
+        keysSorted = np.sort(keys)
+
+        self.dim_of_input = dim_of_input
+        self.classCount = classCount
+        self.keysSorted = keysSorted
+        self.dict_hidStates = dict_hidStates
+        self.initialize_net()
+
+    def initialize_net(self):
+        i = 0
+        dim_in = self.dim_of_input
+        for k in self.keysSorted:
+            i = i + 1
+            actFun = self.dict_hidStates[k]['act']
+            dim_out = self.dict_hidStates[k]['dimOut']
+            initMode = self.dict_hidStates[k]['initMode']
+            print(i, k, initMode, dim_out, actFun)
+
+            print("  self.{:s} = Linear({:d}, {:d})".format("hidden" + str(i), dim_in, dim_out))
+            setattr(self, "hidden" + str(i), Linear(dim_in, dim_out))
+
+            print("  kaiming_uniform_(self.{:s}.weight,nonlinearity={:s})".format("hidden" + str(i), actFun))
+            kaiming_uniform_(getattr(self, "hidden" + str(i)).weight, nonlinearity=actFun)
+
+            print("  self.{:s} = ReLU()".format("act" + str(i)))
+            setattr(self, "act" + str(i), ReLU())
+
+            dim_in = dim_out
+
+        print("  self.finalLayer = Linear({:d},{:d})".format(dim_in, self.classCount))
+        self.finalLayer = Linear(dim_in, self.classCount)
+        xavier_uniform_(getattr(self, "hidden" + str(i)).weight)
+
+    def forward(self, X):
+        for i in range(len(self.keysSorted)):
+            fhid = getattr(self, "hidden" + str(i+1))
+            fact = getattr(self, "act" + str(i+1))
+            X = fhid(X)
+            X = fact(X)
+        X = self.finalLayer(X)
+        return X
+
+    def train_model(self, train_dl, epochCnt=500):
+        # define the optimization
+        criterion = CrossEntropyLoss()
+        optimizer = SGD(self.parameters(), lr=0.01, momentum=0.9)
+        # enumerate epochs
+        for epoch in range(epochCnt):
+            # enumerate mini batches
+            for i, (inputs, targets) in enumerate(train_dl):
+                # clear the gradients
+                optimizer.zero_grad()
+                # compute the model output
+                yhat = self.forward(inputs)
+                # calculate loss
+                loss = criterion(yhat, targets)
+                # credit assignment
+                loss.backward()
+                # update model weights
+                optimizer.step()
+
+    def evaluate_model(self, test_dl):
+        predictions, actuals = list(), list()
+        sm = Softmax(dim=1)
+        for i, (inputs, targets) in enumerate(test_dl):
+            # evaluate the model on the test set
+            yhat = self.forward(inputs)
+            yhat = sm(yhat)
+            # retrieve numpy array
+            yhat = yhat.detach().numpy()
+            actual = targets.numpy()
+            # convert to class labels
+            yhat = np.argmax(yhat, axis=1)
+            # reshape for stacking
+            actual = actual.reshape((len(actual), 1))
+            yhat = yhat.reshape((len(yhat), 1))
+            # store
+            predictions.append(yhat)
+            actuals.append(actual)
+        predictions, actuals = np.vstack(predictions), np.vstack(actuals)
+        # calculate accuracy
+        acc = accuracy_score(actuals, predictions)
+        return acc
+
+    def train_evaluate_trvate(self, train_dl, valid_dl, test_dl, epochCnt=500):
+        # define the optimization
+        criterion = CrossEntropyLoss()
+        optimizer = SGD(self.parameters(), lr=0.01, momentum=0.9)
+        # enumerate epochs
+        accvectr = np.zeros(epochCnt)
+        accvecva = np.zeros(epochCnt)
+        accvecte = np.zeros(epochCnt)
+        for epoch in range(epochCnt):
+            # enumerate mini batches
+            for i, (inputs, targets) in enumerate(train_dl):
+                # clear the gradients
+                optimizer.zero_grad()
+                # compute the model output
+                yhat = self.forward(inputs)
+                # calculate loss
+                loss = criterion(yhat, targets.squeeze_())
+                # credit assignment
+                loss.backward()
+                # update model weights
+                optimizer.step()
+            acc_tr = self.evaluate_model(train_dl)
+            acc_va = self.evaluate_model(valid_dl)
+            acc_te = self.evaluate_model(test_dl)
+            print("epoch ", epoch, "tr: %.3f" % acc_tr, "va: %.3f" % acc_va, "te: %.3f" % acc_te)
+            accvectr[epoch] = acc_tr
+            accvecva[epoch] = acc_va
+            accvecte[epoch] = acc_te
+        return accvectr, accvecva, accvecte

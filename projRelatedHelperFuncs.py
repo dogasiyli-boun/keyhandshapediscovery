@@ -12,6 +12,8 @@ import time
 import datetime
 from sklearn.metrics import confusion_matrix
 
+from torch.utils.data import DataLoader
+
 def createExperimentName(trainParams, modelParams, rnnParams):
 
     pcaCountStr = str(modelParams["pcaCount"]) if modelParams["pcaCount"] > 0 else "Feats"
@@ -789,7 +791,7 @@ def plot_supervised_results(fold_name, model_name="resnet18", random_seed=1, nos
             file2read = os.path.join(fold_name, file_name)
             try:
                 featsMat = pd.read_csv(file2read, header=0, sep="*", names=["epoch", "train", "validation", "test"])
-                max_val = np.max(featsMat["test"].values[:29])
+                max_val = np.max(featsMat["test"].values[:])
                 acc_list["ep"].append(featsMat["epoch"].values[:])
                 acc_list["tr"].append(featsMat["train"].values[:])
                 acc_list["va"].append(featsMat["validation"].values[:])
@@ -931,3 +933,259 @@ def sup_res_confusion_run(fold_name, model_name="resnet18", random_seed=1, nos=1
             conf_worst["te"] = conf_mat_update(conf_worst["te"], _confMat_tes, op_name="worst_cell")
 
             # plot conf_worst, conf_std, conf_best for each tr/va/te as sub plots
+
+def get_label_names_resnet(te_u_id=6, cv_id=1, nos=11, ep=59, model="resnet18",
+                           pred_fold_base="/home/doga/DataFolder/sup"):
+    pred_fold_cur = "preds_" + model + os.path.sep + "pred_te" + str(te_u_id) + "_cv" + str(
+        cv_id) + "_" + model + "_neuralNetHandImages_nos" + str(nos) + "_rs224_rs01"
+    pred_file = "ep{:03d}.npy".format(ep)
+    predFileName = os.path.join(pred_fold_base, pred_fold_cur, pred_file)
+
+    X = np.load(predFileName, allow_pickle=True)
+    la_tr, pr_tr = X.item().get('labels_tra'), X.item().get('pred_tra')
+    la_va, pr_va = X.item().get('labels_val'), X.item().get('pred_val')
+    la_te, pr_te = X.item().get('labels_tes'), X.item().get('pred_tes')
+
+    csv_fold = os.path.join(pred_fold_base, "data",
+                            "data_te" + str(te_u_id) + "_cv" + str(cv_id) + "_neuralNetHandImages_nos" + str(
+                                nos) + "_rs224_rs01")
+    csv_fname = "cnt_table_te" + str(te_u_id) + "_cv" + str(cv_id) + "_resnet18neuralNetHandImages_nos" + str(
+        nos) + "_rs224.csv"
+    csv_fall = os.path.join(csv_fold, csv_fname)
+    cnt_csv = pd.read_csv(csv_fall, header=0, names=["khsnames", "train", "validation", "test", "total"])
+    labelNames = cnt_csv["khsnames"].values[:-1].copy()
+    khs_cnt_vec_csv_tr = cnt_csv["train"].values[:-1].copy()
+    khs_cnt_vec_csv_va = cnt_csv["validation"].values[:-1].copy()
+    khs_cnt_vec_csv_te = cnt_csv["test"].values[:-1].copy()
+
+    conf_mat_tr = confusion_matrix(la_tr, pr_tr)
+    khs_cnt_vec_conf_tr = np.sum(conf_mat_tr, axis=1)
+    conf_mat_te = confusion_matrix(la_te, pr_te)
+    khs_cnt_vec_conf_te = np.sum(conf_mat_te, axis=1)
+    conf_mat_va = confusion_matrix(la_va, pr_va)
+    khs_cnt_vec_conf_va = np.sum(conf_mat_va, axis=1)
+
+    i = 0
+    khsNamesMatchInds = np.zeros(khs_cnt_vec_conf_tr.shape, dtype=int)
+    for i in range(0, np.size(khs_cnt_vec_conf_tr)):
+        cnt_co_tr = khs_cnt_vec_conf_tr[i]
+        cnt_co_te = khs_cnt_vec_conf_te[i]
+        cnt_co_va = khs_cnt_vec_conf_va[i]
+        # these counts should match the csv counts
+        result = np.where(
+            ((khs_cnt_vec_csv_tr == cnt_co_tr) & (khs_cnt_vec_csv_va == cnt_co_va) & (khs_cnt_vec_csv_te == cnt_co_te)))
+        #print(labelNames[result[0][0]], result[0], cnt_co_tr, cnt_co_va, cnt_co_te, np.size(result[0]))
+        khsNamesMatchInds[i] = result[0][0]
+        khs_cnt_vec_csv_tr[result[0][0]] = -1
+        khs_cnt_vec_csv_va[result[0][0]] = -1
+        khs_cnt_vec_csv_te[result[0][0]] = -1
+        i = i + 1
+    labelNamesNew = labelNames[khsNamesMatchInds]
+    conf_mat = {"tr": conf_mat_tr,
+                "te": conf_mat_te,
+                "va": conf_mat_va, }
+    return labelNamesNew, conf_mat
+
+def prepare_data_4(X, y, detailedLabels, validUser, testUser):
+    print("y.dtype=", type(y))
+    y = np.asarray(y, dtype=int)
+    uniqLabels = np.unique(y)
+    #print("uniqLabels=", uniqLabels)
+    #print("uniqLabels2=", np.unique(detailedLabels[:, 2]))
+
+    tr_inds = np.array([], dtype=int)
+    va_inds = np.array([], dtype=int)
+    te_inds = np.array([], dtype=int)
+    empty_test_classes = {}
+    empty_validation_classes = {}
+    for label in uniqLabels:
+        inds = funcH.getInds(y, label)
+        cnt = len(inds)
+
+        #print("label=", label, ", inds=", inds, ", cnt=", cnt)
+        #print("detailedLabels=", detailedLabels[inds, :])
+        if cnt > 0:
+            # userid = testUser to test
+            # userid = validUser to valid
+            # others to train
+            userIDs = detailedLabels[inds, 1]
+            #print("unique userIDs = ", np.unique(userIDs))
+            teIDs = funcH.getInds(userIDs, testUser)
+            if teIDs.shape[0] > 0:
+                teIndsCur = inds[teIDs]
+                te_inds = np.concatenate((te_inds, teIndsCur))
+            else:
+                teIndsCur = []
+                empty_test_classes[label] = 1
+
+            vaIDs = funcH.getInds(userIDs, validUser)
+            if vaIDs.shape[0] > 0:
+                vaIndsCur = inds[vaIDs]
+                va_inds = np.concatenate((va_inds, vaIndsCur))
+            else:
+                vaIndsCur = []
+                empty_validation_classes[label] = 1
+
+            # print("label=",label,", teIDs=", teIDs.shape)
+            # print("label=",label,", vaIDs=", vaIDs.shape)
+
+            usedInds = np.squeeze(np.concatenate((teIDs, vaIDs)))
+            # print("label=",label,", usedInds=", usedInds.shape)
+
+            allInds = np.arange(0, len(inds))
+            trIDs = np.delete(allInds, usedInds)
+            trIndsCur = inds[trIDs]
+            tr_inds = np.concatenate((tr_inds, trIndsCur))
+
+            trCnt = len(trIndsCur)
+            vaCnt = len(vaIndsCur)
+            teCnt = len(teIndsCur)
+
+            if cnt != trCnt + vaCnt + teCnt:
+                print("xxxxxx cnt all = ", cnt, "!=", trCnt + vaCnt + teCnt)
+            print("label(", label, "),cnt(", cnt, "),trCnt(", trCnt, "),vaCnt(", vaCnt, "),teCnt(", teCnt, ")")
+    print("len train = ", len(tr_inds))
+    print("len valid = ", len(va_inds))
+    print("len test = ", len(te_inds))
+    print("len all = ", len(y), "=", len(tr_inds) + len(va_inds) + len(te_inds))
+
+    print("empty_test_classes", empty_test_classes)
+    print("empty_validation_classes", empty_validation_classes)
+
+    dataset_tr = funcD.HandCraftedDataset("", X=X[tr_inds, :], y=y[tr_inds])
+    train_dl = DataLoader(dataset_tr, batch_size=32, shuffle=True)
+    dataset_va = funcD.HandCraftedDataset("", X=X[va_inds, :], y=y[va_inds])
+    valid_dl = DataLoader(dataset_va, batch_size=1024, shuffle=False)
+    dataset_te = funcD.HandCraftedDataset("", X=X[te_inds, :], y=y[te_inds])
+    test_dl = DataLoader(dataset_te, batch_size=1024, shuffle=False)
+
+    return train_dl, valid_dl, test_dl
+
+def get_hospisign_labels(nos=11, sortBy=None, verbose=0):
+    base_dir = funcH.getVariableByComputerName('base_dir')
+    baseFold = os.path.join(base_dir, "neuralNetHandImages_nos" + str(nos) + "_rs224", "imgs")
+    list_dict_file = os.path.join(baseFold, "list_dict.txt")
+    a = pd.read_csv(list_dict_file, delimiter="*", header=None,
+                    names=["sign", "user", "rep", "frameID", "khsID", "khsName", "hand"])
+    b, uniqKHSinds = np.unique(np.asarray(a["khsID"]), return_index=True)
+    labelsAll = np.asarray(a["khsID"], dtype=int)
+    namesAll = np.asarray(a["khsName"])
+
+    labels_sui = np.squeeze(np.asarray(a[["sign", "user", "khsID"]]))
+    # get sort index first
+    assignedKHSinds = labelsAll[uniqKHSinds]
+    selectedKHSnames = np.array([str(np.char.strip(n)) for n in namesAll[uniqKHSinds]])
+
+    if verbose > 1:
+        print(labelsAll.shape, labelsAll.dtype)
+    sortedLabelsAll, sortedLabelsMap = funcH.reset_labels(labelsAll, assignedKHSinds, selectedKHSnames, sortBy=sortBy,
+                                                          verbose=verbose)
+    if verbose > 1:
+        print("sortedLabelsAll:\n", sortedLabelsAll.head())
+        print("sortedLabelsMap:\n", sortedLabelsMap)
+        print(labels_sui.shape, labels_sui.dtype)
+    labels_sui[:, 2] = np.squeeze(np.array(sortedLabelsAll))
+
+    hospisign_labels = {
+        "labels": sortedLabelsAll,
+        "labels_sui": labels_sui,
+        "khsInds": sortedLabelsMap["labelIDs"],
+        "khsNames": sortedLabelsMap["labelStrings"],
+        "label_map": np.vstack((sortedLabelsMap["labelIDs"], sortedLabelsMap["labelStrings"])).T
+    }
+
+    return hospisign_labels
+
+def get_hospisign_feats(nos=11, labelsSortBy=None, verbose=0):
+    base_dir = funcH.getVariableByComputerName('base_dir')
+    baseFold = os.path.join(base_dir, "neuralNetHandImages_nos" + str(nos) + "_rs224", "imgs")
+    hogMat = os.path.join(baseFold, "hog_10_9.mat")
+    skelMat = os.path.join(baseFold, "skel.mat")
+    snMat = os.path.join(baseFold, "sn.mat")
+
+    hg_ft = funcH.loadMatFile(hogMat)
+    sn_ft = funcH.loadMatFile(snMat)
+    sk_ft = funcH.loadMatFile(skelMat)
+
+    hg_ft = hg_ft['hogImArr']
+    sn_ft = sn_ft['mat2sa']
+    sk_ft = sk_ft['mat2sa']
+
+    if verbose > 0:
+        print("hog = ", hg_ft.shape, hg_ft.dtype)
+        print("surfNorm = ", sn_ft.shape, sn_ft.dtype)
+        print("skeleton = ", sk_ft.shape, sk_ft.dtype)
+
+    hospisign_labels = get_hospisign_labels(nos=nos, sortBy=labelsSortBy)
+    labels = hospisign_labels["labels"]
+    labels_sui = hospisign_labels["labels_sui"]
+    label_map = hospisign_labels["label_map"]
+
+    if verbose > 0:
+        print("labels_sui = ", labels_sui.shape, labels_sui.dtype)
+        print("labels = ", labels.shape, labels.dtype)
+    ft = {
+        "hg": hg_ft,
+        "sn": sn_ft,
+        "sk": sk_ft,
+    }
+    lab = {
+        "labels_sui": labels_sui,
+        "labels": labels,
+        "label_map": label_map,
+    }
+    return ft, lab
+
+def combine_pca_hospisign_data(dataIdent, pca_dim=256, nos=11, verbose=2):
+    ft, lab = get_hospisign_feats(nos=nos, verbose=verbose)
+
+    print('hg_ft.shape = ', ft["hg"].shape)
+    print('sn_ft.shape = ', ft["sn"].shape)
+    print('sk_ft.shape = ', ft["sk"].shape)
+
+    print("hg - min(", ft["hg"].min(), "), max(", ft["hg"].max(), ")")
+    print("sn - min(", ft["sn"].min(), "), max(", ft["sn"].max(), ")")
+    print("sk - min(", ft["sk"].min(), "), max(", ft["sk"].max(), ")")
+
+    nan_sk, nan_sn, nan_hg = list(), list(), list()
+    for i in range(ft["sk"].shape[0]):
+        if (np.isnan(ft["sk"][i]).any()):
+            nan_sk.append(i)
+            ft["sk"][i] = np.zeros(ft["sk"][i].shape)  # print(i,":",ft["sk"][i]) #print(ft["sk"][i].shape)
+        if (np.isnan(ft["sn"][i]).any()):
+            nan_sn.append(i)
+            ft["sn"][i] = np.zeros(ft["sn"][i].shape)  # print(i,":",ft["sn"][i]) #print(ft["sn"][i].shape)
+        if (np.isnan(ft["hg"][i]).any()):
+            nan_hg.append(i)
+            ft["hg"][i] = np.zeros(ft["hg"][i].shape)  # print(i,":",ft["hg"][i]) #print(ft["hg"][i].shape)
+
+    if nan_hg:
+        nan_hg = np.squeeze(np.vstack(nan_hg))
+        print("nan_hg: ", nan_hg)
+    if nan_sn:
+        nan_sn = np.squeeze(np.vstack(nan_sn))
+        print("nan_sn: ", nan_sn)
+    if nan_sk:
+        nan_sk = np.squeeze(np.vstack(nan_sk))
+        print("nan_sk: ", nan_sk)
+
+    if (dataIdent == "hog" or dataIdent == "hg"):
+        feats = ft["hg"]
+    elif (dataIdent == "skeleton" or dataIdent == "sk"):
+        feats = ft["sk"]
+    elif (dataIdent == "snv" or dataIdent == "sn"):
+        feats = ft["sn"]
+    elif (dataIdent == "hgsk"):
+        feats = np.concatenate([ft["hg"].T, ft["sk"].T]).T
+    elif (dataIdent == "hgsn"):
+        feats = np.concatenate([ft["hg"].T, ft["sn"].T]).T
+    elif (dataIdent == "snsk"):
+        feats = np.concatenate([ft["sn"].T, ft["sk"].T]).T
+    elif (dataIdent == "hgsnsk"):
+        feats = np.concatenate([ft["hg"].T, ft["sn"].T, ft["sk"].T]).T
+
+    feats_pca, exp_var_rat = funcH.applyMatTransform(feats, applyPca=True, whiten=True, normMode="", verbose=verbose)
+    feats = feats_pca[:, 0:pca_dim]
+    print(dataIdent, '.shape = ', feats.shape)
+
+    return feats, lab["labels"], lab["labels_sui"], lab["label_map"]
