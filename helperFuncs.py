@@ -164,7 +164,7 @@ def removeConfMatUnnecessaryRows(_confMat):
 
 def getVariableByComputerName(variableName):
     curCompName = socket.gethostname()
-    if variableName=='base_dir':
+    if variableName == 'base_dir':
         if curCompName == 'doga-MSISSD':
             base_dir = '/media/doga/SSD258/DataPath'  # for bogazici kasa
         elif curCompName == 'WsUbuntu05':
@@ -174,7 +174,17 @@ def getVariableByComputerName(variableName):
         else:
             base_dir = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
         retVal = base_dir
-    if variableName=='data_dir':
+    if variableName == 'desktop_dir':
+        if curCompName == 'doga-MSISSD':
+            desktop_dir = '/media/doga/Desktop'  # for bogazici kasa
+        elif curCompName == 'WsUbuntu05':
+            desktop_dir = '/media/dg/Desktop'  # for WS Doga DHO
+        elif curCompName == 'doga-msi-ubu':
+            desktop_dir = '/home/doga/Desktop'  # for laptop
+        else:
+            desktop_dir = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
+        retVal = desktop_dir
+    if variableName == 'data_dir':
         if curCompName == 'doga-MSISSD':
             data_dir = '/media/doga/SSD258/DataPath/bdData'  # for bogazici kasa
         elif curCompName == 'WsUbuntu05':
@@ -184,7 +194,7 @@ def getVariableByComputerName(variableName):
         else:
             data_dir = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
         retVal = data_dir
-    if variableName=='results_dir':
+    if variableName == 'results_dir':
         if curCompName == 'doga-MSISSD':
             results_dir = '/media/doga/SSD258/DataPath/bdResults'  # for bogazici kasa
         elif curCompName == 'WsUbuntu05':
@@ -203,6 +213,33 @@ def createDirIfNotExist(dir2create):
 def normalize(x, axis=None):
     x = x / np.linalg.norm(x, axis=axis)
     return x
+
+def softmax(x):
+    """Compute softmax values for each sets of scores in x."""
+    e_x = np.exp(x - np.max(x))
+    return e_x / e_x.sum(axis=0) # only difference
+
+def normalize2(featVec, normMode, axis=0):
+    if normMode == 'nm':
+        if axis==0:
+            featVec = featVec - np.min(featVec, axis=0)
+            featVec = featVec / np.max(featVec, axis=0)  # divide per column max
+        else:
+            featVec = featVec.T
+            featVec = featVec - np.min(featVec, axis=0)
+            featVec = featVec / np.max(featVec, axis=0)  # divide per column max
+            featVec = featVec.T
+    elif normMode == 'ns':
+        if axis==0:
+            featVec = featVec / np.sum(featVec, axis=0)  # divide per column sum
+        else:
+            featVec = (featVec.T / np.sum(featVec.T, axis=0)).T  # divide per column sum
+    elif normMode == 'softmax':
+        if axis==0:
+            featVec = softmax(featVec)
+        else:
+            featVec = softmax(featVec.T).T
+    return featVec
 
 def discretizeW(W, printAssignments=False):
     rows2ColAssignments = np.argmax(W, axis=1) + 1
@@ -515,6 +552,127 @@ def del_rows_cols(x, row_ids, col_ids=np.array([])):
         x = np.delete(x, col_ids, axis=1)
     x = np.squeeze(x)
     return x
+
+def calcConfusionStatistics(confMat, categoryNames=None, selectedCategories=None, verbose=0, data_frame_keys=None):
+    # https://en.wikipedia.org/wiki/Confusion_matrix
+    # confMat-rows are actual(true) classes
+    # confMat-cols are predicted classes
+
+    # for all categories a confusion matrix can be re-arranged per category,
+    # for example for category "i";
+    # ----------  -----------------------------
+    # TP | FN |  |      TP     | Type2 Error |
+    # FP | TN |  | Type1 Error |      TN     |
+    # ----------  -----------------------------
+    # --------------------------------------------------------------------------
+    #       c_i is classified as ci         |  c_i are classified as non-ci   |
+    # other classes falsly predicted as c_i | non-c_i is classified as non-ci |
+    # --------------------------------------------------------------------------
+    # TP : true positive - c_i is classified as ci
+    # FN : false negative - c_i are classified as non-ci
+    # FP : false positive - other classes falsly predicted as c_i
+    # TN : true negative - non-c_i is classified as non-ci
+    categoryCount = confMat.shape[1]
+    if categoryCount != confMat.shape[1]:
+        print('problem with confusion matrix')
+        return
+
+    if selectedCategories is not None and len(selectedCategories) != 0:
+        selectedCategories = selectedCategories[np.argwhere(selectedCategories <= categoryCount)]
+    else:
+        selectedCategories = np.arange(0, categoryCount)
+
+    categoryCount = len(selectedCategories);
+
+    if verbose > 2:
+        print('Columns of confusion mat is predictions, rows are ground truth.')
+
+    confMatStats = {}
+    sampleCounts_All = np.sum(confMat, axis=1)
+    totalCountOfAll = np.sum(sampleCounts_All)
+    if verbose > 0:
+        print("sampleCounts_All : \n", sampleCounts_All)
+        print("selectedCategories : \n", selectedCategories)
+
+    for i in range(categoryCount):
+        c = selectedCategories[i]
+
+        totalPredictionOfCategory = np.sum(confMat[:, c], axis=0)
+        totalCountOfCategory = sampleCounts_All[c]
+
+        TP = confMat[c, c]
+        FN = totalPredictionOfCategory - TP
+        FP = totalCountOfCategory - TP
+        TN = totalCountOfAll - (TP + FN + FP)
+
+        ACC = (TP + TN) / totalCountOfAll  # accuracy
+        TPR = TP / (TP + FN)  # true positive rate, sensitivity
+        TNR = TN / (FP + TN)  # true negative rate, specificity
+        PPV = TP / (TP + FP)  # positive predictive value, precision
+        NPV = TN / (TN + FN)  # negative predictive value
+        FPR = FP / (FP + TN)  # false positive rate, fall out
+        FDR = FP / (FP + TP)  # false discovery rate
+        FNR = FN / (FN + TP)  # false negative rate, miss rate
+
+        F1 = (2 * TP) / (2 * TP + FP + FN)  # harmonic mean of precision and sensitivity
+        MCC = (TP * TN - FP * FN) / np.sqrt(
+            (TP + FP) * (TP + FN) * (TN + FP) * (TN + FN))  # matthews correlation coefficient
+        INFORMEDNESS = TPR + TNR - 1
+        MARKEDNESS = PPV + NPV - 1
+
+        #
+        c_stats = {
+            "totalCountOfAll": totalCountOfAll,
+            "totalCountOfCategory": totalCountOfCategory,
+            "totalPredictionOfCategory": totalPredictionOfCategory,
+
+            "TruePositive": TP,
+            "FalseNegative": FN,
+            "FalsePositive": FP,
+            "TrueNegative": TN,
+
+            "Accuracy": ACC,
+            "Sensitivity": TPR,
+            "Specificity": TNR,
+            "Precision": PPV,
+            "Negative_Predictive_Value": NPV,
+            "False_Positive_Rate": FPR,
+            "False_Discovery_Rate": FDR,
+            "False_Negative_Rate": FNR,
+
+            "F1_Score": F1,
+            "Matthews_Correlation_Coefficient": ACC,
+            "Informedness": INFORMEDNESS,
+            "Markedness": MARKEDNESS,
+        }
+
+        if categoryNames is None:
+            categoryName = str(i).zfill(2)
+        else:
+            categoryName = categoryNames[c]
+        confMatStats[categoryName] = c_stats
+
+
+    if data_frame_keys is None:
+        data_frame_keys = ["F1_Score", "totalCountOfCategory"]
+
+    # df_slctd = {}
+    # for dfk in data_frame_keys:
+    #     kmkm = [[k, confMatStats[k][dfk]] for k in confMatStats.keys()]
+    #     df_slctd[dfk] = pd.DataFrame({"khsName": np.asarray(kmkm)[:, 0], dfk: np.asarray(kmkm)[:, 1]})
+    #     print("\n**\nkey-", dfk, ":\n", df_slctd[dfk])
+    df_slctd_table = pd.DataFrame({"khsName": [k for k in confMatStats.keys()]})
+    for dfk in data_frame_keys:
+        df_add = pd.DataFrame({dfk: [confMatStats[k][dfk] for k in confMatStats.keys()]})
+        df_slctd_table = pd.concat([df_slctd_table, df_add], axis=1)
+
+    if verbose > 0:
+        print("\n**\nfinal df_slctd_table-\n", df_slctd_table)
+
+    if categoryCount == 1:
+        confMatStats = confMatStats[selectedCategories, 1]
+
+    return confMatStats, df_slctd_table
 
 def plot_confusion_matrix(conf_mat,
                           hide_spines=False,
@@ -981,10 +1139,9 @@ def countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=None):
 
     return _confMat, kluster2Classes
 
-import pycm
-
 def calc_c_pdf(_confMat, labelNames=None):
-    pycm.ConfusionMatrix
+    #import pycm
+    #pycm.ConfusionMatrix
     c_data = []
     uniq_labels = np.arange(_confMat.shape[0])
     sampleCount = np.sum(np.sum(_confMat))

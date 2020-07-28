@@ -11,6 +11,7 @@ import matplotlib as plt
 import time
 import datetime
 from sklearn.metrics import confusion_matrix
+from collections import Counter
 
 from torch.utils.data import DataLoader
 
@@ -1086,12 +1087,39 @@ def get_hospisign_labels(nos=11, sortBy=None, verbose=0):
         print(labels_sui.shape, labels_sui.dtype)
     labels_sui[:, 2] = np.squeeze(np.array(sortedLabelsAll))
 
+    lb_map = np.vstack((sortedLabelsMap["labelIDs"], sortedLabelsMap["labelStrings"])).T
+
+    x = Counter(np.squeeze(labelsAll).astype(int))
+
+    khsCntVec = [v for k, v in x.most_common()]
+    khsIndex = [k for k, v in x.most_common()]
+    if verbose > 2:
+        print("x:\n", x)
+        khsNameCol = [str(np.squeeze(lb_map[np.where(lb_map[:, 0] == k), 1])) for k, v in x.most_common()]
+        print("khsNameCol:\n", khsNameCol)
+        print("khsCntVec:\n", khsCntVec)
+        print("khsIndex:\n", khsIndex)
+    khsCntCol = np.asarray(khsCntVec)[np.argsort(khsIndex)]
+    if verbose > 2:
+        print("khsCntVec(sorted accordingly):\n", khsCntCol)
+
+    lb_map_new = pd.DataFrame({"khsID": lb_map[:, 0], "khsName": lb_map[:, 1], "khsCnt": khsCntCol})
+    lb_map_cnt = lb_map_new.sort_values(by='khsCnt', ascending=False)
+    lb_map_id = lb_map_new.sort_values(by='khsID', ascending=True)
+    lb_map_name = lb_map_new.sort_values(by='khsName', ascending=True)
+    if verbose > 1:
+        print("lb_map_cnt=\n", lb_map_cnt)
+        print("lb_map_id=\n", lb_map_id)
+        print("lb_map_name=\n", lb_map_name)
+
     hospisign_labels = {
         "labels": sortedLabelsAll,
         "labels_sui": labels_sui,
         "khsInds": sortedLabelsMap["labelIDs"],
         "khsNames": sortedLabelsMap["labelStrings"],
-        "label_map": np.vstack((sortedLabelsMap["labelIDs"], sortedLabelsMap["labelStrings"])).T
+        "label_map": lb_map_id,
+        "label_map_cnt": lb_map_cnt,
+        "label_map_name": lb_map_name,
     }
 
     return hospisign_labels
@@ -1123,7 +1151,7 @@ def get_hospisign_feats(nos=11, labelsSortBy=None, verbose=0):
 
     if verbose > 0:
         print("labels_sui = ", labels_sui.shape, labels_sui.dtype)
-        print("labels = ", labels.shape, labels.dtype)
+        print("labels = ", labels.shape, type(labels))
     ft = {
         "hg": hg_ft,
         "sn": sn_ft,
@@ -1189,3 +1217,56 @@ def combine_pca_hospisign_data(dataIdent, pca_dim=256, nos=11, verbose=2):
     print(dataIdent, '.shape = ', feats.shape)
 
     return feats, lab["labels"], lab["labels_sui"], lab["label_map"]
+
+def get_result_table_out(result_file_name_full, class_names):
+    a = np.load(result_file_name_full)
+    print(a.files)
+
+    dataIdent_ = a["dataIdent_"]
+    testUser_ = a["testUser_"]
+    validUser_ = a["validUser_"]
+    hid_state_cnt_vec_ = a["hid_state_cnt_vec_"]
+
+    accvectr = a["accvectr_"]
+    accvecva = a["accvecva_"]
+    accvecte = a["accvecte_"]
+    bestVaID = np.argmax(accvecva)
+    bestTeID = np.argmax(accvecte)
+    formatStr = "5.3f"
+    print(("bestTeID({:" + formatStr + "}),vaAcc({:" + formatStr + "}),teAcc({:" + formatStr + "})").format(bestTeID,accvecva[bestTeID],accvecte[bestTeID]))
+    print(("last, vaAcc({:" + formatStr + "}),teAcc({:" + formatStr + "})").format(accvecva[-1], accvecte[-1]))
+    print("accvectr_=", accvectr.shape, ", accvecva_=", accvecva.shape, ", accvecte_=", accvecte.shape)
+
+    preds_best_ = np.squeeze(a["preds_best_"])
+    labels_best_ = np.squeeze(a["labels_best_"])
+    print("preds_best_=", preds_best_.shape, ", labels_best_=", labels_best_.shape)
+
+    # check if exist. if yes go on
+    # uniqLabs = np.unique(labels_best_)
+    # classCount = len(uniqLabs)
+    # print("uniqLabs=", uniqLabs, ", classCount_=", classCount)
+
+    conf_mat_ = confusion_matrix(labels_best_, preds_best_)
+    print(conf_mat_.shape, class_names.shape)
+    saveConfFileName_full = result_file_name_full.replace('.npz', '.png')
+    if not os.path.exists(saveConfFileName_full):
+        print("saving--", saveConfFileName_full)
+        try:
+            funcH.plot_confusion_matrix(conf_mat_, class_names=class_names, confusionTreshold=0.2, show_only_confused=True, saveConfFigFileName=saveConfFileName_full)
+        except:
+            pass
+
+    confMatStats, df_slctd_table = funcH.calcConfusionStatistics(conf_mat_, categoryNames=class_names,
+                                                                 selectedCategories=None, verbose=0)
+    df_slctd_table = df_slctd_table.sort_values(["F1_Score"], ascending=False)
+    print(df_slctd_table)
+    saveF1TableFileName_full = result_file_name_full.replace('.npz', '_F1.csv')
+    if not os.path.exists(saveF1TableFileName_full):
+        print("saving--", saveF1TableFileName_full)
+        df_slctd_table.to_csv(saveF1TableFileName_full)
+    else:
+        print("already saved--", saveF1TableFileName_full)
+
+    print("dataIdent_=", dataIdent_, "\ntestUser_=", testUser_, "\nvalidUser_=", validUser_, "\nhid_state_cnt_vec_=", hid_state_cnt_vec_)
+    print(("bestVaID({:" + formatStr + "}),trAcc({:" + formatStr + "}),vaAcc({:" + formatStr + "}),teAcc({:" + formatStr + "})").format(bestVaID,accvectr[bestVaID],accvecva[bestVaID],accvecte[bestVaID]))
+    return df_slctd_table
