@@ -310,11 +310,10 @@ def run_untar(remove_zip=False):
         listOfFiles_in_folder = [line.rstrip() for line in f]
     # check if they match
 
-def run_dataset_paper_script(cvVec=[1, 2, 3, 4, 5], uiVec=[2, 3, 4, 5, 6, 7],
-                             data_path_base='neuralNetHandImages_nos11_rs224',
-                             epochs=60, modelName='squeezenet0'):
+def run_dataset_paper_script_01(viVec=[4, 5, 6, 7], uiVec=[2], nos=11, epochs=50, modelName='resnet18'):
+    data_path_base = "neuralNetHandImages_nos" + str(nos) + "_rs224"
     error_calls = []
-    for crossValidID in cvVec:
+    for userIDValid in viVec:
         for userIDTest in uiVec:
             try :
                 runString = "python train_supervised.py" + \
@@ -322,32 +321,93 @@ def run_dataset_paper_script(cvVec=[1, 2, 3, 4, 5], uiVec=[2, 3, 4, 5, 6, 7],
                             " --data_path_base " + str(data_path_base) + \
                             " --epochs " + str(epochs) + \
                             " --userIDTest " + str(userIDTest) + \
-                            " --crossValidID " + str(crossValidID)
+                            " --userIDValid " + str(userIDValid)
                 print(runString)
                 os.system(runString)
             except :
                 error_calls.append(runString)
     print("erroneous calls : ", error_calls)
+
+def remove_sub_data_folds_cv(cvVec=[1, 2, 3, 4, 5], uiVec=[2, 3, 4, 5, 6, 7],
+                          nos=41, random_seed=1, execute=False):
+    data_path_base = "neuralNetHandImages_nos" + str(nos) + "_rs224"
+    sup_fold = os.path.join(funcH.getVariableByComputerName("base_dir"), "sup")
+    for crossValidID in cvVec:
+        for userIDTest in uiVec:
+            data_fold_new = "data_" + "te" + str(userIDTest) + "_cv" + str(crossValidID) + "_" + data_path_base + "_rs" + str(random_seed).zfill(2)
+            data_fold_new = os.path.join(sup_fold, "data", data_fold_new)
+            if os.path.isdir(data_fold_new):
+                folds_2_del = funcH.getFolderList(dir2Search=data_fold_new, startString="neural")
+                print("+ui({:d}),cv({:d})".format(userIDTest, crossValidID))
+                for f in folds_2_del:
+                    print("--delete fold = <", os.path.join(data_fold_new, f), ">")
+                    if execute:
+                        shutil.rmtree(os.path.join(data_fold_new, f))
+
+def remove_sub_data_folds_va(viVec=[2, 3, 4, 5, 6 ,7], uiVec=[2, 3, 4, 5, 6, 7],
+                             nos=41, random_seed=1, execute=False):
+    data_path_base = "neuralNetHandImages_nos" + str(nos) + "_rs224"
+    sup_fold = os.path.join(funcH.getVariableByComputerName("base_dir"), "sup")
+    for userIDValid in viVec:
+        for userIDTest in uiVec:
+            data_fold_new = "data_" + "te" + str(userIDTest) + "_va" + str(userIDValid) + "_" + data_path_base + "_rs" + str(random_seed).zfill(2)
+            data_fold_new = os.path.join(sup_fold, "data", data_fold_new)
+            if os.path.isdir(data_fold_new):
+                folds_2_del = funcH.getFolderList(dir2Search=data_fold_new, startString="neural")
+                print("+ui({:d}),va({:d})".format(userIDTest, userIDValid))
+                for f in folds_2_del:
+                    print("--delete fold = <", os.path.join(data_fold_new, f), ">")
+                    if execute:
+                        shutil.rmtree(os.path.join(data_fold_new, f))
+
+
+def run_dataset_paper_script(viVec=[4, 5, 6, 7], uiVec=[2], nos=11, epochs=50, modelName='resnet18',
+                             rsdf=[False, True], random_seed=1):
+    data_path_base = "neuralNetHandImages_nos" + str(nos) + "_rs224"
+    error_calls = []
+    for userIDValid in viVec:
+        for userIDTest in uiVec:
+            if rsdf[0]:
+                remove_sub_data_folds_va(viVec=[userIDValid], uiVec=[userIDTest], nos=nos,
+                                         random_seed=random_seed, execute=True)
+            try:
+                runString = "python train_supervised.py" + \
+                            " --modelName " + str(modelName) + \
+                            " --data_path_base " + str(data_path_base) + \
+                            " --epochs " + str(epochs) + \
+                            " --userIDTest " + str(userIDTest) + \
+                            " --userIDValid " + str(userIDValid)
+                print(runString)
+                os.system(runString)
+            except:
+                error_calls.append(runString)
+
+            if rsdf[1]:
+                remove_sub_data_folds_va(viVec=[userIDValid], uiVec=[userIDTest], nos=nos,
+                                         random_seed=random_seed, execute=True)
+
+    print("erroneous calls : ", error_calls)
 #  run_untar()
 #  run_script_combine_predictions(useNZ=True, nos=11)
 
 def change_fold_names(cvVec=[1, 2, 3, 4, 5], uiVec=[2, 3, 4, 5, 6, 7],
-                      data_path_base='neuralNetHandImages_nos11_rs224', epochs=60, random_seed=1,
+                      nos=41, epochs=50, random_seed=1, modelName='resnet18',
                       delete_sub_data_folds=False, execute=False):
-    sup_fold = "/home/doga/DataFolder/sup"
+    data_path_base = "neuralNetHandImages_nos" + str(nos) + "_rs224"
+    sup_fold = os.path.join(funcH.getVariableByComputerName("base_dir"), "sup")
     for crossValidID in cvVec:
         for userIDTest in uiVec:
-            pred_fold_old = "pred_" + "te" + str(userIDTest) + "_cv" + str(crossValidID) + "_resnet18" + data_path_base
-            data_fold_old = "data_" + "te" + str(userIDTest) + "_cv" + str(crossValidID) + "_resnet18" + data_path_base
+            pred_fold_old = "pred_" + "te" + str(userIDTest) + "_cv" + str(crossValidID) + "_" + modelName + data_path_base
+            data_fold_old = "data_" + "te" + str(userIDTest) + "_cv" + str(crossValidID) + "_" + modelName + data_path_base
             # check if there are 61 items under pred_fold_old
             pred_fold_abs_old = os.path.join(sup_fold, pred_fold_old)
 
-            pred_fold_new = "pred_te" + str(userIDTest) + "_cv" + str(crossValidID) + "_resnet18_" + data_path_base + "_rs" + str(random_seed).zfill(2)
-            data_fold_new = str(data_fold_old + "_rs" + str(random_seed).zfill(2)).replace("resnet18", "")
+            pred_fold_new = "pred_te" + str(userIDTest) + "_cv" + str(crossValidID) + "_" + modelName + "_" + data_path_base + "_rs" + str(random_seed).zfill(2)
+            data_fold_new = str(data_fold_old + "_rs" + str(random_seed).zfill(2)).replace(modelName, "")
 
             if os.path.isdir(pred_fold_abs_old):
                 fl = funcH.getFileList(dir2Search=pred_fold_abs_old, startString="ep", endString=".npy")
-                if len(fl) == epochs+1:
+                if len(fl) <= epochs+1:
                     #change pred folder name
                     pred_fold_abs_to = os.path.join(sup_fold, "pred", pred_fold_new)
                     print("move -> ", pred_fold_abs_old, "-to-", pred_fold_abs_to)
@@ -372,6 +432,7 @@ def change_fold_names(cvVec=[1, 2, 3, 4, 5], uiVec=[2, 3, 4, 5, 6, 7],
                     print(pred_fold_old, "- active")
             else:
                 print(pred_fold_old, "- ?")
+
 
 def mlp_study_01(dataIdent="hgsk", pca_dim=256, nos=11, validUser=3, epochCnt=10, testUser=2, verbose=2, model_= None):
     ft, lb, lb_sui = prHF.combine_pca_hospisign_data(dataIdent=dataIdent, pca_dim=pca_dim, nos=nos, verbose=verbose)

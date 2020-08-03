@@ -194,7 +194,32 @@ def parse_args_helper_02(paramsAll):
         valuesParamsCur[paramsAll[i]["paramName"]] = paramsAll[i]["defaultVal"]
     return valuesParamsCur, dvSetParamsCur
 
-#updated
+def set_ident_str(valuesParamsCur):
+
+    if valuesParamsCur["userIDValid"] is not None and valuesParamsCur["crossValidID"] is not None:
+        print("{:s} was set to {:d}, now set to None".format("crossValidID", valuesParamsCur["crossValidID"]))
+        valuesParamsCur["crossValidID"] = None
+    if valuesParamsCur["userIDValid"] is None and valuesParamsCur["crossValidID"] is None:
+        print("{:s} and {:s} can not be both set to None".format("userIDValid", "crossValidID"))
+        exit(65)
+
+    vci = valuesParamsCur["userIDValid"] if valuesParamsCur["userIDValid"] is not None else valuesParamsCur["crossValidID"]
+    vcs = "va" if valuesParamsCur["crossValidID"] is None else "cv" #valid_cross_string
+
+    # <?> + _te2_cv4_ + resnet18_ + neuralNetHandImages_nos11_rs224
+    # old -> ?_te6_cv2_resnet18neuralNetHandImages_nos11_rs224
+    # new -> ? + _ + te6_cv2 + _ + neuralNetHandImages_nos11_rs224 + _ + rs01
+    exp_ident = "te{:d}_{:s}{:d}".format(valuesParamsCur["userIDTest"], vcs, vci) + \
+                "_" + valuesParamsCur["modelName"] + \
+                "_" + valuesParamsCur["data_path_base"] + "_rs" + str(valuesParamsCur["randomSeed"]).zfill(2)
+    # <data> + _te2_cv4_ + 18neuralNetHandImages_nos11_rs224
+    # old -> data_te6_cv2_resnet18neuralNetHandImages_nos11_rs224
+    # new -> data + _ + te6_cv2 + _ + neuralNetHandImages_nos11_rs224 + _ + rs01
+    data_ident = "te{:d}_{:s}{:d}".format(valuesParamsCur["userIDTest"], vcs, vci) + \
+                 "_" + valuesParamsCur["data_path_base"] + \
+                 "_rs" + str(valuesParamsCur["randomSeed"]).zfill(2)
+    return exp_ident, data_ident, valuesParamsCur
+
 def parseArgs(argv):
     # train_supervised.py --modelName resnet18 --epochs 50
     #                --batch_size 16 --appendEpochBinary 1 --randomSeed 1
@@ -215,29 +240,20 @@ def parseArgs(argv):
     param07 = {"paramName": "data_path_base", "possibleValues": "{'any folder in DataFolder'}",
                "vs": "-dp", "defaultVal": None, "dvSet": True, "paramType": "str"}
     param08 = {"paramName": "userIDTest", "possibleValues": "{2-3-4-5-6-7}",
-               "vs": "-ut", "defaultVal": 4, "dvSet": True, "paramType": "int"}
-    param09 = {"paramName": "crossValidID", "possibleValues": "{1-2-3-4-5}",
-               "vs": "-cv", "defaultVal": 1, "dvSet": True, "paramType": "int"}
+               "vs": "-ut", "defaultVal": 2, "dvSet": True, "paramType": "int"}
+    param09 = {"paramName": "userIDValid", "possibleValues": "{1-2-3-4-5}",
+               "vs": "-cv", "defaultVal": 3, "dvSet": True, "paramType": "int"}
+    param10 = {"paramName": "crossValidID", "possibleValues": "{1-2-3-4-5}",
+               "vs": "-cv", "defaultVal": None, "dvSet": True, "paramType": "int"}
 
     # model and data parameters
     paramsAll = [param01, param02, param03, param04, param05,
-                 param06, param07, param08, param09]
+                 param06, param07, param08, param09, param10]
 
     parse_args_helper_01(paramsAll, argv)
     valuesParamsCur, dvSetParamsCur = parse_args_helper_02(paramsAll)
 
-    # <?> + _te2_cv4_ + resnet18_ + neuralNetHandImages_nos11_rs224
-    # old -> ?_te6_cv2_resnet18neuralNetHandImages_nos11_rs224
-    # new -> ? + _ + te6_cv2 + _ + neuralNetHandImages_nos11_rs224 + _ + rs01
-    exp_ident = "te{:d}_cv{:d}".format(valuesParamsCur["userIDTest"], valuesParamsCur["crossValidID"]) + \
-                "_" + valuesParamsCur["modelName"] + \
-                "_" + valuesParamsCur["data_path_base"] + "_rs" + str(valuesParamsCur["randomSeed"]).zfill(2)
-    # <data> + _te2_cv4_ + 18neuralNetHandImages_nos11_rs224
-    # old -> data_te6_cv2_resnet18neuralNetHandImages_nos11_rs224
-    # new -> data + _ + te6_cv2 + _ + neuralNetHandImages_nos11_rs224 + _ + rs01
-    data_ident = "te{:d}_cv{:d}".format(valuesParamsCur["userIDTest"], valuesParamsCur["crossValidID"]) + \
-                 "_" + valuesParamsCur["data_path_base"] + \
-                 "_rs" + str(valuesParamsCur["randomSeed"]).zfill(2)
+    exp_ident, data_ident, valuesParamsCur = set_ident_str(valuesParamsCur)
 
     params_dict = {
         "modelName": valuesParamsCur["modelName"],
@@ -254,6 +270,7 @@ def parseArgs(argv):
     user_id_dict = {
         "cross_valid_id": valuesParamsCur["crossValidID"],
         "test": valuesParamsCur["userIDTest"],
+        "valid": valuesParamsCur["userIDValid"],
     }
 
     return params_dict, user_id_dict
@@ -340,11 +357,12 @@ def create_dataset(path_dict, user_id_dict, params_dict):
         cnt_table[col].values[:] = 0
 
     np.random.seed(seed=params_dict["randomSeed"])
+    torch.random.manual_seed(params_dict["randomSeed"])
     spaces_list = []
     for t in targets:
         print(f"Start copying target {t} -->")
         source_path = os.path.join(data_path, t)
-        samples = os.listdir(source_path)
+        samples = funcH.getFileList(dir2Search=source_path, endString=".png")
         #according to user_id_dict
         cnt_table["total"][t] = len(samples)
         cnt_table["total"]["total"] += len(samples)
@@ -362,22 +380,30 @@ def create_dataset(path_dict, user_id_dict, params_dict):
             if user_id_dict["test"] == user_id_int:
                 copyfile(os.path.join(source_path, s), os.path.join(test_path, t, s))
                 cnt_table["test"][t] += 1
-            else:
+            elif user_id_dict["cross_valid_id"] is not None and user_id_dict["valid"] is None:
                 copyfile(os.path.join(source_path, s), os.path.join(train_path, t, s))
                 train_samples.append(os.path.join(train_path, t, s))
                 cnt_table["train"][t] += 1
+            elif user_id_dict["cross_valid_id"] is None and user_id_dict["valid"] == user_id_int:
+                copyfile(os.path.join(source_path, s), os.path.join(valid_path, t, s))
+                cnt_table["validation"][t] += 1
+            elif user_id_dict["cross_valid_id"] is None:
+                copyfile(os.path.join(source_path, s), os.path.join(train_path, t, s))
+                cnt_table["train"][t] += 1
+
         # deal with validation samples
-        num_of_train_samples = len(train_samples)
-        perm_list = np.random.permutation(num_of_train_samples)
-        spaces = np.array(np.floor(np.linspace(0.0, num_of_train_samples, num=6)), dtype=int)
-        fr, to = spaces[user_id_dict["cross_valid_id"]-1], spaces[user_id_dict["cross_valid_id"]]
-        spaces_list.append(list(np.array([fr, to])) + list([-1])+ list(perm_list[fr:to]))
-        for i in range(fr, to):
-            sample_to_move = train_samples[perm_list[i]]
-            sample_new_name = sample_to_move.replace(train_path, valid_path)
-            os.rename(sample_to_move, sample_new_name)
-            cnt_table["train"][t] -= 1
-            cnt_table["validation"][t] += 1
+        if user_id_dict["cross_valid_id"] is not None and user_id_dict["valid"] is None:
+            num_of_train_samples = len(train_samples)
+            perm_list = np.random.permutation(num_of_train_samples)
+            spaces = np.array(np.floor(np.linspace(0.0, num_of_train_samples, num=6)), dtype=int)
+            fr, to = spaces[user_id_dict["cross_valid_id"]-1], spaces[user_id_dict["cross_valid_id"]]
+            spaces_list.append(list(np.array([fr, to])) + list([-1])+ list(perm_list[fr:to]))
+            for i in range(fr, to):
+                sample_to_move = train_samples[perm_list[i]]
+                sample_new_name = sample_to_move.replace(train_path, valid_path)
+                os.rename(sample_to_move, sample_new_name)
+                cnt_table["train"][t] -= 1
+                cnt_table["validation"][t] += 1
 
         cnt_table["train"]["total"] += cnt_table["train"][t]
         cnt_table["validation"]["total"] += cnt_table["validation"][t]
@@ -425,7 +451,7 @@ def getTransformFuncs(params_dict):
 
     train_data_transform = transforms.Compose([
         transforms.Resize(input_initial_resize),
-        transforms.RandomSizedCrop(input_size),
+        transforms.RandomResizedCrop(input_size),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -464,10 +490,24 @@ def iterate_1(model, ds_loader, num_ftrs, ep, epochTo, epochStartTime, path_dict
     return result_row
 
 def saveToResultMatFile(result_csv, result_row):
+    result_pd = pd.read_csv(result_csv, header=0, sep="*", parse_dates=True, names=["epoch", "train", "validation", "test"])
+
     f = open(result_csv, 'a')
     np.savetxt(f, np.array(result_row).reshape(1, -1), fmt='%4.3f', delimiter='*', newline=os.linesep, header='', footer='', comments='', encoding=None)
     f.close()
-    return
+
+    valAccArr = np.asarray(result_pd['validation'])
+    maxAccVal = np.max(valAccArr)
+    maxAccInd = np.squeeze(np.where(valAccArr == maxAccVal))
+    if maxAccInd.size > 1:
+        maxAccInd = maxAccInd[-1]
+    maxAccTest = np.squeeze(np.asarray(result_pd['test'])[maxAccInd])
+    best_valid_so_far = float(result_row[2])-float(maxAccVal) > 0.001
+    if best_valid_so_far:
+        print("++++Validation accuracy increased from {:5.3f} to {:5.3f}".format(maxAccVal, float(result_row[2])))
+        print("++++Test accuracy changed from {:5.3f} to {:5.3f}".format(maxAccTest, float(result_row[3])))
+
+    return best_valid_so_far
 
 #needs update
 def setEpochBounds(result_csv_file, num_epochs, appendEpochBinary):
@@ -498,11 +538,11 @@ def getModel(params_dict, path_dict, expName, num_classes):
         num_of_feats = 4096
 
     if os.path.isfile(updatedModelFile) and useUpdatedModel:
-        print('model(', useModelName, ') is being loaded from updatedModelFile')
+        print('model(', useModelName, ') is being loaded from updatedModelFile(', updatedModelFile, ')')
         model = torch.load(f=updatedModelFile)
         print('model(', useModelName, ') has been loaded from updatedModelFile')
     elif os.path.isfile(downloadedModelFile):
-        print('model(', useModelName, ') is being loaded from downloadedModelFile')
+        print('model(', useModelName, ') is being loaded from downloadedModelFile(', downloadedModelFile, ')')
         model = torch.load(f=downloadedModelFile)
         print('model(', useModelName, ') has been loaded from downloadedModelFile')
 
@@ -645,12 +685,11 @@ def main(argv):
     print('you are running this train function on = <', params_dict["hostName"], '>')
     train_data_transform, valid_data_transform, batch_size, num_workers = getTransformFuncs(params_dict)
 
-
     ds_loader, train_labels, num_classes = get_dataset_variables(path_dict, train_data_transform, valid_data_transform, batch_size, num_workers)
     print(cnt_table)
 
     model, optimizer, updatedModelFile, num_ftrs = getModel(params_dict, path_dict, expName, num_classes)
-
+    best_model_name = updatedModelFile.replace(".model", "_best.model")
     print('num_classes = ', num_classes, ', num_ftrs = ', num_ftrs, flush=True)
 
     epochStartTime = time.time()
@@ -667,9 +706,11 @@ def main(argv):
         te_acc_rd = result_pd["test"].values[-1]
         good_to_proceed = (epochFr == ep_read+1) and (abs(tr_acc_rd-result_row[1]) <= 0.01) and (abs(va_acc_rd-result_row[2]) <= 0.01) and (abs(te_acc_rd-result_row[3]) <= 0.01)
         if not good_to_proceed:
-            print("result_row=", result_row)
-            print("final row=", result_pd.iloc[[-1]])
+            print("result_row:\n", result_row)
+            print("final row:\n", result_pd.iloc[[-1]])
             saveToResultMatFile(result_csv_file, result_row)
+        print("results so far : ")
+        print(result_pd)
 
     for ep in range(epochFr, epochTo):
         model.train()  # Set model to training mode
@@ -677,8 +718,11 @@ def main(argv):
         _, _ = runTrainDs(model, optimizer, ds_loader["train_tr"])
 
         result_row = iterate_1(model, ds_loader, num_ftrs, ep, epochTo, epochStartTime, path_dict)
-        saveToResultMatFile(result_csv_file, result_row)
+        best_valid_so_far = saveToResultMatFile(result_csv_file, result_row)
         torch.save(model, f=updatedModelFile)
+        if best_valid_so_far or ep == 0:
+            print("++++best_valid_so_far - ", result_row)
+            torch.save(model, f=best_model_name)
 
     return 0
 
