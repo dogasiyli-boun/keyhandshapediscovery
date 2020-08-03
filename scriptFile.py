@@ -734,6 +734,9 @@ def mlp_study_score_fuse_apply(model_export_dict, defStr, data_va_te_str, data_i
     conf_mat_max = confusion_matrix(labels_xx, pr_comb_max)
     conf_mat_sof = confusion_matrix(labels_xx, pr_comb_sof)
 
+    while len(classNames)<conf_mat_max.shape[0] or len(classNames)<conf_mat_sof.shape[0]:
+        classNames = np.hstack((classNames, "wtf"))
+
     cmStats_max, df_max = funcH.calcConfusionStatistics(conf_mat_max, categoryNames=classNames, selectedCategories=None, verbose=0)
     cmStats_sofx, df_sof = funcH.calcConfusionStatistics(conf_mat_sof, categoryNames=classNames, selectedCategories=None, verbose=0)
     df_final = pd.concat([df_final, df_max["F1_Score"].sort_index()], axis=1).rename(columns={"F1_Score": "df_max"})
