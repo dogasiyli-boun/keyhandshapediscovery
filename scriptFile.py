@@ -652,6 +652,8 @@ def get_from_model(model_exports_x, model_str, normalizationMode, data_va_te_str
         ft_n = funcH.normalize2(ft, normMode='ns', axis=1)
     elif normalizationMode == 'softmax':
         ft_n = funcH.softmax(ft.T).T
+    else:
+        ft_n = ft
     return ft_n, pr, la
 
 def test_normalization(n, c, axis, rs=0):
@@ -691,6 +693,7 @@ def mlp_study_score_fuse(userTe, userVa, dropout_value, rs, hidStateID, nos, dat
     return model_export_dict
 
 def mlp_study_score_fuse_apply(model_export_dict, defStr, data_va_te_str, data_ident_vec=["hog", "sn", "sk", "hgsk", "hgsn", "snsk", "hgsnsk"]):
+    ft_comb_ave = None
     ft_comb_max = None
     ft_comb_sof = None
 
@@ -700,11 +703,13 @@ def mlp_study_score_fuse_apply(model_export_dict, defStr, data_va_te_str, data_i
         #print("****\n", defStr, "\n", data_ident)
         ft_max, preds_te, labels_xx = get_from_model(model_export_dict[data_ident]["model_export"], model_str=data_ident, normalizationMode="max", data_va_te_str=data_va_te_str)
         ft_sof, _, _ = get_from_model(model_export_dict[data_ident]["model_export"], model_str=data_ident, normalizationMode="softmax", data_va_te_str=data_va_te_str)
+        ft_none, _, _ = get_from_model(model_export_dict[data_ident]["model_export"], model_str=data_ident, normalizationMode=None, data_va_te_str=data_va_te_str)
 
         print(data_ident+data_va_te_str+"_acc = ", "{:5.3f}".format(accuracy_score(labels_xx, preds_te)))
 
         df_final = pd.concat([df_final, model_export_dict[data_ident]["df_slctd_table"]["F1_Score"].sort_index()], axis = 1).rename(columns={"F1_Score": data_ident})
-        ft_comb_max = ft_max if ft_comb_max is None else ft_max+ft_comb_max
+        ft_comb_ave = ft_max if ft_comb_ave is None else ft_max+ft_comb_ave
+        ft_comb_max = ft_none if ft_comb_max is None else np.maximum(ft_none, ft_comb_max)
         ft_comb_sof = ft_sof if ft_comb_sof is None else ft_sof+ft_comb_sof
 
         preds_max = np.argmax(ft_max, axis=1)
@@ -720,25 +725,32 @@ def mlp_study_score_fuse_apply(model_export_dict, defStr, data_va_te_str, data_i
 
     classNames = np.asarray(model_export_dict["hog"]["df_slctd_table"]["khsName"].sort_index())
 
+    pr_comb_ave = np.argmax(ft_comb_ave, axis=1)
     pr_comb_max = np.argmax(ft_comb_max, axis=1)
     pr_comb_sof = np.argmax(ft_comb_sof, axis=1)
+    acc_ave = accuracy_score(labels_xx, pr_comb_ave)
     acc_max = accuracy_score(labels_xx, pr_comb_max)
     acc_sof = accuracy_score(labels_xx, pr_comb_sof)
+    print(defStr, data_va_te_str, "comb-(AVE) acc = {:6.4f}".format(acc_ave))
     print(defStr, data_va_te_str, "comb-(MAX) acc = {:6.4f}".format(acc_max))
     print(defStr, data_va_te_str, "comb-(SOFTMAX) acc = {:6.4f}".format(acc_sof))
 
     str_j = '_'.join(data_ident_vec)
+    acc_vec_all[str_j+'_ave'] = acc_ave
     acc_vec_all[str_j+'_max'] = acc_max
     acc_vec_all[str_j+'_sof'] = acc_sof
 
+    conf_mat_ave = confusion_matrix(labels_xx, pr_comb_ave)
     conf_mat_max = confusion_matrix(labels_xx, pr_comb_max)
     conf_mat_sof = confusion_matrix(labels_xx, pr_comb_sof)
 
-    while len(classNames)<conf_mat_max.shape[0] or len(classNames)<conf_mat_sof.shape[0]:
+    while len(classNames) < conf_mat_max.shape[0] or len(classNames) < conf_mat_sof.shape[0]:
         classNames = np.hstack((classNames, "wtf"))
 
+    cmStats_ave, df_ave = funcH.calcConfusionStatistics(conf_mat_ave, categoryNames=classNames, selectedCategories=None, verbose=0)
     cmStats_max, df_max = funcH.calcConfusionStatistics(conf_mat_max, categoryNames=classNames, selectedCategories=None, verbose=0)
     cmStats_sofx, df_sof = funcH.calcConfusionStatistics(conf_mat_sof, categoryNames=classNames, selectedCategories=None, verbose=0)
+    df_final = pd.concat([df_final, df_ave["F1_Score"].sort_index()], axis=1).rename(columns={"F1_Score": "df_ave"})
     df_final = pd.concat([df_final, df_max["F1_Score"].sort_index()], axis=1).rename(columns={"F1_Score": "df_max"})
     df_final = pd.concat([df_final, df_sof["F1_Score"].sort_index()], axis=1).rename(columns={"F1_Score": "df_sof"})
 
@@ -751,6 +763,7 @@ def mlp_study_score_fuse_apply(model_export_dict, defStr, data_va_te_str, data_i
         "conf_mat_max": conf_mat_max,
         "conf_mat_sof": conf_mat_sof,
         "df_final": df_final,
+        "df_ave": df_ave,
         "df_max": df_max,
         "df_sof": df_sof,
         "acc_vec_all": acc_vec_all,
@@ -773,7 +786,7 @@ def save_df_tables_for_te_va(userTe, userVa, dropout_value, hidStateID, nos, mod
 
 def append_to_all_results(results_dict, index_name, dropout_value, rs, hidStateID, nos, data_va_te_str,
                           model_export_dict_folder=os.path.join(funcH.getVariableByComputerName('desktop_dir'),'modelExportDicts')):
-    columns = ["hog", "sk", "sn", "hgsk", "hgsn", "snsk", "hgsnsk", "hogsn", "hogsk", "hogsnsk", "ALLmx", "ALLsm"]
+    columns = ["hog", "sk", "sn", "hgsk", "hgsn", "snsk", "hgsnsk", "hogsk", "hogskhgsk", "hogsn", "hogsnsk", "ALLax", "ALLmx", "ALLsm"]
     doStr = ""
     if dropout_value is not None:
         doStr = "_do{:4.2f}".format(dropout_value)
@@ -800,9 +813,11 @@ def append_to_all_results(results_dict, index_name, dropout_value, rs, hidStateI
         # keyN = keyN.replace('hog','hg')
         keyN = key.replace('_', '')
         keyN = keyN.replace('hogsnskhgskhgsnsnskhgsnsk', 'ALL')
+        keyN = keyN.replace('ALLave', 'ALLax')
         keyN = keyN.replace('ALLmax', 'ALLmx')
         keyN = keyN.replace('ALLsof', 'ALLsm')
         keyN = keyN.replace('max', '')
+        keyN = keyN.replace('ave', '')
         try:
             if all_results[keyN][index_name] != value:
                 all_results[keyN][index_name] = value
