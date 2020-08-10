@@ -160,6 +160,7 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, numOfSign
     detailedLabelsFileNameFull = data_dir + os.sep + detailedLabelsFileName
     labelsFileName = funcD.getFileName(dataToUse=dataToUse, normMode=normMode, pcaCount=pcaCount, numOfSigns=numOfSigns, expectedFileType='Labels') # 'labels_41.npy'
     labelsFileNameFull = data_dir + os.sep + labelsFileName
+    labelNames = load_label_names(numOfSigns)
 
     baseResultFileName = funcD.getFileName(dataToUse=dataToUse, normMode=normMode, pcaCount=pcaCount, numOfSigns=numOfSigns, expectedFileType='BaseResultName')
     funcH.createDirIfNotExist(os.path.join(results_dir, 'baseResults'))
@@ -181,7 +182,7 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, numOfSign
         resultDict = []
 
     headerStrFormat = "+++frmfile(%15s) clusterModel(%8s), clusCnt(%4s)"
-    valuesStrFormat = "nmiAll(%.2f) * accAll(%.2f) * nmiNoz(%.2f) * accNoz(%.2f) * emptyClusters(%d)"
+    valuesStrFormat = "nmiAll(%.2f) * accAll(%.2f) * nmiNoz(%.2f) * accNoz(%.2f) * emptyClusters(%d) * meanPurity(%5.3f) * weightedPurity(%5.3f)"
 
     for clusterModel in clusterModels:
         for curClustCnt in clustCntVec:
@@ -190,7 +191,7 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, numOfSign
                 if resultList[1] == clusterModel and resultList[2] == curClustCnt:
                     str2disp = headerStrFormat + "=" + valuesStrFormat
                     data2disp = (baseResultFileName, resultList[1], resultList[2],
-                                 resultList[3][0], resultList[3][1], resultList[3][2], resultList[3][3], resultList[3][4])
+                                 resultList[3][0], resultList[3][1], resultList[3][2], resultList[3][3], resultList[3][4], resultList[3][5], resultList[3][6])
                     #histCnt=', resultList[3][5][0:10])
                     print(str2disp % data2disp)
                     foundResult = True
@@ -205,7 +206,7 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, numOfSign
                 t = time.time()
                 print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                 print(featsFileName, 'clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ') running.')
-                predClusters = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, normMode='', applyPca=False, clusterModel=clusterModel)
+                predClusters, _ = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, normMode='', applyPca=False, clusterModel=clusterModel)
                 print('elapsedTime(', time.time() - t, ')')
 
                 nmi_cur, acc_cur = funcH.get_NMI_Acc(labels_all, predClusters)
@@ -214,12 +215,101 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, numOfSign
                 nmi_cur_nz, acc_cur_nz = funcH.get_NMI_Acc(non_zero_labels, non_zero_preds)
 
                 numOf_1_sample_bins, histSortedInv = funcH.analyzeClusterDistribution(predClusters, curClustCnt, verbose=2)
+                _, _, kr_pdf, weightedPurity = funcH.countPredictionsForConfusionMat(non_zero_labels, non_zero_preds, labelNames=labelNames)
+                meanPurity = np.mean(np.asarray(kr_pdf["%purity"]))
 
-                resultList = [featsFileName.replace('.npy', ''), clusterModel, curClustCnt, [nmi_cur, acc_cur, nmi_cur_nz, acc_cur_nz, numOf_1_sample_bins, histSortedInv]]
+                resultList = [featsFileName.replace('.npy', ''), clusterModel, curClustCnt, [nmi_cur, acc_cur, nmi_cur_nz, acc_cur_nz, meanPurity, weightedPurity, numOf_1_sample_bins, histSortedInv]]
                 resultDict.append(resultList)
 
-                print(valuesStrFormat % (nmi_cur, acc_cur, nmi_cur_nz, acc_cur_nz, numOf_1_sample_bins))
+                print(valuesStrFormat % (nmi_cur, acc_cur, nmi_cur_nz, acc_cur_nz, numOf_1_sample_bins, meanPurity, weightedPurity))
                 print(resultList[3][5][0:10])
+                np.save(baseResultFileNameFull, resultDict, allow_pickle=True)
+                np.savez(predictionFileNameFull, labels_all, predClusters)
+
+    np.set_printoptions(prevPrintOpts)
+    return resultDict
+
+def runClusteringOnFeatSet_Aug2020(ft, labels_all, lb_map, dataToUse, numOfSigns, pcaCount, clustCntVec = None, clusterModels = ['KMeans'], randomSeed=5):
+    seed(randomSeed)
+    try:
+        tf.set_random_seed(seed=randomSeed)
+    except:
+        tf.random.set_seed(seed=randomSeed)
+    prevPrintOpts = np.get_printoptions()
+    np.set_printoptions(precision=4, suppress=True)
+    labels_all = np.squeeze(np.array(labels_all))
+    class_names = np.asarray(lb_map["khsName"])
+
+    baseResultFileName = funcD.getFileName(dataToUse=dataToUse, normMode="", pcaCount=pcaCount, numOfSigns=numOfSigns, expectedFileType='BaseResultName')
+    results_dir = funcH.getVariableByComputerName('results_dir')  # '/media/dg/SSD_Data/DataPath/bdResults'
+    funcH.createDirIfNotExist(os.path.join(results_dir, 'baseResults'))
+    baseResultFileNameFull = os.path.join(results_dir, 'baseResults', baseResultFileName)
+
+    featsName = baseResultFileName.replace(".npy", "")  # '<dataToUse><pcaCount>_baseResults_<nos>.npy'
+
+    print('*-*-*-*-*-*-*running for : ', featsName, '*-*-*-*-*-*-*')
+    print('featSet(', ft.shape, '), labels_All(', labels_all.shape, ')')
+
+    if clustCntVec is None:
+        if ft.shape[1] > 128:
+            clustCntVec = [128, 256, 512]
+        else:
+            clustCntVec = [32, 64, 96]
+    # clustCntVec = [64, 128, 256] #[32, 64, 128, 256, 512]
+    if os.path.isfile(baseResultFileNameFull):
+        print('resultDict will be loaded from(', baseResultFileNameFull, ')')
+        resultDict = list(np.load(baseResultFileNameFull, allow_pickle=True))
+    else:
+        resultDict = []
+
+    headerStrFormat = "+++frmfile(%15s) clusterModel(%8s), clusCnt(%4s)"
+    valuesStrFormat = "nmiAll(%.2f) * acc_cent(%.2f) * meanPurity_cent(%.3f) * weightedPurity_cent(%.3f) * acc_mxhs(%.2f) * meanPurity_mxhs(%.3f) * weightedPurity_mxhs(%.3f) * cnmxh_perc(%.3f) * emptyClusters(%d)"
+
+    for clusterModel in clusterModels:
+        for curClustCnt in clustCntVec:
+            foundResult = False
+            for resultList in resultDict:
+                if resultList[1] == clusterModel and resultList[2] == curClustCnt:
+                    str2disp = headerStrFormat + "=" + valuesStrFormat
+                    data2disp = (baseResultFileName, resultList[1], resultList[2],
+                                 resultList[3][0],
+                                 resultList[3][1], resultList[3][2], resultList[3][3],
+                                 resultList[3][4], resultList[3][5], resultList[3][6], resultList[3][7],
+                                 resultList[3][8])
+                    #histCnt=', resultList[3][9][0:10])
+                    print(str2disp % data2disp)
+                    foundResult = True
+                if foundResult:
+                    break
+            predictionFileName = baseResultFileName.replace("_baseResults.npy","") + "_" + clusterModel + "_" + str(curClustCnt) + ".npz"
+            predictionFileNameFull = os.path.join(results_dir, 'baseResults', predictionFileName)
+            predictionFileExist = os.path.isfile(predictionFileNameFull)
+            if not foundResult or not predictionFileExist:
+                if foundResult and not predictionFileExist:
+                    print('running again for saving predictions')
+                t = time.time()
+                print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                print(featsName, 'clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ') running.')
+                predClusters, kluster_centers = funcH.clusterData(featVec=ft, n_clusters=curClustCnt, normMode='', applyPca=False, clusterModel=clusterModel)
+                print('elapsedTime(', funcH.getElapsedTimeFormatted(time.time() - t), ')')
+                #np.savez("/home/doga/DataFolder/bdResults/baseResults/prdclu.npz", predClusters=predClusters, kluster_centers=kluster_centers)
+
+                centroid_info_pdf = funcH.get_cluster_centroids(ft, predClusters, kluster_centers, verbose=0)
+
+                nmi_cur = 100*funcH.get_nmi_only(labels_all, predClusters)
+                _confMat_mapped_preds_center, _, kr_pdf_center, weightedPurity_center, cnmxh_perc = funcH.countPredictionsForConfusionMat(labels_all, predClusters, labelNames=class_names, centroid_info_pdf=centroid_info_pdf, verbose=0)
+                _confMat_mapped_preds_mxhist, _, kr_pdf_mxhist, weightedPurity_mxhist, _ = funcH.countPredictionsForConfusionMat(labels_all, predClusters, labelNames=class_names, centroid_info_pdf=None, verbose=0)
+                acc_center = 100*np.sum(np.diag(_confMat_mapped_preds_center)) / np.sum(np.sum(_confMat_mapped_preds_center))
+                acc_mxhist = 100*np.sum(np.diag(_confMat_mapped_preds_mxhist)) / np.sum(np.sum(_confMat_mapped_preds_mxhist))
+                numOf_1_sample_bins, histSortedInv = funcH.analyzeClusterDistribution(predClusters, curClustCnt, verbose=2)
+                meanPurity_center = np.mean(np.asarray(kr_pdf_center["%purity"]))
+                meanPurity_mxhist = np.mean(np.asarray(kr_pdf_mxhist["%purity"]))
+
+                resultList = [featsName, clusterModel, curClustCnt, [nmi_cur, acc_center, meanPurity_center, weightedPurity_center, acc_mxhist, meanPurity_mxhist, weightedPurity_mxhist, cnmxh_perc, numOf_1_sample_bins, histSortedInv]]
+                resultDict.append(resultList)
+
+                print(valuesStrFormat % (nmi_cur,  acc_center, meanPurity_center, weightedPurity_center, acc_mxhist, meanPurity_mxhist, weightedPurity_mxhist, cnmxh_perc, numOf_1_sample_bins))
+                print("histogram of clusters max first 10", resultList[3][9][0:10])
                 np.save(baseResultFileNameFull, resultDict, allow_pickle=True)
                 np.savez(predictionFileNameFull, labels_all, predClusters)
 
@@ -292,7 +382,7 @@ def runOPTICSClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, pca
                 t = time.time()
                 print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                 print(featsFileName, 'clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ') running.')
-                predClusters = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, norMMode='', applyPca=False, clusterModel=clusterModel)
+                predClusters, _ = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, norMMode='', applyPca=False, clusterModel=clusterModel)
                 print('elapsedTime(', time.time() - t, ')')
                 np.savez(predictionFileNameFull, labels_all, predClusters)
             else:
@@ -359,8 +449,13 @@ def loadData(model_params, numOfSigns, data_dir):
     return feat_set, labels_all, detailed_labels_all
 
 def loadBaseResult(fileName):
-    results_dir = funcH.getVariableByComputerName('results_dir')
-    preds = np.load(os.path.join(results_dir, 'baseResults', fileName + '.npz'))
+    results_dir = funcH.getVariableByComputerName('results_dir')  # '/media/dg/SSD_Data/DataPath/bdResults'
+    baseLineResultFolder = os.path.join(results_dir, 'baseResults')  # '/media/dg/SSD_Data/DataPath/bdResults/baseResults'
+    if not str(fileName).endswith(".npz"):
+        fileName = fileName + ".npz"
+    fileName = os.path.join(baseLineResultFolder, fileName)
+    #print("fileName=", fileName)
+    preds = np.load(fileName)
     labels_true = np.asarray(preds['arr_0'], dtype=int)
     labels_pred = np.asarray(preds['arr_1'], dtype=int)
     return labels_true, labels_pred
@@ -408,6 +503,37 @@ def getBaseResults(dataToUse, normMode, pcaCount, numOfSigns, displayResults=Tru
 
     return returnDict
 
+def getBaseResults_Aug2020(dataToUse, pcaCount, numOfSigns, displayResults=True, baseResultFileName=''):
+    if baseResultFileName == '':
+        baseResultFileName = funcD.getFileName(dataToUse=dataToUse, normMode="", pcaCount=pcaCount,
+                                               numOfSigns=numOfSigns, expectedFileType='BaseResultName')
+    results_dir = funcH.getVariableByComputerName('results_dir')  # '/media/dg/SSD_Data/DataPath/bdResults'
+    baseLineResultFolder = os.path.join(results_dir, 'baseResults')  # '/media/dg/SSD_Data/DataPath/bdResults/baseResults'
+    baseResultFileNameFull = os.path.join(baseLineResultFolder, baseResultFileName)
+    resultDict = np.load(baseResultFileNameFull, allow_pickle=True)
+    returnDict = []
+    for resultList in resultDict:
+        clusterModel = resultList[1]
+        clusterCount = resultList[2]
+        nmiAll = resultList[3][0]
+        acc_cent = resultList[3][1]
+        meanPurity_cent = resultList[3][2]
+        weightedPurity_cent = resultList[3][3]
+        acc_mxhs = resultList[3][4]
+        meanPurity_mxhs = resultList[3][5]
+        weightedPurity_mxhs = resultList[3][6]
+        cnmxh_perc = resultList[3][7]
+        emptyK = resultList[3][8]
+        dataUsed = baseResultFileName.replace('.npy', '').replace('_baseResults', '')
+        returnDict.append([dataUsed, clusterModel, clusterCount, nmiAll, acc_cent, meanPurity_cent, weightedPurity_cent, acc_mxhs, meanPurity_mxhs, weightedPurity_mxhs, cnmxh_perc, emptyK])
+
+    df = pd.DataFrame(returnDict, columns=['npyFileName', 'clusModel', 'clusCnt', 'nmiAll', 'acc_cent', 'meanPurity_cent', 'weightedPurity_cent', 'acc_mxhs', 'meanPurity_mxhs', 'weightedPurity_mxhs', 'cnmxh_perc', 'emptyK'])
+    funcH.setPandasDisplayOpts()
+    if displayResults:
+        print(df)
+
+    return returnDict
+
 def traverseBaseResultsFolder():
     results_dir = funcH.getVariableByComputerName('results_dir')  # '/media/dg/SSD_Data/DataPath/bdResults'
     baseLineResultFolder = os.path.join(results_dir, 'baseResults')  # '/media/dg/SSD_Data/DataPath/bdResults/baseResults'
@@ -422,8 +548,21 @@ def traverseBaseResultsFolder():
     baseResults_csv = os.path.join(baseLineResultFolder, 'baseLineResults.csv')
     returnDictAll.to_csv(path_or_buf=baseResults_csv, sep=',', na_rep='NaN', float_format='%8.4f')
 
-def displayDataResults(method, dataToUse, normMode, pcaCount, numOfSigns, posteriorDim, weightReg = 1.0, batchSize = 16):
+def traverseBaseResultsFolder_Aug2020():
+    results_dir = funcH.getVariableByComputerName('results_dir')  # '/media/dg/SSD_Data/DataPath/bdResults'
+    baseLineResultFolder = os.path.join(results_dir, 'baseResults')  # '/media/dg/SSD_Data/DataPath/bdResults/baseResults'
+    fileList = funcH.getFileList(dir2Search=baseLineResultFolder, startString='', endString='.npy')
+    brAll = []
+    for f in fileList:
+        br = getBaseResults_Aug2020(dataToUse='', pcaCount=-1, numOfSigns=-1, displayResults=False, baseResultFileName=f)
+        brAll = brAll + br
+    returnDictAll = pd.DataFrame(brAll, columns=['npyFileName', 'clusModel', 'clusCnt', 'nmiAll', 'acc_cent', 'meanPurity_cent', 'weightedPurity_cent', 'acc_mxhs', 'meanPurity_mxhs', 'weightedPurity_mxhs', 'cnmxh_perc', 'emptyK']).sort_values(by='cnmxh_perc', ascending=False)
+    print(returnDictAll)
 
+    baseResults_csv = os.path.join(baseLineResultFolder, 'baseLineResults.csv')
+    returnDictAll.to_csv(path_or_buf=baseResults_csv, sep=',', na_rep='NaN', float_format='%8.4f')
+
+def displayDataResults(method, dataToUse, normMode, pcaCount, numOfSigns, posteriorDim, weightReg = 1.0, batchSize = 16):
     getBaseResults(dataToUse=dataToUse, normMode=normMode, pcaCount=pcaCount, numOfSigns=numOfSigns, displayResults=True)
     modelParams = {
         "trainMode": method,
@@ -540,7 +679,7 @@ def analayzePredictionResults(labels_pred, dataToUse, pcaCount, numOfSigns,
     if confCalcMethod == 'dnn':
         acc, _confMat, kluster2Classes = funcH.getAccFromConf(labels_true, labels_pred)
     else:
-        _confMat, kluster2Classes = funcH.countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=labelNames)
+        _confMat, kluster2Classes, kr_pdf, weightedPurity = funcH.countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=labelNames)
 
     if saveConfFigFileName != '':
         saveConfFigFileName = saveConfFigFileName.replace(".", "_ccm(" + confCalcMethod + ").")
@@ -610,11 +749,50 @@ def load_labels_pred_for_ensemble(useNZ=True, nos=11, featUsed="hgsk256",
     return labelNames, labels, predictionsDict, cluster_runs, N
 
 
+def load_labels_pred_for_ensemble_Aug2020(class_names, dataToUseVec=["hog", "sn", "sk"], nos=11, pcaCountVec=[96, 256],
+                                          clusterModelsVec=["KMeans"], clustCntVec=[256]):
+    results_dir = funcH.getVariableByComputerName('results_dir')
+
+    predictionsDict = []
+    N = 0
+    for dataToUse in dataToUseVec:
+        for pcaCount in pcaCountVec:
+            baseResultFileName = funcD.getFileName(dataToUse=dataToUse, normMode="", pcaCount=pcaCount, numOfSigns=nos,
+                                                   expectedFileType='BaseResultName')
+            for clusterModel in clusterModelsVec:
+                for curClustCnt in clustCntVec:
+                    predictionFileName = baseResultFileName.replace("_baseResults.npy",
+                                                                    "") + "_" + clusterModel + "_" + str(
+                        curClustCnt) + ".npz"
+                    predictionFileNameFull = os.path.join(results_dir, 'baseResults', predictionFileName)
+                    if os.path.isfile(predictionFileNameFull):
+                        print("EXIST - ", predictionFileNameFull)
+
+                        predStr = predictionFileName.replace(".npy", "").replace(".npz", "")
+
+                        a = np.load(predictionFileNameFull)
+                        labels_all = a["arr_0"]
+                        predClusters = a["arr_1"]
+                        _confMat_mapped_preds_mxhist, _, kr_pdf_mxhist, weightedPurity_mxhist, _ = funcH.countPredictionsForConfusionMat(
+                            labels_all, predClusters, labelNames=class_names, centroid_info_pdf=None, verbose=0)
+                        print("predStr", predStr)
+                        print("preds(", predClusters, ") loaded of size", predClusters.shape)
+                        predictionsDict.append({"str": predStr, "prd": predClusters})
+                        N = N + 1
+
+    cluster_runs = None
+    for i in range(0, N):
+        cluster_runs = funcH.append_to_vstack(cluster_runs, predictionsDict[i]["prd"], dtype=int)
+
+    return class_names, labels_all, predictionsDict, cluster_runs, N
+
 def ensemble_cluster_analysis(cluster_runs, predictionsDict, labels,
                      consensus_clustering_max_k=256, useNZ=True, nos=11,
                      resultsToCombineDescriptorStr="",
                      labelNames = None, verbose=False):
     N = cluster_runs.shape[0]
+    results_dir = funcH.getVariableByComputerName("results_dir")
+    predictResultFold = os.path.join(results_dir, "predictionResults")
 
     # 1.run cluster_ensembles
     t = time.time()
@@ -637,8 +815,7 @@ def ensemble_cluster_analysis(cluster_runs, predictionsDict, labels,
     resultsDict = []
     for i in range(0, N + 1):
         t = time.time()
-        klusRet, classRet, _confMat, c_pdf, kr_pdf = runForPred(labels, predictionsDict[i]["prd"], labelNames,
-                                                                predictionsDict[i]["str"])
+        klusRet, classRet, _confMat, c_pdf, kr_pdf = runForPred(labels, predictionsDict[i]["prd"], labelNames, predictionsDict[i]["str"])
         elapsed_runForPred = time.time() - t
         print('runForPred(', predictionsDict[i]["str"], ') - elapsedTime({:4.2f})'.format(elapsed_runForPred),
               ' ended at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -656,17 +833,23 @@ def ensemble_cluster_analysis(cluster_runs, predictionsDict, labels,
     classRet = resultsDict[0]["classRet"].copy().rename(columns={"value": predictionsDict[0]["str"]})
     for i in range(1, N + 1):
         classRet.insert(i + 1, predictionsDict[i]["str"], resultsDict[i]["classRet"]['value'], True)
-    print("\r\nclassification metrics comparison\r\n")
-    print(classRet)
-    print("\r\n")
+    if verbose:
+        print("\r\nclassification metrics comparison\r\n")
+        print(classRet)
+        print("\r\n")
+    class_metrics_FileName = os.path.join(predictResultFold, resultsToCombineDescriptorStr.replace("klusterResults", "class_metrics") + ".csv")
+    pd.DataFrame.to_csv(classRet, path_or_buf=class_metrics_FileName)
 
     c_pdf = resultsDict[0]["c_pdf"][['class', '%f1']].sort_index().rename(
         columns={"class": "f1Score", "%f1": predictionsDict[0]["str"]})
     for i in range(1, N + 1):
         c_pdf.insert(i + 1, predictionsDict[i]["str"], resultsDict[i]["c_pdf"][['%f1']].sort_index(), True)
-    print("\r\nf1 score comparisons for classes\r\n")
-    print(c_pdf)
-    print("\r\n")
+    if verbose:
+        print("\r\nf1 score comparisons for classes\r\n")
+        print(c_pdf)
+        print("\r\n")
+    f1_comparison_FileName = os.path.join(predictResultFold, resultsToCombineDescriptorStr.replace("klusterResults", "f1_comparison") + ".csv")
+    pd.DataFrame.to_csv(c_pdf, path_or_buf=f1_comparison_FileName)
 
     print('calc_ensemble_driven_cluster_index - started at ', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     t = time.time()
@@ -688,9 +871,6 @@ def ensemble_cluster_analysis(cluster_runs, predictionsDict, labels,
     elapsed = time.time() - t
     print('create_quality_vec - elapsedTime({:4.2f})'.format(elapsed), ' ended at ',
           datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-
-    results_dir = funcH.getVariableByComputerName("results_dir")
-    predictResultFold = os.path.join(results_dir, "predictionResults")
 
     sampleCntToPick = np.array([1, 3, 5, 10], dtype=int)
     columns = ['1', '3', '5', '10']
@@ -749,7 +929,7 @@ def ensemble_cluster_analysis(cluster_runs, predictionsDict, labels,
             for sj in range(0, colCnt):
                 sCnt = sampleCntToPick[sj] if curSampleCntInCluster>sampleCntToPick[sj] else curSampleCntInCluster
                 sampleLabelsPicked = sortedLabelIdx[:sCnt]
-                purity_k, correctLabelInds, mappedClass = funcH.calcPurity(list(sampleLabelsPicked))
+                purity_k, correctLabelInds, mappedClass, _ = funcH.calcPurity(list(sampleLabelsPicked))
                 if mappedClass == mappedClassOfKluster:
                     cols2add[pi, sj] = purity_k
                 else:
@@ -773,7 +953,12 @@ def ensemble_cluster_analysis(cluster_runs, predictionsDict, labels,
     resultTable_pd = pd.DataFrame(resultTable_mat, index=resultTable_pd_columns, columns=resultTable_pd_index)
     pd.DataFrame.to_csv(resultTable_pd, path_or_buf=resultTable_FileName)
 
-    #displayDataResults(method='sae', dataToUse='skeleton', posteriorDim=256, pcaCount=32, numOfSigns=11, weightReg = 1.0, batchSize = 16)
+    _confMat_consensus, _, kr_pdf_consensus, weightedPurity_consensus, _ = funcH.countPredictionsForConfusionMat(labels, consensus_clustering_labels, labelNames=labelNames, centroid_info_pdf=None, verbose=0)
+    meanPurity_consensus = np.mean(np.asarray(kr_pdf_consensus["%purity"]))
+    nmi_consensus = funcH.get_nmi_only(labels, consensus_clustering_labels)
+    acc_consensus = np.sum(np.diag(_confMat_consensus)) / np.sum(np.sum(_confMat_consensus))
+    print(resultsToCombineDescriptorStr, "\nnmi_consensus", nmi_consensus, "acc_consensus", acc_consensus, "meanPurity_consensus", meanPurity_consensus)
+    del(_confMat_consensus, kr_pdf_consensus, weightedPurity_consensus)
 
 def plot_supervised_results(fold_name, model_name="resnet18", random_seed=1, nos=11):
     result_mat = np.zeros((6, 5), dtype=float)
@@ -1072,11 +1257,23 @@ def get_hospisign_labels(nos=11, sortBy=None, verbose=0):
     labelsAll = np.asarray(a["khsID"], dtype=int)
     namesAll = np.asarray(a["khsName"])
 
+    print(len(np.unique(namesAll)))
+    print(np.unique(namesAll))
+
     labels_sui = np.squeeze(np.asarray(a[["sign", "user", "khsID"]]))
     # get sort index first
     assignedKHSinds = labelsAll[uniqKHSinds]
-    selectedKHSnames = np.array([str(np.char.strip(n)) for n in namesAll[uniqKHSinds]])
+    #selectedKHSnames = np.array([str(np.char.strip(n)) for n in namesAll[uniqKHSinds]])
+    selectedKHSnames = []
+    for cur_ind in uniqKHSinds:
+        cur_label = labelsAll[cur_ind]
+        label_samples = funcH.getInds(labelsAll, cur_label)
+        label_names = namesAll[label_samples]
+        cur_names = np.asarray([np.char.strip(nm) for nm in np.unique(label_names)])
+        cur_name = '|'.join(cur_names)
+        selectedKHSnames.append(cur_name)
 
+    selectedKHSnames = np.asarray(selectedKHSnames)
     if verbose > 1:
         print(labelsAll.shape, labelsAll.dtype)
     sortedLabelsAll, sortedLabelsMap = funcH.reset_labels(labelsAll, assignedKHSinds, selectedKHSnames, sortBy=sortBy,
@@ -1131,9 +1328,9 @@ def get_hospisign_feats(nos=11, labelsSortBy=None, verbose=0):
     skelMat = os.path.join(baseFold, "skel.mat")
     snMat = os.path.join(baseFold, "sn.mat")
 
-    hg_ft = funcH.loadMatFile(hogMat)
-    sn_ft = funcH.loadMatFile(snMat)
-    sk_ft = funcH.loadMatFile(skelMat)
+    hg_ft = funcH.loadMatFile(hogMat, verbose=verbose)
+    sn_ft = funcH.loadMatFile(snMat, verbose=verbose)
+    sk_ft = funcH.loadMatFile(skelMat, verbose=verbose)
 
     hg_ft = hg_ft['hogImArr']
     sn_ft = sn_ft['mat2sa']
@@ -1167,13 +1364,12 @@ def get_hospisign_feats(nos=11, labelsSortBy=None, verbose=0):
 def combine_pca_hospisign_data(dataIdent, pca_dim=256, nos=11, verbose=2):
     ft, lab = get_hospisign_feats(nos=nos, verbose=verbose)
 
-    print('hg_ft.shape = ', ft["hg"].shape)
-    print('sn_ft.shape = ', ft["sn"].shape)
-    print('sk_ft.shape = ', ft["sk"].shape)
+    print('hg_ft.shape = ', ft["hg"].shape, ', sn_ft.shape = ', ft["sn"].shape, ', sk_ft.shape = ', ft["sk"].shape)
 
-    print("hg - min(", ft["hg"].min(), "), max(", ft["hg"].max(), ")")
-    print("sn - min(", ft["sn"].min(), "), max(", ft["sn"].max(), ")")
-    print("sk - min(", ft["sk"].min(), "), max(", ft["sk"].max(), ")")
+    if verbose > 0:
+        print("hg - min(", ft["hg"].min(), "), max(", ft["hg"].max(), ")")
+        print("sn - min(", ft["sn"].min(), "), max(", ft["sn"].max(), ")")
+        print("sk - min(", ft["sk"].min(), "), max(", ft["sk"].max(), ")")
 
     nan_sk, nan_sn, nan_hg = list(), list(), list()
     for i in range(ft["sk"].shape[0]):
@@ -1189,13 +1385,16 @@ def combine_pca_hospisign_data(dataIdent, pca_dim=256, nos=11, verbose=2):
 
     if nan_hg:
         nan_hg = np.squeeze(np.vstack(nan_hg))
-        print("nan_hg: ", nan_hg)
+        if verbose > 0:
+            print("nan_hg: ", nan_hg)
     if nan_sn:
         nan_sn = np.squeeze(np.vstack(nan_sn))
-        print("nan_sn: ", nan_sn)
+        if verbose > 0:
+            print("nan_sn: ", nan_sn)
     if nan_sk:
         nan_sk = np.squeeze(np.vstack(nan_sk))
-        print("nan_sk: ", nan_sk)
+        if verbose > 0:
+            print("nan_sk: ", nan_sk)
 
     if (dataIdent == "hog" or dataIdent == "hg"):
         feats = ft["hg"]
@@ -1214,7 +1413,7 @@ def combine_pca_hospisign_data(dataIdent, pca_dim=256, nos=11, verbose=2):
 
     feats_pca, exp_var_rat = funcH.applyMatTransform(feats, applyPca=True, whiten=True, normMode="", verbose=verbose)
     feats = feats_pca[:, 0:pca_dim]
-    print(dataIdent, '.shape = ', feats.shape)
+    print(dataIdent, '.shape = ', feats.shape, ' loaded.')
 
     return feats, lab["labels"], lab["labels_sui"], lab["label_map"]
 

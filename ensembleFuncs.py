@@ -213,7 +213,10 @@ def create_LWCA_matrix(cluster_runs, eci_vec=None, verbose=0):
     clustRunCount, sampleCount = cluster_runs.shape
     if verbose > 0:
         print("there are {:d} clusters for {:d} samples\n".format(clustRunCount, sampleCount))
-    lwca_mat = np.zeros((sampleCount, sampleCount), dtype=float)
+    try:
+        lwca_mat = np.zeros((sampleCount, sampleCount), dtype=float)
+    except:
+        lwca_mat = np.zeros((sampleCount, sampleCount), dtype=np.float32)
     for ci in range(0, clustRunCount):
         # check if si&sj falls into same cluster
         if verbose > 0:

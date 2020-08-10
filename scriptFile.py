@@ -59,7 +59,7 @@ def study02(ep = 3):
     klusRet_nz, classRet_nz, _confMat_nz, c_pdf_nz, kr_pdf_nz = prHF.runForPred(labels_true_nz, predictionsTr_nz, labelNames_nz, expIdentStr_tr+"_nz")
 
     #the question is what is we only used the matched samples from predictionsTr_nz==predClusters_nz
-    _confMat_preds, kluster2Classes = funcH.countPredictionsForConfusionMat(predictionsTr_nz, predClusters_nz, labelNames=None)
+    _confMat_preds, kluster2Classes, kr_pdf, weightedPurity = funcH.countPredictionsForConfusionMat(predictionsTr_nz, predClusters_nz, labelNames=None)
     #_confMat_preds = confusion_matrix(predictionsTr_nz, predClusters_nz)
     sampleCount = np.sum(np.sum(_confMat_preds))
     acc = 100 * np.sum(np.diag(_confMat_preds)) / sampleCount
@@ -435,7 +435,7 @@ def change_fold_names(cvVec=[1, 2, 3, 4, 5], uiVec=[2, 3, 4, 5, 6, 7],
 
 
 def mlp_study_01(dataIdent="hgsk", pca_dim=256, nos=11, validUser=3, epochCnt=10, testUser=2, verbose=2, model_= None):
-    ft, lb, lb_sui = prHF.combine_pca_hospisign_data(dataIdent=dataIdent, pca_dim=pca_dim, nos=nos, verbose=verbose)
+    ft, lb, lb_sui, lb_map = prHF.combine_pca_hospisign_data(dataIdent=dataIdent, pca_dim=pca_dim, nos=nos, verbose=verbose)
     dl_tr, dl_va, dl_te = prHF.prepare_data_4(ft, lb, lb_sui, validUser=validUser, testUser=testUser, useNZ=False)
     hidCounts = [128, 64]
     np.random.seed(0)
@@ -846,3 +846,52 @@ def append_to_all_results_dv_loop(userTe, userVa, nos, dv, data_va_te_str, dropo
         all_results = append_to_all_results(results_dict, index_name, dropout_value=dropout_value, rs=rs,
                                             hidStateID=hidStateID, nos=nos, data_va_te_str=data_va_te_str)
     return all_results
+
+def cluster_resluts_journal01(nos = 11):
+    labelNames = prHF.load_label_names(nos)
+    results_dir = funcH.getVariableByComputerName('results_dir')  # '/media/dg/SSD_Data/DataPath/bdResults'
+    baseLineResultFolder = os.path.join(results_dir, 'baseResults')  # '/media/dg/SSD_Data/DataPath/bdResults/baseResults'
+    baseResFiles = funcH.getFileList(baseLineResultFolder, startString="", endString=".npz", sortList=False)
+    for f in baseResFiles:
+        if not str(f).__contains__("_" + str(nos)):
+            continue
+        if not str(f).__contains__("Kmeans"):
+            continue
+        labels_true, labels_pred = prHF.loadBaseResult(f)
+        labels_true, labels_pred, _ = funcH.getNonZeroLabels(labels_true, labels_pred)
+        labels_true = labels_true - 1
+        _confMat_preds, kluster2Classes, kr_pdf, weightedPurity = funcH.countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=labelNames)
+        sampleCount = np.sum(np.sum(_confMat_preds))
+        acc = 100 * np.sum(np.diag(_confMat_preds)) / sampleCount
+        meanPurity = np.mean(np.asarray(kr_pdf["%purity"]))
+
+        f = f.replace("_" + str(nos),"")
+        f = f.replace("_Kmeans","")
+        print("f({:s}),n({:d},{:d}), acc({:5.3f}), meanPurity({:5.3f}), weightedPurity({:5.3f})".format(f, labels_true.shape[0], labels_pred.shape[0], acc, meanPurity, weightedPurity))
+        print("****")
+
+def cluster_journal01_aug2020(rs, nos, data_ident_vec=["hog", "sn", "sk", "hgsk", "hgsn", "snsk", "hgsnsk"], clustCntVec=[128, 256], verbose=0, pca_dim=256):
+    for data_ident in data_ident_vec:
+        pca_dim_2_use = pca_dim
+        if (data_ident == 'skeleton' or data_ident == 'sk') and pca_dim > 112:
+            pca_dim_2_use = 96
+        ft, lb, lb_sui, lb_map = prHF.combine_pca_hospisign_data(dataIdent=data_ident, nos=nos, pca_dim=pca_dim_2_use, verbose=verbose)
+        resultDict = prHF.runClusteringOnFeatSet_Aug2020(ft, lb, lb_map, dataToUse=data_ident, numOfSigns=nos,
+                                                         pcaCount=pca_dim_2_use, clustCntVec=clustCntVec, randomSeed=rs)
+    prHF.traverseBaseResultsFolder_Aug2020()
+    return
+
+def combine_clusters_Aug2020(nos = 11, dataToUseVec = ["hog", "sn", "sk"], clustCntVec=[256], consensus_clustering_max_k=256):
+    impL.reload(prHF)
+    ft, lb, lb_sui, lb_map = prHF.combine_pca_hospisign_data(dataIdent="sk", nos=nos, pca_dim=None, verbose=0)
+    del(ft, lb, lb_sui)
+    class_names = np.asarray(lb_map["khsName"])
+    del (lb_map)
+
+    resultsToCombineDescriptorStr = '|'.join(dataToUseVec)
+    labelNames, labels, predictionsDict, cluster_runs, N = prHF.load_labels_pred_for_ensemble_Aug2020(
+                    class_names, nos=nos, clustCntVec=clustCntVec, dataToUseVec=dataToUseVec)
+    prHF.ensemble_cluster_analysis(cluster_runs, predictionsDict, labels,
+                                   consensus_clustering_max_k=consensus_clustering_max_k, useNZ=False, nos=nos,
+                                   resultsToCombineDescriptorStr=resultsToCombineDescriptorStr,
+                                   labelNames=labelNames, verbose=True)

@@ -340,7 +340,7 @@ def get_NMI_Acc(non_zero_labels, non_zero_predictions, average_method='geometric
     return nmi_cur, acc_cur
 
 def get_nmi_deepCluster(featVec, labVec, n_clusters, clusterModel='KMeans', normMode='', applyPca=True):
-    predictedKlusters = clusterData(featVec, n_clusters,
+    predictedKlusters, _ = clusterData(featVec, n_clusters,
                                     applyPca=applyPca, normMode=normMode,
                                     clusterModel=clusterModel)
     nmi_score = get_nmi_only(labVec, predictedKlusters, average_method='geometric')
@@ -393,6 +393,36 @@ def getNonZeroLabels(labVec, predictedKlusters, detailedLabels=None):
         detailedLabels_nz = detailedLabels
     return labVec_nz, predictedKlusters_nz, detailedLabels_nz
 
+def get_cluster_centroids(ft, predClusters, kluster_centers, verbose=0):
+    print(predClusters.shape)
+    print(kluster_centers.shape)
+    centroid_info_mat = np.asarray(np.squeeze(np.zeros((kluster_centers.shape[0], 3)))) - 1
+
+    uniq_preds = np.unique(predClusters)
+    cntUniqPred = uniq_preds.size
+    for i in range(0, cntUniqPred):  #
+        klust_cur = uniq_preds[i]
+        inds = getInds(predClusters, klust_cur)
+        ft_cur = ft[inds, :]
+        center_cur = kluster_centers[i, :]
+        center_mat = center_cur[None, :]
+        dist_m = np.array(cdist(ft_cur, center_mat))
+
+        predicted_inds_rel = np.argmin(dist_m)
+        predicted_inds_abs = inds[predicted_inds_rel]
+        centroid_info_mat[i, :] = [klust_cur, predicted_inds_abs, np.min(dist_m)]
+        if verbose > 0:
+            print("k({:d}), pred_inds_rel({:d}), pred_inds_abs({:d}), min({:5.3f}), max({:5.3f})".format(i,
+                                                                                                         predicted_inds_rel,
+                                                                                                         predicted_inds_abs,
+                                                                                                         np.min(dist_m),
+                                                                                                         np.max(
+                                                                                                             dist_m)))
+
+    centroid_df = pd.DataFrame(centroid_info_mat, columns=['klusterID', 'sampleID', 'distanceEuc'])
+    centroid_df = centroid_df.astype({'klusterID': int, 'sampleID': int, 'distanceEuc': float})
+    return centroid_df
+
 def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='KMeans'):
     featVec, exp_var_rat = applyMatTransform(np.array(featVec), applyPca=applyPca, normMode=normMode)
     df = pd_df(featVec)
@@ -410,10 +440,12 @@ def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='K
         print('Clustering the featVec(', featVec.shape, ') with n_clusters(', str(n_clusters), ') and model = ',
               clusterModel, ", curTol(", str(curTol), "), max_iter(", str(max_iter), "), at ",
               datetime.datetime.now().strftime("%H:%M:%S"))
+        kluster_centers = None
         if clusterModel == 'KMeans':
                 #default vals for kmeans --> max_iter=300, 1e-4
                 kmeans_result = KMeans(n_clusters=n_clusters, n_init=5, tol=curTol, max_iter=max_iter).fit(df)
                 predictedKlusters = kmeans_result.labels_.astype(float)
+                kluster_centers = kmeans_result.cluster_centers_.astype(float)
         elif clusterModel == 'GMM_full':
             # default vals for gmm --> max_iter=100, 1e-3
             predictedKlusters = GaussianMixture(n_components=n_clusters, covariance_type='full', tol=curTol, max_iter=max_iter).fit_predict(df)
@@ -449,7 +481,7 @@ def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='K
     #     print(clusterModel, ' found ', str(n1), ' uniq clusters')
     #     predictedKlusters = predictedKlusters + 1
 
-    return np.asarray(predictedKlusters, dtype=int)
+    return np.asarray(predictedKlusters, dtype=int), kluster_centers
 
 def backtrack(D, max_x, max_y):
     #https://github.com/gulzi/DTWpy/blob/master/dtwpy.py
@@ -925,9 +957,10 @@ def rnn_getValidIDs(frameCnt, timesteps, verbose=0):
     return vidIDsValid, frameIDsForLabelAcc
 
 #mat = loadMatFile('/mnt/USB_HDD_1TB/neuralNetHandVideos_11/surfImArr_all_pca_256.mat')
-def loadMatFile(matFileNameFull):
+def loadMatFile(matFileNameFull, verbose=1):
     mat = scipy.io.loadmat(matFileNameFull)
-    print(sorted(mat.keys()))
+    if verbose > 0:
+        print(sorted(mat.keys()))
     return mat
 
 def getMappedKlusters(predictions, Kluster2ClassesK):
@@ -1086,8 +1119,16 @@ def getVideosToLabel(detailedLabels, labels_pred, predStr="", labelNames=None):
 
     return pd_cntMat
 
-def calcPurity(labels_k):
-    mappedClass = get_most_frequent(labels_k)
+def calcPurity(labels_k, mappedClass=None, verbose=0):
+    cnmxh_perc_add = 0
+    most_frequent_class = get_most_frequent(labels_k)
+    if mappedClass is None:
+        mappedClass = most_frequent_class
+    else:
+        cnmxh_perc_add = int(mappedClass == most_frequent_class)
+
+    if verbose > 0:
+        print("mappedClass({:d}), most_frequent_class({:d})".format(mappedClass, most_frequent_class))
     try:
         correctLabelInds = getInds(labels_k, mappedClass)
     except:
@@ -1099,9 +1140,9 @@ def calcPurity(labels_k):
     if len(labels_k) > 0:
         purity_k = 100 * (len(correctLabelInds) / len(labels_k))
 
-    return purity_k, correctLabelInds, mappedClass
+    return purity_k, correctLabelInds, mappedClass, cnmxh_perc_add
 
-def countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=None):
+def countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=None, centroid_info_pdf=None, verbose=0):
     sampleCount = labels_pred.size
     labels_pred2class = labels_pred.copy()
     kluster2Classes = []
@@ -1109,12 +1150,22 @@ def countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=None):
     kr_data = []
     weightedPurity = 0
     cntUniqPred = uniq_preds.size
+    cnmxh_perc = 0
     for i in range(0, cntUniqPred):
         klust_cur = uniq_preds[i]
         inds = getInds(labels_pred, klust_cur)
         labels_k = getIndicedList(labels_true, inds)
 
-        purity_k, correctLabelInds, mappedClass = calcPurity(labels_k)
+        if centroid_info_pdf is not None:
+            klusterID, sampleID = centroid_info_pdf['klusterID'][i], centroid_info_pdf['sampleID'][i]
+            if klusterID == klust_cur:
+                mappedClass = labels_true[sampleID]
+            else:
+                mappedClass = None
+        else:
+            mappedClass = None
+        purity_k, correctLabelInds, mappedClass, cnmxh_perc_add = calcPurity(labels_k, mappedClass=mappedClass, verbose=verbose)
+        cnmxh_perc = cnmxh_perc + cnmxh_perc_add
 
         kluster2Classes.append([klust_cur, mappedClass, len(labels_k), correctLabelInds.size])
         labels_pred2class[inds] = mappedClass
@@ -1136,8 +1187,9 @@ def countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=None):
     kr_pdf.sort_values(by=['%purity', 'N'], inplace=True, ascending=[False, False])
 
     _confMat = confusion_matrix(labels_true, labels_pred2class)
+    cnmxh_perc = 100*cnmxh_perc/cntUniqPred
 
-    return _confMat, kluster2Classes
+    return _confMat, kluster2Classes, kr_pdf, weightedPurity, cnmxh_perc
 
 def calc_c_pdf(_confMat, labelNames=None):
     #import pycm
@@ -1188,7 +1240,7 @@ def calcCluster2ClassMetrics(labels_true, labels_pred, removeZeroLabels=False, l
 
     # 4 map klusters to classes
     #_confMat, kluster2Classes = confusionFromKluster(labels_true, labels_pred)
-    _confMat, kluster2Classes = countPredictionsForConfusionMat(labels_true, labels_pred)
+    _confMat, kluster2Classes, kr_pdf, weightedPurity, cnmxh_perc = countPredictionsForConfusionMat(labels_true, labels_pred)
 
     sampleCount = np.sum(np.sum(_confMat))
     acc = 100 * np.sum(np.diag(_confMat)) / sampleCount
