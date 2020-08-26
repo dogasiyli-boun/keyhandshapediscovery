@@ -14,6 +14,7 @@ from sklearn.metrics import confusion_matrix
 from collections import Counter
 
 from torch.utils.data import DataLoader
+import csv
 
 def createExperimentName(trainParams, modelParams, rnnParams):
 
@@ -1036,6 +1037,100 @@ def plot_supervised_results(fold_name, model_name="resnet18", random_seed=1, nos
         fig.savefig(os.path.join(fold_name, filename_2_save), bbox_inches='tight')
 
     plt.pyplot.close('all')
+
+def plot_supervised_results_aug2020(fold_name, model_name="resnet18", random_seed=1, nos=11):
+    result_mat = np.zeros((6, 6), dtype=float)
+    # fold_name = "/home/doga/DataFolder/sup_old/results_old_to_check"
+    # fold_name = "/home/doga/DataFolder/sup/results"
+    acc_list = {"ep": [], "tr": [], "va": [], "te": [], }
+    usr_list = {"u2": [], "u3": [], "u5": [], "u6": [], "u7": [], }
+    for userIDTest in [2, 3, 4, 5, 6, 7]:
+        user_id_str = "u"+str(userIDTest)
+        usr_list[user_id_str] = {"ep": [], "tr": [], "va": [], "te": [], }
+        for userValidID in [2, 3, 4, 5, 6, 7]:  # 32
+            result_mat[userIDTest - 2, userValidID - 2] = np.nan
+            if userValidID == userIDTest:
+                continue
+            file_name = "rCF_te" + str(userIDTest) + "_va" + str(userValidID) + \
+                        "_" + model_name + \
+                        "_" + "neuralNetHandImages_nos" + str(nos) + "_rs224" + \
+                        "_rs" + str(random_seed).zfill(2) + ".csv"
+            file2read = os.path.join(fold_name, file_name)
+            try:
+                featsMat = pd.read_csv(file2read, header=0, sep="*", names=["epoch", "train", "validation", "test"])
+                accvecva = featsMat["validation"].values[:]
+                accvecte = featsMat["test"].values[:]
+
+                acc_list["ep"].append(featsMat["epoch"].values[:])
+                acc_list["tr"].append(featsMat["train"].values[:])
+                acc_list["va"].append(accvecva)
+                acc_list["te"].append(accvecte)
+
+                bestVaID = np.argmax(accvecva)
+                bestTeID = np.argmax(accvecte)
+                formatStr = "5.3f"
+                print(("bestVaID({:" + formatStr + "}),vaAcc({:" + formatStr + "}),teAcc({:" + formatStr + "})").format(
+                    bestVaID, accvecva[bestVaID], accvecte[bestVaID]))
+                print(("bestTeID({:" + formatStr + "}),vaAcc({:" + formatStr + "}),teAcc({:" + formatStr + "})").format(
+                    bestTeID, accvecva[bestTeID], accvecte[bestTeID]))
+                print(("last, vaAcc({:" + formatStr + "}),teAcc({:" + formatStr + "})").format(accvecva[-1],
+                                                                                               accvecte[-1]))
+                max_val = accvecte[bestVaID]
+
+                usr_list[user_id_str]["ep"].append(featsMat["epoch"].values[1:])
+                usr_list[user_id_str]["tr"].append(featsMat["train"].values[1:])
+                usr_list[user_id_str]["va"].append(featsMat["validation"].values[1:])
+                usr_list[user_id_str]["te"].append(featsMat["test"].values[1:])
+
+            except Exception as e:
+                print(str(e))
+                max_val = np.nan
+            result_mat[userIDTest-2, userValidID-2] = max_val
+    result_pd = pd.DataFrame(result_mat, columns=["u2", "u3", "u4", "u5", "u6", "u7"],
+                             index=["u2", "u3", "u4", "u5", "u6", "u7"])
+    print(result_pd)
+    file_name = "rCF_all" \
+                "_" + model_name + \
+                "_" + "neuralNetHandImages_nos" + str(nos) + "_rs224" + \
+                "_rs" + str(random_seed).zfill(2) + ".csv"
+    fileNameFull_csv = os.path.join(fold_name, file_name)
+    print(fileNameFull_csv)
+    result_pd.to_csv(fileNameFull_csv, index=["u2", "u3", "u4", "u5", "u6", "u7"], header=True, quoting=csv.QUOTE_NONE)
+
+    data_set_ident_str = "HospiSign Development Dataset" if nos==11 else "HospiSign Expanded Dataset"
+    dev_exp_str = "development" if nos==11 else "expanded"
+
+    save_fig_name = model_name + "_" + dev_exp_str + "_accRange_per_user.png"
+    title_str = "{:s}{:s} Model({:s}){:s} 5-Fold-Cross-Validation Accuracy Range".format(data_set_ident_str, os.linesep, model_name, os.linesep)
+    funcVis.stack_fig_disp(result_mat, fold_name, save_fig_name, title_str)
+
+    mmm_mat = np.column_stack((np.nanmin(result_mat[:, :], axis=1).ravel(),
+                               np.nanmean(result_mat[:, :], axis=1).ravel(),
+                               np.nanmax(result_mat[:, :], axis=1).ravel()))
+    result_mmm = pd.DataFrame(mmm_mat, index=["u2", "u3", "u4", "u5", "u6", "u7"], columns=["min", "mean", "max"])
+    print(result_mmm)
+
+    save_fig_name = model_name + "_accBar_per_user.png"
+    title_str = model_name + " Accuracy Bar-Plot for 5-Fold-Cross-Validation"
+    funcVis.pdf_bar_plot_users(result_mmm, fold_name, save_fig_name, title_str)
+
+    fig = funcVis.plot_acc_eval(acc_list, "te", model_name + " Test Accuracy Range for All Users 5-Fold-Cross-Validation")
+    fig.savefig(os.path.join(fold_name, model_name + "_te_all_range.png"), bbox_inches='tight')
+
+    fig = funcVis.plot_acc_eval(acc_list, "tr", model_name + " Train Accuracy Range for All Users 5-Fold-Cross-Validation")
+    fig.savefig(os.path.join(fold_name, model_name + "_tr_all_range.png"), bbox_inches='tight')
+
+    fig = funcVis.plot_acc_eval(acc_list, "va", model_name + " Validation Accuracy Range for All Users 5-Fold-Cross-Validation")
+    fig.savefig(os.path.join(fold_name, model_name + "_va_all_range.png"), bbox_inches='tight')
+
+    for i, userIDTest in enumerate({2, 3, 4, 5, 6, 7}):
+        title_str = data_set_ident_str + os.linesep + "Model({:s}), User({:d}){:s}5-Fold-Cross-Validation Accuracy Range".format(model_name, userIDTest, os.linesep)
+        filename_2_save = "{:s}_u{:d}_{:s}_acc_range.png".format(model_name, userIDTest, dev_exp_str)
+        fig = funcVis.plot_acc_range_for_user(usr_list, userIDTest, title_str)
+        fig.savefig(os.path.join(fold_name, filename_2_save), bbox_inches='tight')
+
+    plt.pyplot.close('all')
+
 
 def conf_mat_update(old_conf, new_conf, op_name="best_cell"):
     if len(old_conf)==0:

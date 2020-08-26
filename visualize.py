@@ -137,7 +137,7 @@ def offset_image(coord, ax, img, zoom=0.1):
 
     ax.add_artist(ab)
 
-def bar_cnt_plot(nos=11, zoom=0.1, step_xticks = 2, title_str="", fontsize_cnt=8):
+def bar_cnt_plot(nos=11, zoom=0.1, step_xticks = 2, title_str="", fontsize_cnt=8, xtick_rot=90, ax_text_rot=45):
     folder_list = ["/home/doga/Desktop/desktopShit/khsImages/bothHands", "/home/doga/Desktop/desktopShit/khsImages/singleHand"]
     labelnames_csv_filename = "/home/doga/DataFolder/sup/data/nos" + str(nos) + "_labels.csv"
     labelNames = list(pd.read_csv(labelnames_csv_filename, sep="*")['khsName'].values.flatten())
@@ -148,18 +148,19 @@ def bar_cnt_plot(nos=11, zoom=0.1, step_xticks = 2, title_str="", fontsize_cnt=8
     labelPerc = labelCounts*100 / np.sum(labelCounts)
     print(labelNames)
     print(labelCounts)
+    print(np.sum(labelCounts))
     x_tick_int = np.arange(start=0, stop=step_xticks*len(labelNames), step=step_xticks)
     print(x_tick_int)
 
     fig, ax = plt.subplots(dpi=480)  # figsize=(step_xticks*len(labelNames)*4, 200)
     ax.bar(x_tick_int, labelCounts, width=step_xticks*.75, align="center")
     ax.set_xticks(x_tick_int)
-    plt.xticks(rotation=90)
+    plt.xticks(rotation=xtick_rot)
     ax.set_xticklabels(labelNames)
     plt.ylim(0, np.max(labelCounts)+500)
 
     label_color_loop = ['b', 'm', 'g', 'k']
-    ax.tick_params(axis='x', which='major', pad=20)
+    ax.tick_params(axis='x', which='major', pad=25)
     ax.set_title(title_str)
 
     for i, c in enumerate(labelNames):
@@ -173,7 +174,7 @@ def bar_cnt_plot(nos=11, zoom=0.1, step_xticks = 2, title_str="", fontsize_cnt=8
         color_cur = label_color_loop[np.mod(i, 4)]
         ax.text(y=row_int, x=i*step_xticks,
                 s=str(row_int) + "(%{:.1f})".format(labelPerc[i]),
-                va='bottom', ha='left', rotation=45,
+                va='bottom', ha='left', rotation=ax_text_rot,
                 color=color_cur, fontsize=fontsize_cnt)
         ax.get_xticklabels()[i].set_color(color_cur)
         ax.get_xticklabels()[i].set_fontsize(fontsize_cnt)
