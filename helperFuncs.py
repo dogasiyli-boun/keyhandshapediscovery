@@ -167,8 +167,8 @@ def getVariableByComputerName(variableName):
     if variableName == 'base_dir':
         if curCompName == 'doga-MSISSD':
             base_dir = '/media/doga/SSD258/DataPath'  # for bogazici kasa
-        elif curCompName == 'WsUbuntu05':
-            base_dir = '/media/dg/SSD_Data/DataPath'  # for WS Doga DHO
+        elif curCompName == 'WsUbuntu05' or curCompName == 'wsubuntu':
+            base_dir = '/media/wsubuntu/SSD_Data/DataPath'  # for WS Doga DHO
         elif curCompName == 'doga-msi-ubu':
             base_dir = '/home/doga/DataFolder'  # for laptop
         else:
@@ -177,8 +177,8 @@ def getVariableByComputerName(variableName):
     if variableName == 'desktop_dir':
         if curCompName == 'doga-MSISSD':
             desktop_dir = '/media/doga/Desktop'  # for bogazici kasa
-        elif curCompName == 'WsUbuntu05':
-            desktop_dir = '/media/dg/Desktop'  # for WS Doga DHO
+        elif curCompName == 'WsUbuntu05' or curCompName == 'wsubuntu':
+            desktop_dir = '/home/wsubuntu/Desktop'  # for WS Doga DHO
         elif curCompName == 'doga-msi-ubu':
             desktop_dir = '/home/doga/Desktop'  # for laptop
         else:
@@ -187,8 +187,8 @@ def getVariableByComputerName(variableName):
     if variableName == 'data_dir':
         if curCompName == 'doga-MSISSD':
             data_dir = '/media/doga/SSD258/DataPath/bdData'  # for bogazici kasa
-        elif curCompName == 'WsUbuntu05':
-            data_dir = '/media/dg/SSD_Data/DataPath/bdData'  # for WS Doga DHO
+        elif curCompName == 'WsUbuntu05' or curCompName == 'wsubuntu':
+            data_dir = '/media/wsubuntu/SSD_Data/DataPath/bdData'  # for WS Doga DHO
         elif curCompName == 'doga-msi-ubu':
             data_dir = '/home/doga/DataFolder/bdData'  # for laptop
         else:
@@ -197,8 +197,8 @@ def getVariableByComputerName(variableName):
     if variableName == 'results_dir':
         if curCompName == 'doga-MSISSD':
             results_dir = '/media/doga/SSD258/DataPath/bdResults'  # for bogazici kasa
-        elif curCompName == 'WsUbuntu05':
-            results_dir = '/media/dg/SSD_Data/DataPath/bdResults'  # for WS Doga DHO
+        elif curCompName == 'WsUbuntu05' or curCompName == 'wsubuntu':
+            results_dir = '/media/wsubuntu/SSD_Data/DataPath/bdResults'  # for WS Doga DHO
         elif curCompName == 'doga-msi-ubu':
             results_dir = '/home/doga/DataFolder/bdResults'  # for laptop
         else:

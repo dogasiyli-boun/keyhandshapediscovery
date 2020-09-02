@@ -1310,7 +1310,7 @@ def prepare_data_4(X, y, detailedLabels, validUser, testUser):
             # print("label=",label,", teIDs=", teIDs.shape)
             # print("label=",label,", vaIDs=", vaIDs.shape)
 
-            usedInds = np.squeeze(np.concatenate((teIDs, vaIDs)))
+            usedInds = np.asarray(np.squeeze(np.concatenate((teIDs, vaIDs))), dtype=int)
             # print("label=",label,", usedInds=", usedInds.shape)
 
             allInds = np.arange(0, len(inds))
