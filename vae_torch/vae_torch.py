@@ -4,6 +4,7 @@ from data_classes import khs_dataset
 import numpy as np
 import datetime
 import os
+import sys
 
 def getFileList(dir2Search, startString="", endString="", sortList=False):
     fileList = [f for f in os.listdir(dir2Search) if f.startswith(startString) and
@@ -13,10 +14,10 @@ def getFileList(dir2Search, startString="", endString="", sortList=False):
         fileList = np.sort(fileList)
     return fileList
 
-def main():
+def main(argv):
     input_initial_resize = 80
     input_size = 64
-    epochs = 500
+    epochs = 135
     batch_size = 64
     chn_sizes = [3, 32, 32, 16, 16, 16]
     kern_sizes = [5, 5, 5, 3, 3]
@@ -24,13 +25,15 @@ def main():
     feat_size = 64
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    data_folder = "/home/doga/DataFolder/sup/data/data_te2_cv1_neuralNetHandImages_nos11_rs224_rs01/neuralNetHandImages_nos11_rs224_rs01_XX_"
+    data_main_fold = "/media/doga/SSD258/DataPath/sup/data" #/home/doga/DataFolder/sup/data
+    data_folder = data_main_fold + "/data_te2_cv1_neuralNetHandImages_nos11_rs224_rs01/neuralNetHandImages_nos11_rs224_rs01_XX_"
     X_tr = khs_dataset(root_dir=data_folder.replace("_XX_", "_tr"), is_train=True, input_size=input_size, input_initial_resize=input_initial_resize)
     # X_va = khs_dataset(root_dir=data_folder.replace("_XX_", "_va"), is_train=False, input_size=input_size)
     X_te = khs_dataset(root_dir=data_folder.replace("_XX_", "_te"), is_train=False, input_size=input_size)
 
-    out_folder = "output_C18_is" + str(input_size) + "_hs" + str(hid_sizes[0]) + "_fs" + str(feat_size)
-    vae_f_name = 'vae_ft_C18_is' + str(input_size) + "_hs" + str(hid_sizes[0]) + '_fs' + str(feat_size) + '.npz'
+    base_str = "C18_is" + str(input_size) + "_hs" + str(hid_sizes[0]) + "_fs" + str(feat_size)
+    out_folder = 'output_' + base_str
+    vae_f_name = 'vae_ft_' + base_str + '.npz'
     if not os.path.exists(out_folder):
         os.mkdir(out_folder)
     updatedModelFile = os.path.join(out_folder, "model_C18_is" + str(input_size) + "_hs" + str(hid_sizes[0]) + "_fs" + str(feat_size) + '.model')
@@ -58,3 +61,6 @@ def main():
         print(datetime.datetime.now().strftime("%H:%M:%S"))
         torch.save(_model_vae, f=updatedModelFile)
     np.savez(vae_f_name, tr_loss=tr_loss, val_loss=val_loss, allow_pickle=True)
+
+if __name__ == '__main__':
+    main(sys.argv)

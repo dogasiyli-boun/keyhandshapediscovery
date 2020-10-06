@@ -31,22 +31,20 @@ class khs_dataset(Dataset):
     def __init__(self, root_dir, is_train, input_size, input_initial_resize=None, datasetname="hospdev"):
         self.root_dir = root_dir
 
-        train_data_transform = transforms.Compose([
+
+        data_transform = \
+        transforms.Compose([
             transforms.Resize(input_initial_resize),
             transforms.RandomResizedCrop(input_size),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor()
-        ])
-        valid_data_transform = transforms.Compose([
+        ]) if is_train and input_initial_resize is not None else \
+        transforms.Compose([
             transforms.Resize(input_size),
             transforms.ToTensor()
         ])
 
-        if is_train:
-            self.transform = train_data_transform
-        else:
-            self.transform = valid_data_transform
-
+        self.transform = data_transform
         self.datasetname = datasetname
 
         images, labels, ids = parseDataset_khs(root_dir)

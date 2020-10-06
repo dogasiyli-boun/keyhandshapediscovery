@@ -3,9 +3,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 import torch.optim as optim
-import torch.nn as nn
 from torchvision.utils import save_image
 from numpy import unique as np_unique
 
@@ -147,11 +145,6 @@ class ConvVAE_2(nn.Module):
 
         self.DropLayer = nn.Dropout(p=droput_val) if droput_val is not None else None
 
-        lr = 0.0001
-        self.optimizer = optim.Adam(self.parameters(), lr=lr)
-        self.criterion = nn.BCELoss(reduction='sum')
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
         # encoder
         self.L0_conv1 = nn.Conv2d(in_channels=chn_sizes[0], out_channels=chn_sizes[1], kernel_size=kern_sizes[0], stride=1, padding=0)
         self.L1_conv2 = nn.Conv2d(in_channels=chn_sizes[1], out_channels=chn_sizes[2], kernel_size=kern_sizes[1], stride=1, padding=0)
@@ -179,6 +172,11 @@ class ConvVAE_2(nn.Module):
         print("kern_sizes=", self.kern_sizes)
         print("hid_sizes=", self.hid_sizes)
         print("feat_size=", self.feat_size)
+
+        lr = 0.0001
+        self.optimizer = optim.Adam(self.parameters(), lr=lr)
+        self.criterion = nn.BCELoss(reduction='sum')
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def reparameterize(self, mu, log_var):
         """
@@ -222,6 +220,7 @@ class ConvVAE_2(nn.Module):
         x = self.L2_upsm1(x)
         x = F.relu(self.L1_dcnv2(x))
         reconstruction = torch.sigmoid(self.L0_dcnv1(x))
+        return reconstruction
 
     def forward(self, x):
         x, rp0, rp1, rp2 = self.enc(x)
