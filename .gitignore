@@ -10,3 +10,7 @@ venv/
 *.json
 
 .ipynb_checkpoints/
+
+vae_torch/output*
+
+vae_torch/vae_ft*

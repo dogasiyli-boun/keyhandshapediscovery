@@ -510,6 +510,7 @@ def mlp_study_03(dropout_value, hidStateID, nos, dataIdent_vec, pca_dim = 256, v
     impL.reload(moF)
 
     for dataIdent in dataIdent_vec:
+        # prepare and get the data along with labels and necessary variables
         ft, lb, lb_sui, lb_map = prHF.combine_pca_hospisign_data(dataIdent=dataIdent, pca_dim=pca_dim, nos=nos, verbose=verbose)
 
         doStr = ""
