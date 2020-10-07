@@ -8,6 +8,7 @@ from torchvision.utils import save_image
 from numpy import unique as np_unique
 from torch.utils.data import DataLoader
 import numpy as np
+from sklearn.metrics import accuracy_score
 
 # define a simple linear VAE
 class LinearVAE(nn.Module):
@@ -475,3 +476,254 @@ class ConvVAE_2(nn.Module):
         lab_vec = np.asarray(torch.cat(lab_vec).to(torch.device('cpu')))
         #np.savez('?_data.npz', mu_vec=mu_vec, x_vec=x_vec, labsTr=batch_lb)
         return mu_vec, x_vec, lab_vec
+
+class ConvVAE_MultiTask(nn.Module):
+    def __init__(self, input_size, chn_sizes, kern_sizes, hid_sizes, feat_size, class_count):
+        super(ConvVAE_MultiTask, self).__init__()
+
+        self.input_size = input_size  # 64
+        self.chn_sizes = chn_sizes  # chn_sizes = [3, 32, 32, 16]
+        self.kern_sizes = kern_sizes  # kern_sizes = [5, 5, 5]
+        self.hid_sizes = hid_sizes  # hid_sizes = [9216(16*24*24), 512]
+        self.feat_size = feat_size  # feat_size = 64
+        self.bottle_neck_image_size = None
+        self.class_count = class_count  # class_count=27
+
+        # encoder
+        self.L0_conv1 = nn.Conv2d(in_channels=chn_sizes[0], out_channels=chn_sizes[1], kernel_size=kern_sizes[0], stride=1, padding=0)
+        self.L1_conv2 = nn.Conv2d(in_channels=chn_sizes[1], out_channels=chn_sizes[2], kernel_size=kern_sizes[1], stride=1, padding=0)
+        self.L2_maxp1 = nn.MaxPool2d(kernel_size=2)
+        self.L3_conv3 = nn.Conv2d(in_channels=chn_sizes[2], out_channels=chn_sizes[3], kernel_size=kern_sizes[2], stride=1, padding=0)
+        self.L4_lenc1 = nn.Linear(in_features=hid_sizes[0], out_features=hid_sizes[1])
+        self.L5_lenc2 = nn.Linear(in_features=hid_sizes[1], out_features=feat_size*2)
+
+        # decoder
+        self.L6_ldec2 = nn.Linear(in_features=feat_size, out_features=hid_sizes[1])
+        self.L7_ldec1 = nn.Linear(in_features=hid_sizes[1], out_features=hid_sizes[0])
+        self.L8_dcnv3 = nn.ConvTranspose2d(in_channels=chn_sizes[3], out_channels=chn_sizes[2], kernel_size=kern_sizes[2], stride=1, padding=0)
+        self.L9_upsm1 = nn.Upsample(scale_factor=2)
+        self.L10_dcnv2 = nn.ConvTranspose2d(in_channels=chn_sizes[2], out_channels=chn_sizes[1], kernel_size=kern_sizes[1], stride=1, padding=0)
+        self.L11_dcnv1 = nn.ConvTranspose2d(in_channels=chn_sizes[1], out_channels=chn_sizes[0], kernel_size=kern_sizes[0], stride=1, padding=0)
+
+        # classifier
+        self.L8_lcls1 = nn.Linear(in_features=feat_size*2, out_features=hid_sizes[1])
+        self.L9_lcls2 = nn.Linear(in_features=hid_sizes[1], out_features=hid_sizes[0])
+        self.L10_sofm = nn.Linear(in_features=hid_sizes[0], out_features=self.class_count)
+
+        print("input_size=", self.input_size)
+        print("chn_sizes=", self.chn_sizes)
+        print("kern_sizes=", self.kern_sizes)
+        print("hid_sizes=", self.hid_sizes)
+        print("feat_size=", self.feat_size)
+        print("class_count=", self.class_count)
+
+        lr = 0.0001
+        self.optimizer = optim.Adam(self.parameters(), lr=lr)
+        self.loss_BCE = nn.BCELoss(reduction='sum')
+        self.loss_CLS = nn.CrossEntropyLoss()
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    def reparameterize(self, mu, log_var):
+        """
+        :param mu: mean from the encoder's latent space
+        :param log_var: log variance from the encoder's latent space
+        """
+        std = torch.exp(0.5*log_var) # standard deviation
+        eps = torch.randn_like(std) # `randn_like` as we need the same size
+        sample = mu + (eps * std) # sampling as if coming from the input space
+        return sample
+
+    def enc(self, x):
+        # encoding
+        x = F.relu(self.L0_conv1(x))
+        x = F.relu(self.L1_conv2(x))
+        x = self.L2_maxp1(x)
+        x = F.relu(self.L3_conv3(x))
+        if self.bottle_neck_image_size is None:
+            self.bottle_neck_image_size = [x.size(1), x.size(2), x.size(3)]
+        x = x.view(x.size(0), -1)
+        x = F.relu(self.L4_lenc1(x))
+        x = self.L5_lenc2(x)
+        return x
+
+    def dec(self, z):
+        # decoding
+        x = F.relu(self.L6_ldec2(z))
+        x = F.relu(self.L7_ldec1(x))
+        x = x.view(x.size(0), self.bottle_neck_image_size[0], self.bottle_neck_image_size[1], self.bottle_neck_image_size[2])
+        x = F.relu(self.L8_dcnv3(x))
+        x = self.L9_upsm1(x)
+        x = F.relu(self.L10_dcnv2(x))
+        reconstruction = torch.sigmoid(self.L11_dcnv1(x))
+        return reconstruction
+
+    def predict(self, x):
+        x = F.relu(self.L8_lcls1(x))
+        x = F.relu(self.L9_lcls2(x))
+        x = self.L10_sofm(x)
+        _, preds = torch.max(x, 1)
+        return x, preds
+
+    def forward(self, x):
+        x = self.enc(x)
+
+        xProb, preds = self.predict(x)
+
+        x = x.view(-1, 2, self.feat_size)
+        # get `mu` and `log_var`
+        mu = x[:, 0, :] # the first feature values as mean
+        log_var = x[:, 1, :] # the other feature values as variance
+        # get the latent vector through reparameterization
+        z = self.reparameterize(mu, log_var)
+
+        reconstruction = self.dec(z)
+
+        return reconstruction, mu, log_var, xProb, preds
+
+    def final_loss(self, classification_loss, bce_loss, mu, logvar):
+        """
+        This function will add the reconstruction loss (BCELoss) and the
+        KL-Divergence.
+        KL-Divergence = 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+        :param bce_loss: recontruction loss
+        :param mu: the mean from the latent vector
+        :param logvar: log variance from the latent vector
+        """
+        CLS = classification_loss
+        BCE = bce_loss
+        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        return BCE + KLD + CLS
+
+    def fit(self, X_data, batch_size):
+        self.train()
+        running_loss = 0.0
+        cls_loss = 0.0
+        dloader = DataLoader(X_data, batch_size=batch_size, shuffle=True)
+        lab_vec = []
+        pred_vec = []
+        for b in dloader:
+            data = b['image']
+            labels = b['label']
+
+            data = data.to(self.device)
+            labels = labels.to(self.device)
+            self.optimizer.zero_grad()
+            reconstruction, mu, logvar, xProb, preds = self.forward(data)
+
+            lab_vec.append(labels)
+            pred_vec.append(preds)
+
+            classification_loss = self.loss_CLS(xProb, labels)
+            bce_loss = self.loss_BCE(reconstruction, data)
+            loss = self.final_loss(classification_loss, bce_loss, mu, logvar)
+
+            running_loss += loss.item()
+            cls_loss += classification_loss
+
+            loss.backward()
+            self.optimizer.step()
+
+        lab_vec = np.asarray(torch.cat(lab_vec).to(torch.device('cpu')))
+        pred_vec = np.asarray(torch.cat(pred_vec).to(torch.device('cpu')))
+        acc = accuracy_score(lab_vec, pred_vec)
+
+        train_loss = running_loss/len(X_data)
+        cls_loss = cls_loss / len(X_data)
+        return train_loss, cls_loss, acc
+
+    def validate(self, X_vate, epoch, batch_size, out_folder, out_name_add_str=""):
+        self.eval()
+        running_loss = 0.0
+        batch = [b['image'] for b in X_vate]
+        batch_lb = [b['label'] for b in X_vate]
+        uqlb, unid = np_unique(batch_lb, return_index=True)
+        data_al = [batch[i] for i in unid]
+        data_cn = len(unid)
+        pred_vec = []
+
+        with torch.no_grad():
+            fr = 0
+            while (fr < len(X_vate)):
+                to = fr + batch_size
+                if to > len(X_vate):
+                    to = len(X_vate)
+
+                data = torch.stack(batch[fr:to], dim=0)
+                labels = torch.tensor(batch_lb[fr:to])
+
+                data = data.to(self.device)
+                labels = labels.to(self.device)
+
+                reconstruction, mu, logvar, xProb, preds = self.forward(data)
+
+                pred_vec.append(preds)
+
+                classification_loss = self.loss_CLS(xProb, labels)
+                bce_loss = self.loss_BCE(reconstruction, data)
+                loss = self.final_loss(classification_loss, bce_loss, mu, logvar)
+
+                running_loss += loss.item()
+                fr = to
+
+        labels = np.asarray(batch_lb)
+        pred_vec = np.asarray(torch.cat(pred_vec).to(torch.device('cpu')))
+        acc = accuracy_score(labels, pred_vec)
+
+        with torch.no_grad():
+            # save the last batch input and output of every epoch
+            data = torch.stack(data_al, dim=0)
+            data = data.to(self.device)
+            #data = data.view(data.size(0), -1)
+            reconstruction, _, _, _, _ = self.forward(data)
+            both = torch.cat((data.view(data_cn, 3, self.input_size, self.input_size)[:data_cn],
+                              reconstruction.view(data_cn, 3, self.input_size, self.input_size)[:data_cn]))
+            f_name = out_folder + "/output_" + out_name_add_str + "{:03d}.png".format(epoch)
+            save_image(both.cpu(), f_name, nrow=data_cn)
+        val_loss = running_loss/len(X_vate)
+        return val_loss, acc
+
+    @staticmethod
+    def feat_extract_ext(model, X_vate, batch_size):
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if isinstance(model, str):
+            model = torch.load(model, map_location=device)
+        model.eval()
+        dloader = DataLoader(X_vate, batch_size=batch_size, shuffle=False)
+
+        mu_vec = []
+        x_vec = []
+        lab_vec = []
+        pred_vec = []
+        with torch.no_grad():
+            for b in dloader:
+                data = b['image']
+                labels = b['label']
+                lab_vec.append(labels)
+
+                x = data.to(device)
+                # encode
+                x = F.relu(model.L0_conv1(x))
+                x = F.relu(model.L1_conv2(x))
+                x = model.L2_maxp1(x)
+                x = F.relu(model.L3_conv3(x))
+                x = x.view(x.size(0), -1)
+                x = F.relu(model.L4_lenc1(x))
+                x = model.L5_lenc2(x)
+                x_vec.append(x)
+
+                _, preds = model.predict(x)
+                pred_vec.append(preds)
+
+                x = x.view(-1, 2, model.feat_size)
+                mu = x[:, 0, :]  # the first feature values as mean
+                mu_vec.append(mu)
+
+        mu_vec = np.asarray(torch.cat(mu_vec).to(torch.device('cpu')))
+        x_vec = np.asarray(torch.cat(x_vec).to(torch.device('cpu')))
+        lab_vec = np.asarray(torch.cat(lab_vec).to(torch.device('cpu')))
+        pred_vec = np.asarray(torch.cat(pred_vec).to(torch.device('cpu')))
+        #np.savez('?_data.npz', mu_vec=mu_vec, x_vec=x_vec, labsTr=lab_vec, predsTr=pred_vec)
+        return mu_vec, x_vec, lab_vec, pred_vec
+
+    def feat_extract(self, X_vate, batch_size):
+        return self.feat_extract_ext(self, X_vate, batch_size)

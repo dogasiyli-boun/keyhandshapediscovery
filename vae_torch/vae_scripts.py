@@ -355,6 +355,59 @@ def get_data_from_ConvVAE_model(data_main_fold="/media/doga/SSD258/DataPath/sup/
 
     return X
 
+def get_data_from_ConvVAE_Multitask_model(data_main_fold="/home/doga/DataFolder/sup/data/conv_data",
+                                model_folder="/home/doga/GithUBuntU/keyhandshapediscovery/output_ConvVAE_MultiTask_is64_hs9216_fs64",
+                                model_name="model_ConvVAE_MultiTask_is64_hs9216_fs64",
+                                batch_size=32):
+    save_data_name = "data_ConvVAE_MultiTask_" + model_name + ".npy"
+    save_data_full_name = os.path.join(model_folder, save_data_name)
+    if not os.path.exists(save_data_full_name):
+        model = os.path.join(model_folder, model_name + ".model")
+        input_size = 64
+        data_folder = os.path.join(data_main_fold, "data_XX_")
+        X_tr = dc.khs_dataset(root_dir=data_folder.replace("_XX_", "_tr"), is_train=False, input_size=input_size)
+        X_va = dc.khs_dataset(root_dir=data_folder.replace("_XX_", "_va"), is_train=False, input_size=input_size)
+        X_te = dc.khs_dataset(root_dir=data_folder.replace("_XX_", "_te"), is_train=False, input_size=input_size)
+
+        mu_vec_tr, x_vec_tr, lab_vec_tr, pred_vec_tr = vtm.ConvVAE_MultiTask.feat_extract_ext(model, X_tr, 64)
+        mu_vec_va, x_vec_va, lab_vec_va, pred_vec_va = vtm.ConvVAE_MultiTask.feat_extract_ext(model, X_va, 64)
+        mu_vec_te, x_vec_te, lab_vec_te, pred_vec_te = vtm.ConvVAE_MultiTask.feat_extract_ext(model, X_te, 64)
+
+        X = {
+            "trCnt": len(lab_vec_tr),
+            "vaCnt": len(lab_vec_va),
+            "teCnt": len(lab_vec_te),
+            "trLab": lab_vec_tr,
+            "vaLab": lab_vec_va,
+            "teLab": lab_vec_te,
+            "trPrd": pred_vec_tr,
+            "vaPrd": pred_vec_va,
+            "tePrd": pred_vec_te,
+            "ftCnt": mu_vec_tr.shape[1],
+            "classCnt": len(np.unique(lab_vec_tr)),
+            "train_dl": DataLoader(HandCraftedDataset("", X=mu_vec_tr, y=np.asarray(lab_vec_tr, dtype=int)), batch_size=batch_size, shuffle=False),
+            "mTr": mu_vec_tr,
+            "valid_dl": DataLoader(HandCraftedDataset("", X=mu_vec_va, y=np.asarray(lab_vec_va, dtype=int)), batch_size=batch_size, shuffle=False),
+            "mVa": mu_vec_va,
+            "test_dl" : DataLoader(HandCraftedDataset("", X=mu_vec_te, y=np.asarray(lab_vec_te, dtype=int)), batch_size=batch_size, shuffle=False),
+            "mTe": mu_vec_te,
+        }
+        np.save(save_data_full_name, X, allow_pickle=True)
+    else:
+        X_L = np.load(save_data_full_name, allow_pickle=True)
+        X = {}
+        for k in X_L.item().keys():
+            X[k] = X_L.item().get(k)
+
+    acc_tr = accuracy_score(X["trLab"], X["trPrd"])
+    print("Initial training accuracy = ", acc_tr)
+    acc_va = accuracy_score(X["vaLab"], X["vaPrd"])
+    print("Initial validation accuracy = ", acc_va)
+    acc_te = accuracy_score(X["teLab"], X["tePrd"])
+    print("Initial test accuracy = ", acc_te)
+
+    return X
+
 def run_sup_learner(X=None, hidStateID=7, epochCnt=100):
     if X is None:
         X = load_data()
@@ -362,8 +415,24 @@ def run_sup_learner(X=None, hidStateID=7, epochCnt=100):
     hidStatesDict = create_hidstate_dict(hid_state_cnt_vec, init_mode_vec=None, act_vec=None)
     classCount = X["classCnt"]
     model_ = MLP_Dict(X["ftCnt"], hidStatesDict, classCount, dropout_value=0.3)
+
+    if 'trLab' in X and 'trPrd' in X:
+        acc_tr = accuracy_score(X["trLab"], X["trPrd"])
+        print("Initial training accuracy = ", acc_tr)
+    if 'vaLab' in X and 'vaPrd' in X:
+        acc_va = accuracy_score(X["vaLab"], X["vaPrd"])
+        print("Initial validation accuracy = ", acc_va)
+    if 'teLab' in X and 'tePrd' in X:
+        acc_te = accuracy_score(X["teLab"], X["tePrd"])
+        print("Initial test accuracy = ", acc_te)
+
     accvectr, accvecva, accvecte, preds_best, labels_best = model_.train_evaluate_trvate(X["train_dl"], X["valid_dl"],
                                                                                          X["test_dl"], epochCnt=epochCnt,
                                                                                          saveBestModelName=None)
     print("accvectr=", accvectr, ", accvecva=", accvecva, ", accvecte=", accvecte)
     return accvectr, accvecva, accvecte, preds_best, labels_best
+
+"""
+X = ss.get_data_from_ConvVAE_Multitask_model()
+accvectr, accvecva, accvecte, preds_best, labels_best = ss.run_sup_learner(X=X)
+"""
