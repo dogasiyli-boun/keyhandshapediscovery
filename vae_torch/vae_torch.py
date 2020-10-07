@@ -61,7 +61,7 @@ def get_model(updatedModelFile, model_name, input_size, chn_sizes, kern_sizes, h
 
     return _model_vae
 
-def main(model_name="ConvVAE_MultiTask", epochs=20, class_count=27, data_main_fold="/media/doga/Data/VENVFOLD/vae_torch_data/conv_data_te2_va3_nos11", data_ident_str="conv_data_te2_va3_nos11"):
+def main(model_name="ConvVAE_MultiTask", feat_size = 64, epochs=20, class_count=27, data_main_fold="/media/doga/Data/VENVFOLD/vae_torch_data/conv_data_te2_va3_nos11", data_ident_str="conv_data_te2_va3_nos11"):
     #data related variables
     input_initial_resize = 80
     input_size = 64
@@ -73,8 +73,6 @@ def main(model_name="ConvVAE_MultiTask", epochs=20, class_count=27, data_main_fo
     #model related variables
 
     chn_sizes, kern_sizes, hid_sizes = load_model_vars(model_name)
-
-    feat_size = 64
 
     data_ident_str = "_" + data_ident_str if data_ident_str != "" else ""
 
@@ -150,4 +148,4 @@ def main(model_name="ConvVAE_MultiTask", epochs=20, class_count=27, data_main_fo
         np.savez(vae_f_name, tr_loss=tr_loss, val_loss=val_loss, tes_loss=tes_loss, tr_acc=tr_acc, va_acc=va_acc, te_acc=te_acc)
 
 if __name__ == '__main__':
-    main(model_name="ConvVAE_MultiTask", epochs=20, class_count=27, data_main_fold="/home/doga/DataFolder/sup/data/conv_data", data_ident_str="")
+    main(model_name="ConvVAE_MultiTask", feat_size = 64, epochs=20, class_count=27, data_main_fold="/home/doga/DataFolder/sup/data/conv_data", data_ident_str="")
