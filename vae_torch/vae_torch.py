@@ -61,11 +61,11 @@ def get_model(updatedModelFile, model_name, input_size, chn_sizes, kern_sizes, h
 
     return _model_vae
 
-def main(model_name="ConvVAE_MultiTask", epochs=20, class_count=27):
+def main(model_name="ConvVAE_MultiTask", epochs=20, class_count=27, data_main_fold="/media/doga/Data/VENVFOLD/vae_torch_data/conv_data_te2_va3_nos11", data_ident_str="conv_data_te2_va3_nos11"):
     #data related variables
     input_initial_resize = 80
     input_size = 64
-    X_tr, X_va, X_te = load_data(input_size, input_initial_resize, data_main_fold="/home/doga/DataFolder/sup/data/conv_data")
+    X_tr, X_va, X_te = load_data(input_size, input_initial_resize, data_main_fold=data_main_fold)
 
     #learner related variables
 
@@ -76,8 +76,10 @@ def main(model_name="ConvVAE_MultiTask", epochs=20, class_count=27):
 
     feat_size = 64
 
+    data_ident_str = "_" + data_ident_str if data_ident_str != "" else ""
+
     #experiment related variables
-    base_str = model_name + "_is" + str(input_size) + "_hs" + str(hid_sizes[0]) + "_fs" + str(feat_size)
+    base_str = model_name + data_ident_str + "_is" + str(input_size) + "_hs" + str(hid_sizes[0]) + "_fs" + str(feat_size)
     out_folder = 'output_' + base_str
     vae_f_name = os.path.join(out_folder, 'vae_ft_' + base_str + '.npz')
     if not os.path.exists(out_folder):
@@ -148,4 +150,4 @@ def main(model_name="ConvVAE_MultiTask", epochs=20, class_count=27):
         np.savez(vae_f_name, tr_loss=tr_loss, val_loss=val_loss, tes_loss=tes_loss, tr_acc=tr_acc, va_acc=va_acc, te_acc=te_acc)
 
 if __name__ == '__main__':
-    main(model_name="ConvVAE_MultiTask", epochs=20, class_count=27)
+    main(model_name="ConvVAE_MultiTask", epochs=20, class_count=27, data_main_fold="/home/doga/DataFolder/sup/data/conv_data", data_ident_str="")
