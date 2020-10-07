@@ -76,7 +76,7 @@ def npy_to_matlab(folderOfNPYFiles, matFileName):
         scipy.io.savemat(matFileName, matStructure)
 
 def install_package_str(package_name):
-    return "!{sys.executable} - m pip install " + package_name
+    return "!{sys.executable} -m pip install " + package_name
 
 def removeLastLine():
     sys.stdout.write("\033[F")
