@@ -19,6 +19,7 @@ from torch import load as torch_load
 
 import vae_torch_model as vtm
 import data_classes as dc
+import vae_utils as vu
 
 class HandCraftedDataset(Dataset):
     # load the dataset
@@ -240,49 +241,6 @@ class MLP_Dict(Module):
             accvecte[epoch] = acc_te
         return accvectr, accvecva, accvecte, preds_best, labels_best
 
-def get_hid_state_vec(hidStateID):
-    hid_state_cnt_vec = [2048, 1024, 1024, 512, 512, 256, 256]
-    if hidStateID == 1:
-        hid_state_cnt_vec = [256, 256]
-    elif hidStateID == 2:
-        hid_state_cnt_vec = [512, 512]
-    elif hidStateID == 3:
-        hid_state_cnt_vec = [512, 512, 256, 256]
-    elif hidStateID == 4:
-        hid_state_cnt_vec = [1024, 512, 512, 256]
-    elif hidStateID == 5:
-        hid_state_cnt_vec = [64, 64, 64, 64]
-    elif hidStateID == 6:
-        hid_state_cnt_vec = [128, 128, 128, 128]
-    elif hidStateID == 7:
-        hid_state_cnt_vec = [256, 256, 256, 256]
-    elif hidStateID == 8:
-        hid_state_cnt_vec = [512, 512, 512, 512]
-    elif hidStateID == 9:
-        hid_state_cnt_vec = [128, 128]
-    return hid_state_cnt_vec
-
-def create_hidstate_dict(hid_state_cnt_vec, init_mode_vec = None, act_vec=None, verbose=0):
-    hid_state_cnt = len(hid_state_cnt_vec)
-    hidStatesDict = {}
-    for i in range(hid_state_cnt):
-        hid_state_id_str = str(i+1).zfill(2)
-        hid_state_name = "hidStateDict_" + hid_state_id_str
-        dim_str = str(hid_state_cnt_vec[i])
-        dim_int = int(hid_state_cnt_vec[i])
-        try:#if init_mode_vec is not None and len(init_mode_vec)>=i:
-            initMode = init_mode_vec[i]
-        except:#else:
-            initMode = "kaiming_uniform_"
-        try:#if act_vec is not None and len(act_vec)>=i:
-            actStr = act_vec[i]
-        except:#else:
-            actStr = "relu"
-        if verbose>0:
-            print(hid_state_name, ' = {"dimOut": "', dim_str, '", "initMode": "', initMode ,'", "act": "', actStr,'"}')
-        hidStatesDict[hid_state_id_str] = {"dimOut": dim_int, "initMode": initMode, "act": actStr}
-    return hidStatesDict
-
 def load_data():
     X_tr = np.load('/home/doga/GithUBuntU/keyhandshapediscovery/vae_torch/tr_data.npz')
     X_va = np.load('/home/doga/GithUBuntU/keyhandshapediscovery/vae_torch/va_data.npz')
@@ -313,6 +271,17 @@ def load_data():
         "mTe": X_te['MuTr'],
     }
     return X
+
+def print_acc_from_X(X):
+    if 'trLab' in X and 'trPrd' in X and len(X["trLab"])==len(X["trPrd"]):
+        acc_tr = accuracy_score(X["trLab"], X["trPrd"])
+        print("Initial training accuracy = ", acc_tr)
+    if 'vaLab' in X and 'vaPrd' in X and len(X["vaLab"])==len(X["vaPrd"]):
+        acc_va = accuracy_score(X["vaLab"], X["vaPrd"])
+        print("Initial validation accuracy = ", acc_va)
+    if 'teLab' in X and 'tePrd' in X and len(X["teLab"])==len(X["tePrd"]):
+        acc_te = accuracy_score(X["teLab"], X["tePrd"])
+        print("Initial test accuracy = ", acc_te)
 
 def get_data_from_ConvVAE_model(data_main_fold="/media/doga/SSD258/DataPath/sup/data",
                                 model_folder="/home/doga/GithUBuntU/keyhandshapediscovery/vae_torch/output_C18_is64_hs1296_fs64",
@@ -399,32 +368,19 @@ def get_data_from_ConvVAE_Multitask_model(data_main_fold="/home/doga/DataFolder/
         for k in X_L.item().keys():
             X[k] = X_L.item().get(k)
 
-    acc_tr = accuracy_score(X["trLab"], X["trPrd"])
-    print("Initial training accuracy = ", acc_tr)
-    acc_va = accuracy_score(X["vaLab"], X["vaPrd"])
-    print("Initial validation accuracy = ", acc_va)
-    acc_te = accuracy_score(X["teLab"], X["tePrd"])
-    print("Initial test accuracy = ", acc_te)
+    print_acc_from_X(X)
 
     return X
 
 def run_sup_learner(X=None, hidStateID=7, epochCnt=100):
     if X is None:
         X = load_data()
-    hid_state_cnt_vec = get_hid_state_vec(hidStateID)
-    hidStatesDict = create_hidstate_dict(hid_state_cnt_vec, init_mode_vec=None, act_vec=None)
+    hid_state_cnt_vec = vu.get_hid_state_vec(hidStateID)
+    hidStatesDict = vu.create_hidstate_dict(hid_state_cnt_vec, init_mode_vec=None, act_vec=None)
     classCount = X["classCnt"]
     model_ = MLP_Dict(X["ftCnt"], hidStatesDict, classCount, dropout_value=0.3)
 
-    if 'trLab' in X and 'trPrd' in X:
-        acc_tr = accuracy_score(X["trLab"], X["trPrd"])
-        print("Initial training accuracy = ", acc_tr)
-    if 'vaLab' in X and 'vaPrd' in X:
-        acc_va = accuracy_score(X["vaLab"], X["vaPrd"])
-        print("Initial validation accuracy = ", acc_va)
-    if 'teLab' in X and 'tePrd' in X:
-        acc_te = accuracy_score(X["teLab"], X["tePrd"])
-        print("Initial test accuracy = ", acc_te)
+    print_acc_from_X(X)
 
     accvectr, accvecva, accvecte, preds_best, labels_best = model_.train_evaluate_trvate(X["train_dl"], X["valid_dl"],
                                                                                          X["test_dl"], epochCnt=epochCnt,
