@@ -372,7 +372,7 @@ def get_data_from_ConvVAE_Multitask_model(data_main_fold="/home/doga/DataFolder/
 
     return X
 
-def run_sup_learner(X=None, hidStateID=7, epochCnt=100):
+def run_sup_learner(X=None, hidStateID=7, epochCnt=100,  applyPca=True):
     if X is None:
         X = load_data()
     hid_state_cnt_vec = vu.get_hid_state_vec(hidStateID)

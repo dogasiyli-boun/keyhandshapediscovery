@@ -2,7 +2,7 @@ import torch
 
 import vae_torch_model
 import vae_utils as vu
-from data_classes import khs_dataset
+from data_classes import khs_dataset_v2
 
 import numpy as np
 import datetime
@@ -13,7 +13,7 @@ import sys, importlib as impL
 sys.path.insert(1,'vae_torch')
 import vae_torch_model as vtm
 import vae_torch as vt
-from data_classes import khs_dataset
+from data_classes import khs_dataset_v2
 import vae_scripts as ss
 
 vt.main(epochs=100)
@@ -30,10 +30,10 @@ def getFileList(dir2Search, startString="", endString="", sortList=False):
 def load_data(input_size, input_initial_resize, data_main_fold = "/home/doga/DataFolder/sup/data"):
     #"/media/doga/SSD258/DataPath/sup/data" #/home/doga/DataFolder/sup/data
     data_folder = os.path.join(data_main_fold, "data_XX_")
-    X_tr_tr = khs_dataset(root_dir=data_folder.replace("_XX_", "_tr"), is_train=True, input_size=input_size, input_initial_resize=input_initial_resize)
-    X_tr_te = khs_dataset(root_dir=data_folder.replace("_XX_", "_tr"), is_train=False, input_size=input_size)
-    X_va = khs_dataset(root_dir=data_folder.replace("_XX_", "_va"), is_train=False, input_size=input_size)
-    X_te = khs_dataset(root_dir=data_folder.replace("_XX_", "_te"), is_train=False, input_size=input_size)
+    X_tr_tr = khs_dataset_v2(root_dir=data_folder.replace("_XX_", "_tr"), is_train=True, input_size=input_size, input_initial_resize=input_initial_resize)
+    X_tr_te = khs_dataset_v2(root_dir=data_folder.replace("_XX_", "_tr"), is_train=False, input_size=input_size)
+    X_va = khs_dataset_v2(root_dir=data_folder.replace("_XX_", "_va"), is_train=False, input_size=input_size)
+    X_te = khs_dataset_v2(root_dir=data_folder.replace("_XX_", "_te"), is_train=False, input_size=input_size)
     return X_tr_tr, X_tr_te, X_va, X_te
 
 def load_model_vars(model_name):
@@ -151,9 +151,9 @@ def main(model_name="ConvVAE_MultiTask",
         print(f"Epoch {epoch} of {epochs}")
 
         loss_tr_tr = _model_vae.fit(X_tr_tr, batch_size)
-        loss_te_tr = _model_vae.validate(X_tr_te, epoch, batch_size, out_folder, out_name_add_str="tra_")
-        loss_te_va = _model_vae.validate(X_va, epoch, batch_size, out_folder, out_name_add_str="val_")
-        loss_te_te = _model_vae.validate(X_te, epoch, batch_size, out_folder, out_name_add_str="tes_")
+        loss_te_tr = _model_vae.validate(X_tr_te, epoch, batch_size, out_folder, sub_data_identifier="tra_")
+        loss_te_va = _model_vae.validate(X_va, epoch, batch_size, out_folder, sub_data_identifier="val_")
+        loss_te_te = _model_vae.validate(X_te, epoch, batch_size, out_folder, sub_data_identifier="tes_")
 
         sumBCE.append(loss_tr_tr["sumBCE"])
         sumCLS.append(loss_tr_tr["sumCLS"])

@@ -5,35 +5,105 @@ import os
 from shutil import copyfile, rmtree
 import numpy as np
 import pandas as pd
+from helperFuncs import get_mapped_0_k_indices
 
-def parseDataset_khs(root_dir):
+def get_def_from_im_name_hospisign(frame_name, verbose=0):
+    khs_name, id_str, hand_char, fr_id_str_rel, fr_id_abs = frame_name.split('_')
+    signID = int(id_str[0:3])
+    signerID = int(id_str[3])
+    repID = int(id_str[4:6])
+    hand_int = 0 if hand_char == 'L' else 1 if hand_char == 'R' else 2
+    fr_id_str_rel = int(fr_id_str_rel)
+    fr_id_str_vid_khs = int(fr_id_abs.replace('.png', ''))
+    if verbose > 0:
+        print("khs_name=", khs_name)
+        print("signID=",signID)
+        print("signerID=",signerID)
+        print("repID=", repID)
+        print("hand_char=", hand_char)
+        print("hand_int=", hand_int)
+        print("fr_id_str_rel=", fr_id_str_rel)
+        print("fr_id_str_vid_khs=", fr_id_str_vid_khs)
+
+    frame_info = {
+        "khs_name": khs_name,
+        "signID": signID,
+        "signerID": signerID,
+        "repID": repID,
+        "hand_char": hand_char,
+        "hand_int": hand_int,
+        "fr_id_str_rel": fr_id_str_rel,
+        "fr_id_str_vid_khs": fr_id_str_vid_khs
+    }
+    return frame_info
+
+def parseDataset_khs_v2(root_dir):
     images = []
     labels = []
     ids = []
+    khs_groups = []
+    khs_names = []
+    sign_ids = []
+    signer_ids = []
+    hand_ids = []
 
-    khsList = os.listdir(root_dir)
+    khs_list = os.listdir(root_dir)
+    khs_unique_idx = np.zeros(len(khs_list),dtype=np.uint8)
     im_id = 0
 
-    for khs_id in range(0,len(khsList)):
-        khsName = khsList[khs_id]
-        khsFolder = os.path.join(root_dir, khsName)
-        if os.path.isdir(khsFolder)==0:
+    for khs_id in range(0, len(khs_list)):
+        khs_name = khs_list[khs_id]
+        khs_folder = os.path.join(root_dir, khs_name)
+        if os.path.isdir(khs_folder) == 0:
             continue
-        image_list = os.listdir(khsFolder)
-        imCnt = len(image_list)
+        image_list = os.listdir(khs_folder)
+        im_cnt = len(image_list)
 
-        for imID in range(0, imCnt):#range(0,len(class_list)):
-            images.append(os.path.join(khsFolder, image_list[imID]))
+        khs_unique_idx[khs_id] = im_id
+
+        for imID in range(0, im_cnt):
+            images.append(os.path.join(khs_folder, image_list[imID]))
             labels.append(khs_id)
             ids.append(im_id)
             im_id = im_id + 1
+            frame_info = get_def_from_im_name_hospisign(image_list[imID], verbose=0)
+            khs_groups.append(khs_name)
+            khs_names.append(frame_info["khs_name"])
+            sign_ids.append(frame_info["signID"])
+            signer_ids.append(frame_info["signerID"])
+            hand_ids.append(frame_info["hand_int"])
 
-    return images, labels, ids
+    sign_ids_map = get_mapped_0_k_indices(sign_ids, verbose=0)
+    signer_ids_map = get_mapped_0_k_indices(signer_ids, verbose=0)
+    hand_ids_map = get_mapped_0_k_indices(hand_ids, verbose=0)
 
-class khs_dataset(Dataset):
+    khs_ids_map = {
+        "unique": np.asarray(khs_list),
+        "unique_idx": khs_unique_idx,
+        "mapped": labels
+    }
+    base_dict = {
+        "image_paths": images,
+        "labels": labels,
+        "ids": ids,
+        "khs_groups": khs_groups,
+        "khs_names": khs_names,
+        "sign_ids": sign_ids,
+        "signer_ids": signer_ids,
+        "hand_ids": hand_ids,
+    }
+    extra_dict = {
+        "khs_ids_map": khs_ids_map,
+        "sign_ids_map": sign_ids_map,
+        "signer_ids_map": signer_ids_map,
+        "hand_ids_map": hand_ids_map,
+    }
+
+    return base_dict, extra_dict
+
+class khs_dataset_v2(Dataset):
     def __init__(self, root_dir, is_train, input_size, input_initial_resize=None, datasetname="hospdev"):
         self.root_dir = root_dir
-
 
         data_transform = \
         transforms.Compose([
@@ -50,20 +120,44 @@ class khs_dataset(Dataset):
         self.transform = data_transform
         self.datasetname = datasetname
 
-        images, labels, ids = parseDataset_khs(root_dir)
+        base_dict, extra_dict = parseDataset_khs_v2(root_dir)
 
-        self.images = images
-        self.labels = labels
-        self.ids = ids
+        self.image_paths = base_dict["image_paths"]
+        self.labels = base_dict["labels"]
+        self.ids = base_dict["ids"]
+        self.khs_groups = base_dict["khs_groups"]
+        self.khs_names = base_dict["khs_names"]
+        self.sign_ids = base_dict["sign_ids"]
+        self.signer_ids = base_dict["signer_ids"]
+        self.hand_ids = base_dict["hand_ids"]
+        self.labels_extra = extra_dict
+
+        self.available_label_types = ["khs", "sign", "signer", "hand"]
 
     def __len__(self):
         return len(self.labels)
 
     def __getitem__(self, idx):
-        image = Image.open(self.images[idx]).convert('RGB')
+        image = Image.open(self.image_paths[idx]).convert('RGB')
         label = self.labels[idx]
         ids = self.ids[idx]
-        sample = {'image': image, 'label': label, 'id': ids}
+        khs_group_str = self.khs_groups[idx]
+        khs_name_str = self.khs_names[idx]
+        sign_id = self.sign_ids[idx]
+        signer_ids = self.signer_ids[idx]
+        hand_ids = self.hand_ids[idx]
+        label_extra = {
+            "khs": self.labels_extra["khs_ids_map"]["mapped"][idx],
+            "sign": self.labels_extra["sign_ids_map"]["mapped"][idx],
+            "signer": self.labels_extra["signer_ids_map"]["mapped"][idx],
+            "hand": self.labels_extra["hand_ids_map"]["mapped"][idx],
+        }
+        sample = {
+            'image': image, 'label': label,  'id': ids,
+            'khs_group_str': khs_group_str, 'khs_name_str': khs_name_str,
+            'sign_id': sign_id, "signer_id": signer_ids,  "hand_id": hand_ids,
+            "label_extra": label_extra
+        }
 
         if self.transform:
             sample['image'] = self.transform(sample['image'])

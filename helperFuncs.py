@@ -21,6 +21,89 @@ import datetime
 
 from collections import Counter
 
+import yaml
+from types import SimpleNamespace
+
+class NestedNamespace(SimpleNamespace):
+    def __init__(self, **kwargs):
+        super(NestedNamespace, self).__init__(**kwargs)
+        for k, v in kwargs.items():
+            if type(v) == dict:
+                setattr(self, k, NestedNamespace(**v))
+            elif type(v) == list:
+                setattr(self, k, list(map(self.map_entry, v)))
+
+    @staticmethod
+    def map_entry(e):
+        if isinstance(e, dict):
+            return NestedNamespace(**e)
+        return e
+
+#_CONF_PARAMS_ = CustomConfigParser(config_file="conf.yaml")
+class CustomConfigParser():
+    def __init__(self, config_file):
+        self.config_path = os.path.normpath(os.path.join(os.path.dirname(__file__), 'configs', config_file))
+        _, config_ext = os.path.splitext(config_file)
+        if config_ext != '.yaml':
+            os.error("couldnt retrieve info from yaml file")
+        config_dict = self._load_config_from_yaml()
+        self.parameters = NestedNamespace(**config_dict)
+
+    def _load_config_from_yaml(self):
+        config_dict = {}
+        with open(self.config_path, 'r') as f:
+            try:
+                config_dict = yaml.safe_load(f)
+            except yaml.YAMLError as exc:
+                os.error("couldnt retrieve info from yaml file")
+        return config_dict
+
+    def __getattr__(self, item):
+        return self.parameters.__getattribute__(item)
+
+def type_cast(var, dtype):
+    return dtype(var)
+
+def print_params_dict(x, empty=0):
+    param_list = None
+    if isinstance(x, dict):
+        param_list = [p for p in x]
+    if param_list is not None:
+        for p in param_list:
+            _att = x[p]
+            print('__' * empty, p, ":", _att)
+
+def print_params_nested_namespace(x, empty=0):
+    param_list = None
+    if hasattr(x, "parameters"):
+        param_list = [p for p in list(x.parameters.__dict__)]
+    elif hasattr(x, "__dict__"):
+        param_list = [p for p in vars(x)]
+    elif isinstance(x, dict):
+        print_params_dict(x, empty)
+    if param_list is not None:
+        for p in param_list:
+            _att = getattr(x, p)
+            if hasattr(_att, "__dict__"):
+                print('__' * empty, p)
+                print_params_nested_namespace(_att, empty+2)
+            else:
+                print('__' * empty, p, ":", _att)
+
+def get_attribute_from_dict(_dict, attribute_string, default_type=None, default_val=None):
+    if attribute_string in _dict:
+        if default_type is not None:
+            return default_type(_dict[attribute_string])
+        return _dict[attribute_string]
+    return default_val
+
+def get_attribute_from_nested_namespace(_nest_ns, attribute_string, default_type=None, default_val=None):
+    if attribute_string in vars(_nest_ns):
+        if default_type is not None:
+            return default_type(getattr(_nest_ns, attribute_string))
+        return getattr(_nest_ns, attribute_string)
+    return default_val
+
 def appendZerosSampleToConfMat(_confMat, toEnd=True, classNames=None):
     # a = np.array([[2, 1, 0, 0],
     #               [1, 2, 0, 0],
@@ -393,13 +476,26 @@ def getNonZeroLabels(labVec, predictedKlusters, detailedLabels=None):
         detailedLabels_nz = detailedLabels
     return labVec_nz, predictedKlusters_nz, detailedLabels_nz
 
-def get_cluster_centroids(ft, predClusters, kluster_centers, verbose=0):
-    print(predClusters.shape)
-    print(kluster_centers.shape)
-    centroid_info_mat = np.asarray(np.squeeze(np.zeros((kluster_centers.shape[0], 3)))) - 1
+def get_cluster_centroids(ft, predClusters, kluster_centers=None, verbose=0):
+    if verbose > 0:
+        print(predClusters.shape)
+        if kluster_centers is not None:
+            print(kluster_centers.shape)
 
     uniq_preds = np.unique(predClusters)
     cntUniqPred = uniq_preds.size
+
+    if kluster_centers is None:
+        kluster_centers = np.asarray(np.squeeze(np.zeros((cntUniqPred, ft.shape[1])))) - 1
+        for i in range(0, cntUniqPred):  #
+            klust_cur = uniq_preds[i]
+            inds = getInds(predClusters, klust_cur)
+            ft_cur = ft[inds, :]
+            center_cur = np.mean(ft_cur, axis=0)
+            kluster_centers[i, :] = center_cur
+
+    centroid_info_mat = np.asarray(np.squeeze(np.zeros((kluster_centers.shape[0], 3)))) - 1
+
     for i in range(0, cntUniqPred):  #
         klust_cur = uniq_preds[i]
         inds = getInds(predClusters, klust_cur)
@@ -423,7 +519,7 @@ def get_cluster_centroids(ft, predClusters, kluster_centers, verbose=0):
     centroid_df = centroid_df.astype({'klusterID': int, 'sampleID': int, 'distanceEuc': float})
     return centroid_df
 
-def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='KMeans'):
+def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='KMeans', verbose=1):
     featVec, exp_var_rat = applyMatTransform(np.array(featVec), applyPca=applyPca, normMode=normMode)
     df = pd_df(featVec)
 
@@ -437,7 +533,8 @@ def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='K
         if expCnt > 0:
             print("running ", clusterModel, " for the ", str(expCnt), " time due to numOf_1_sample_bins(",
                   str(numOf_1_sample_bins), ")")
-        print('Clustering the featVec(', featVec.shape, ') with n_clusters(', str(n_clusters), ') and model = ',
+        if verbose > 0:
+            print('Clustering the featVec(', featVec.shape, ') with n_clusters(', str(n_clusters), ') and model = ',
               clusterModel, ", curTol(", str(curTol), "), max_iter(", str(max_iter), "), at ",
               datetime.datetime.now().strftime("%H:%M:%S"))
         kluster_centers = None
@@ -460,9 +557,11 @@ def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='K
         max_iter = max_iter + 50
         expCnt = expCnt + 1
         elapsed = time.time() - t
-        print('Clustering done in (', getElapsedTimeFormatted(elapsed), '), ended at ', datetime.datetime.now().strftime("%H:%M:%S"))
+        if verbose > 0:
+            print('Clustering done in (', getElapsedTimeFormatted(elapsed), '), ended at ', datetime.datetime.now().strftime("%H:%M:%S"))
     removeLastLine()
-    print('Clustering completed with (', np.unique(predictedKlusters).shape, ') clusters,  expCnt(', str(expCnt), ')')
+    if verbose > 0:
+        print('Clustering completed with (', np.unique(predictedKlusters).shape, ') clusters,  expCnt(', str(expCnt), ')')
     # elif 'OPTICS' in clusterModel:
     #     N = featVec.shape[0]
     #     min_cluster_size = int(np.ceil(N / (n_clusters * 4)))
@@ -1033,6 +1132,29 @@ def calcClusterMetrics(labels_true, labels_pred, removeZeroLabels=False, labelNa
     ret_data = getPandasFromDict(retInds, retVals, columns=['metric', 'value'])
 
     return ret_data
+
+def get_mapped_0_k_indices(x, verbose=0):
+    x_uniq, x_uniq_idx = np.unique(np.sort(np.asarray(x)), return_index=True)
+    if verbose > 0:
+        new_ids = np.asarray(range(0, len(x_uniq_idx)))
+        print(np.vstack((new_ids, x_uniq, x_uniq_idx)))
+
+    x_mapped = np.zeros(np.shape(x), dtype=np.uint8)
+
+    for idx, _x in np.ndenumerate(x_uniq):
+        x_mapped[x == _x] = np.uint8(idx[0])
+
+    # X = [4, 4, 4, 500, 6, 500, 6, 8] - example
+    # new_ids [0 1 2 3]
+    # x_uniq [  4   6   8 500]
+    # x_uniq_idx [0 3 5 6]
+    # x_mapped = [0, 0, 0, 3, 1, 3, 1, 2]
+    x_map = {
+        "unique": x_uniq,
+        "unique_idx": x_uniq_idx,
+        "mapped": x_mapped
+    }
+    return x_map
 
 def getInds(vec, val):
     return np.array([i for i, e in enumerate(vec) if e == val])
