@@ -52,6 +52,7 @@ def get_model(updatedModelFile=None,
 def main(model_name,
          epochs=20,
          data_main_fold="/media/doga/Data/VENVFOLD/vae_torch_data/conv_data_te2_va3_nos11",
+         config_folder="/home/doga/GithUBuntU/keyhandshapediscovery/configs",
          save_model_at_epochs=20,
          config_file_id=0):
     #data related variables
@@ -76,7 +77,7 @@ def main(model_name,
         os.mkdir(out_folder)
     updatedModelFile = os.path.join(out_folder, "model_" + model_name + "_is" + str(input_size) + "_hs" + '.model')
 
-    _model_ae = get_model(updatedModelFile=updatedModelFile)
+    _model_ae = get_model(updatedModelFile=updatedModelFile, config_folder=config_folder, config_file_id=config_file_id)
 
     epoch_out_img_list = funcH.getFileList(out_folder, startString="output_va", endString=".png", sortList=False)
     ep_fr = len(epoch_out_img_list)
@@ -128,5 +129,6 @@ if __name__ == '__main__':
     main(model_name="sae_model",
          epochs=20,
          data_main_fold="/media/doga/Data/VENVFOLD/vae_torch_data/conv_data_te2_va3_nos11",
+         config_folder="/home/doga/GithUBuntU/keyhandshapediscovery/configs",
          save_model_at_epochs=20,
          config_file_id=0)
