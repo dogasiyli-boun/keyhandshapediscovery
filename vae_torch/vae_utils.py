@@ -95,7 +95,10 @@ def plot_cf(cf_int, data_log_keys = ['tr_tr', 'tr_va', 'va', 'te'], k_loss_disp_
         print(e)
 
 def plot_cf_compare(cf_int_arr, data_log_keys=['tr_va', 'va', 'te'], mul_before_plot=None, loss_key='reconstruction', max_act_ep=None,
-                    legend_loc='upper right'):
+                    legend_loc='upper right',
+                    experiments_folder='/mnt/USB_HDD_1TB/GitHub/keyhandshapediscovery/',
+                    exp_base_name='output_sae_k256_is64_cf', ae_f_name_base='ae_ft_sae_k256_is64.npy',
+                    z_fill_int=2):
     fig, ax = plt.subplots(1, figsize=(10, 5), dpi=300)
     ax.set_title(loss_key)
 
@@ -109,16 +112,22 @@ def plot_cf_compare(cf_int_arr, data_log_keys=['tr_va', 'va', 'te'], mul_before_
     for i in range(0, len(cf_int_arr)):
         cf_int = cf_int_arr[i]
         mul_plt = mul_before_plot[i]
-        ae_fold_name = '/mnt/USB_HDD_1TB/GitHub/keyhandshapediscovery/output_sae_k256_is64_cf' + str(cf_int).zfill(2)
-        ae_f_name = os.path.join(ae_fold_name, 'ae_ft_sae_k256_is64.npy')
+        ae_fold_name = os.path.join(experiments_folder, exp_base_name + str(cf_int).zfill(z_fill_int))
+        ae_f_name = os.path.join(ae_fold_name, ae_f_name_base)
         vfz = np.load(ae_f_name, allow_pickle=True)
         loss_log_dict = {}
         n = 0
         for k in data_log_keys:
             loss_log_dict[k] = vfz.item().get(k)
+            if loss_log_dict[k] is None:
+                print("cf("+str(cf_int)+") --> loss_log_dict"+str(k)+"] is none")
+                continue
             n = len(loss_log_dict[k])
             print(str(cf_int), ', ', k, " - log is loaded with len: ", n)
-        loss_key_exist_list = [key for key in loss_log_dict[data_log_keys[0]][0].keys()]
+        try:
+            loss_key_exist_list = [key for key in loss_log_dict[data_log_keys[0]][0].keys()]
+        except:
+            continue
 
         if loss_key not in loss_key_exist_list:
             continue
@@ -130,7 +139,7 @@ def plot_cf_compare(cf_int_arr, data_log_keys=['tr_va', 'va', 'te'], mul_before_
                 los_vec_cur = [loss_log_dict[k_data][l][loss_key] for l in range(0, disp_epoch)]
                 plot_x = np.asarray(list(range(0, disp_epoch)))
                 label_str = str(cf_int) + '_' + k_data + '_' + loss_key
-                print(label_str, los_vec_cur[-3:])
+                print(label_str, los_vec_cur[-3:], "\nmax({:4.2f}),min({:4.2f})".format(np.max(los_vec_cur), np.min(los_vec_cur)))
                 ax.plot(plot_x, mul_plt*np.asarray(los_vec_cur[:disp_epoch]), lw=2, label=label_str, color=np.random.rand(3))
     ax.legend(loc=legend_loc)
 

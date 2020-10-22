@@ -1021,7 +1021,7 @@ class Sparse_Loss_Dim(Sparsity_Loss_Base):
 
     @staticmethod
     def l1_norm(bt, reduction):
-        loss_ret_1 = torch.sum(torch.abs((bt * bt)), 0)
+        loss_ret_1 = torch.sum(torch.abs(bt), 0)
         # loss_ret_2 = torch.norm(((bt * bt)), 1, -1)
         if reduction == 'batchmean':
             loss_ret_1 = torch.mean(loss_ret_1)
