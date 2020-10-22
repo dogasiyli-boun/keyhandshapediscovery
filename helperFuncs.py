@@ -492,15 +492,24 @@ def get_cluster_centroids(ft, predClusters, kluster_centers=None, verbose=0):
             inds = getInds(predClusters, klust_cur)
             ft_cur = ft[inds, :]
             center_cur = np.mean(ft_cur, axis=0)
-            kluster_centers[i, :] = center_cur
+            if cntUniqPred == 1:
+                kluster_centers = center_cur
+            else:
+                kluster_centers[i, :] = center_cur
 
     centroid_info_mat = np.asarray(np.squeeze(np.zeros((kluster_centers.shape[0], 3)))) - 1
+
+    if kluster_centers.ndim > 1 and kluster_centers.shape[1] != cntUniqPred:
+        kluster_centers = np.squeeze(kluster_centers[:cntUniqPred, :])
 
     for i in range(0, cntUniqPred):  #
         klust_cur = uniq_preds[i]
         inds = getInds(predClusters, klust_cur)
         ft_cur = ft[inds, :]
-        center_cur = kluster_centers[i, :]
+        if cntUniqPred == 1:
+            center_cur = kluster_centers
+        else:
+            center_cur = kluster_centers[i, :]
         center_mat = center_cur[None, :]
         dist_m = np.array(cdist(ft_cur, center_mat))
 
@@ -527,12 +536,15 @@ def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='K
     max_iter = 300 if clusterModel == 'KMeans' else 200
 
     numOf_1_sample_bins = 1
+    unique_clust_cnt = 1
     expCnt = 0
-    while numOf_1_sample_bins-expCnt > 0 and expCnt < 5:
+    while (unique_clust_cnt == 1 or numOf_1_sample_bins-expCnt > 0) and expCnt < 5:
         t = time.time()
         if expCnt > 0:
-            print("running ", clusterModel, " for the ", str(expCnt), " time due to numOf_1_sample_bins(",
-                  str(numOf_1_sample_bins), ")")
+            if numOf_1_sample_bins > 0:
+                print("running ", clusterModel, " for the ", str(expCnt), " time due to numOf_1_sample_bins(", str(numOf_1_sample_bins), ")")
+            if unique_clust_cnt == 1:
+                print("running ", clusterModel, " for the ", str(expCnt), " time due to unique_clust_cnt==1")
         if verbose > 0:
             print('Clustering the featVec(', featVec.shape, ') with n_clusters(', str(n_clusters), ') and model = ',
               clusterModel, ", curTol(", str(curTol), "), max_iter(", str(max_iter), "), at ",
@@ -553,6 +565,7 @@ def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='K
             sc_clustering = sc.fit(featVec)
             predictedKlusters = sc_clustering.labels_
         numOf_1_sample_bins, histSortedInv = analyzeClusterDistribution(predictedKlusters, n_clusters, verbose=0)
+        unique_clust_cnt = len(np.unique(predictedKlusters))
         curTol = curTol * 10
         max_iter = max_iter + 50
         expCnt = expCnt + 1

@@ -10,6 +10,8 @@ from torch.utils.data import DataLoader
 import numpy as np
 from sys import exit as sys_exit
 from sklearn.metrics import accuracy_score
+import matplotlib.pyplot as plt
+import os
 
 import helperFuncs as funcH
 
@@ -530,7 +532,7 @@ def get_torch_layer_from_dict(definiton_dict):
         return nn.MaxPool2d(kernel_size=kernel_size)
 
     if definiton_dict["type"] == 'Upsample':
-        scale_factor = funcH.get_attribute_from_dict(definiton_dict, "scale_factor", default_type=int, default_val= 2)
+        scale_factor = funcH.get_attribute_from_dict(definiton_dict, "scale_factor", default_type=int, default_val=2)
         return nn.Upsample(scale_factor=scale_factor)
 
     if definiton_dict["type"] == 'Linear':
@@ -541,6 +543,10 @@ def get_torch_layer_from_dict(definiton_dict):
 
     if definiton_dict["type"] == 'ReLu':
         return nn.ReLU()
+
+    if definiton_dict["type"] == 'Softmax':
+        dim = funcH.get_attribute_from_dict(definiton_dict, "dim", default_type=int, default_val=0)
+        return nn.Softmax(dim=dim)
 
     if definiton_dict["type"] == 'Flatten':
         return Flatten()
@@ -953,20 +959,117 @@ class ConvVAE_MultiTask(nn.Module):
     def feat_extract(self, X_vate, batch_size):
         return self.feat_extract_ext(self, X_vate, batch_size)
 
+class Sparsity_Loss_Base(nn.Module):
+    def __init__(self):
+        super(Sparsity_Loss_Base, self).__init__()
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+class Sparse_KL_DivergenceLoss(Sparsity_Loss_Base):
+    def __init__(self, rho=None, reduction='batchmean', sigmoidAct=False):
+        super(Sparse_KL_DivergenceLoss, self).__init__()
+        self.rho = rho
+        self.rho_set = False
+        self.reduction = reduction
+        self.sigmoidAct = sigmoidAct
+
+    def set_kl_rho_by_data(self, bt): #  bt: bottleneck
+        if self.rho_set:
+            return
+        bt_dim = bt.shape[1]
+        if self.rho is None:
+            print("self.kl_rho is set to {:f}, dimension of bottleneck is {:d}".format(1 / bt_dim, bt_dim))
+            self.rho = np.minimum(1/bt_dim, self.kl_rho)
+        elif self.rho > (1 / bt.shape[1]):
+            print("self.kl_rho changed from {:f} to {:f}, dimension of bottleneck is {:d}".format(self.rho,1 / bt_dim, bt_dim))
+            self.rho = np.minimum(1/bt_dim, self.kl_rho)
+        self.rho_set = True
+
+    def forward(self, bt):
+        self.set_kl_rho_by_data(bt)
+        if self.sigmoidAct:
+            bt = torch.mean(torch.sigmoid(bt), 0)  # sigmoid because we need the probability distributions
+        rho = (self.rho * torch.ones(bt.shape)).to(self.device)
+        # UserWarning: reduction: 'mean' divides the total loss by both the batch size and the support  size.
+        # 'batchmean' divides only by the batch size, and aligns with the KL div math definition.
+        #  'mean' will be changed to behave the same as 'batchmean' in the next major release.
+        # warnings.warn("reduction: 'mean' divides the total loss by both the batch size and the support size."
+        loss_ret_1 = nn.functional.kl_div(rho, bt, reduction=self.reduction)
+        #loss_ret_2 = torch.sum(rho * torch.log(rho / bottleneck) + (1 - rho) * torch.log((1 - rho) / (1 - bottleneck)))
+        return loss_ret_1
+
+class Sparse_Loss_Dim(Sparsity_Loss_Base):
+    def __init__(self, dim):
+        super(Sparse_Loss_Dim, self).__init__()
+        self.dim = dim
+
+    @staticmethod
+    def l2_norm(bt):
+        # loss_ret_1 = torch.sum(((bt * bt)) ** 2, 1).sqrt()
+        loss_ret_2 = torch.norm(((bt * bt)), 2, -1)
+        # loss_ret_3 = torch.mean(torch.pow(bottleneck, torch.tensor(2.0).to(self.device))).sqrt()
+        return loss_ret_2
+
+    @staticmethod
+    def l1_norm(bt):
+        # loss_ret_1 = torch.sum(torch.abs((bottleneck * bottleneck)), 1)
+        loss_ret_2 = torch.norm(((bt * bt)), 1, -1)
+        return loss_ret_2
+
+    def forward(self, bt):
+        if self.dim == 1:
+            return self.l1_norm(bt)
+        if self.dim == 2:
+            return self.l2_norm(bt)
+        os.error("unknown dimension")
+
 class Conv_AE_NestedNamespace(nn.Module):
     def __init__(self, model_NestedNamespace):
         super(Conv_AE_NestedNamespace, self).__init__()
 
+        # data related stuff
         self.input_size = model_NestedNamespace.INPUT_SIZE
+        self.input_channel_size = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'INPUT_CHANNEL_SIZE', default_type=int, default_val=None)
         self.data_key = model_NestedNamespace.DATA_KEY
+
+        # model related stuff
         self.model_name = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'MODEL_NAME', default_type=str, default_val='conv_ae_model')
         self.weight_decay = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'WEIGHT_DECAY', default_type=float, default_val=0.0)
-        self.weight_sparsity = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'WEIGHT_SPARSITY', default_type=float, default_val=0.0)
         self.learning_rate = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'LEARNING_RATE', default_type=float, default_val=0.0001)
-        self.random_seed = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'RANDOM_SEED', default_type=int, default_val=7)
         self.encoder_list = get_encoder_from_ns(model_NestedNamespace.LAYERS.encoder)
         self.decoder_list = get_encoder_from_ns(model_NestedNamespace.LAYERS.decoder)
+        # model_sub : reconstruction error
+        self.recons_err_function = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'RECONSTRUCTION_ERROR_FUNCTION', default_type=str, default_val='MSE')
+        self.recons_err_reduction = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'RECONSTRUCTION_ERROR_REDUCTION', default_type=str, default_val='mean')
+        # model_sub : sparsity stuff
+        self.sparsity_func = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'BOTTLENECK_ERROR', default_type=str, default_val=None)
+        self.sparsity_weight = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'WEIGHT_SPARSITY', default_type=float, default_val=0.0)
+        self.kl_rho = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'KL_DIV_RHO', default_type=float, default_val=0.05)
+        self.kl_reduction = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'KL_ERROR_REDUCTION', default_type=str, default_val='mean')
+        # experiment reproducibility
+        self.random_seed = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'RANDOM_SEED', default_type=int, default_val=7)
+        # evaluation metrics related stuff
+        self.bottleneck_act_apply = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'BOTTLENECK_ACT_APPLY', default_type=bool, default_val=None)
+        self.bottleneck_kmeans_apply = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'BOTTLENECK_KMEANS_APPLY', default_type=bool, default_val=False)
 
+        self.__init_stuff__()
+        self.apply_random_seed()
+
+        self.optimizer = optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.print_model_def()
+
+        self.export_image_ids_dict = {}
+        self.bottleneck_fig = {
+            'save_fold_name': None,
+            'save_fig_name_base': model_NestedNamespace.BOTTLENECK_FIG_NAME_BASE if 'BOTTLENECK_FIG_NAME_BASE' in vars(model_NestedNamespace) else None,
+            'save_fig_name': model_NestedNamespace.BOTTLENECK_FIG_NAME_BASE if 'BOTTLENECK_FIG_NAME_BASE' in vars(model_NestedNamespace) else None,
+        }
+
+    def __init_stuff__(self):
+        self.__init_model_setting__()
+        self.__init_error_stuff__()
+        self.__init_clustering_stuff__()
+    def __init_model_setting__(self):
         for layer_name in self.encoder_list:
             print(layer_name, self.encoder_list[layer_name])
             setattr(self, layer_name, self.encoder_list[layer_name]['layer_module'])
@@ -977,36 +1080,53 @@ class Conv_AE_NestedNamespace(nn.Module):
                 setattr(self, layer_name, getattr(self, 'flat'))
             else:
                 setattr(self, layer_name, self.decoder_list[layer_name]['layer_module'])
+    def __init_error_stuff__(self):
+        reconstruction_err_func = nn.MSELoss(reduction=self.recons_err_reduction)
+        if self.recons_err_function == 'BCE':
+            reconstruction_err_func = nn.BCELoss(reduction=self.recons_err_reduction)
 
-        self.apply_random_seed()
-        self.optimizer = optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
+        if self.sparsity_func is None:
+            bottleneck_func = None
+        elif self.sparsity_func == 'kl_divergence':
+            bottleneck_func = Sparse_KL_DivergenceLoss(rho=self.kl_rho, reduction=self.kl_reduction)
+        elif self.sparsity_func == 'kl_divergence_sigmoid':
+            bottleneck_func = Sparse_KL_DivergenceLoss(rho=self.kl_rho, reduction=self.kl_reduction, sigmoidAct=True)
+        elif self.sparsity_func == 'l1_norm':
+            bottleneck_func = Sparse_Loss_Dim(dim=1)
+        elif self.sparsity_func == 'l2_norm':
+            bottleneck_func = Sparse_Loss_Dim(dim=2)
+
         self.loss = {
-            'reconstruction': {'func': nn.BCELoss(reduction='sum'), 'val': None},
-            'sparsity': {'func': None, 'val': None},
+            'reconstruction': {'func': reconstruction_err_func, 'val': None},
+            'sparsity': {'func': bottleneck_func, 'val': None},
         }
+    def __init_clustering_stuff__(self):
         self.clustering_decided = None
         self.cluster_any = None
         self.clustering_dict = {
-            'bottleneck_kmeans': {'apply': True, 'val': None},
-            'bottleneck_act': {'apply': None, 'val': None},
+            'bottleneck_kmeans': {'apply': self.bottleneck_kmeans_apply, 'val': None},
+            'bottleneck_act': {'apply': self.bottleneck_act_apply, 'val': None},
         }
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.print_model_def()
-
-        self.export_image_ids_dict = {}
 
     def print_model_def(self):
         print("data_key : ", self.data_key)
         print("model_name : ", self.model_name)
-        print("random_seed : ", self.random_seed)
-        print("weight_sparsity : ", self.weight_sparsity)
         print("learning_rate : ", self.learning_rate)
+        print("random_seed : ", self.random_seed)
         print("optimizer : ", self.optimizer)
         print("encoder_list : ")
         funcH.print_params_nested_namespace(self.encoder_list)
         print("decoder_list : ")
         funcH.print_params_nested_namespace(self.decoder_list)
         print("loss : ", self.loss)
+        print("reconstruction.func : ", self.recons_err_function)
+        print("reconstruction.func.reduction : ", self.recons_err_reduction)
+        print("sparsity.func : ", self.sparsity_func)
+        print("sparsity_weight : ", self.sparsity_weight)
+        print("kl_rho : ", self.kl_rho)
+        print("kl_reduction : ", self.kl_reduction)
+        print("bottleneck_act.apply : ", self.bottleneck_act_apply)
+        print("bottleneck_kmeans.apply : ", self.bottleneck_kmeans_apply)
 
     def apply_random_seed(self):
         np.random.seed(self.random_seed )
@@ -1038,9 +1158,9 @@ class Conv_AE_NestedNamespace(nn.Module):
         self.loss['reconstruction']['val'] += loss_reconstruction.item()
 
         loss_sparsity = 0.0
-        if self.weight_sparsity is not None and self.weight_sparsity > 0.0:
-            loss_sparsity = (-self.weight_sparsity*torch.mean(torch.pow(bottleneck, torch.tensor(2.0).to(self.device))))
-            self.loss['sparsity']['val'] += loss_sparsity.item()
+        if self.sparsity_weight is not None and self.sparsity_weight > 0.0:
+            loss_sparsity = -self.sparsity_weight*self.loss['sparsity']['func'](bottleneck)
+            self.loss['sparsity']['val'] += loss_sparsity.item()/self.sparsity_weight
 
         return loss_reconstruction + loss_sparsity #sum(self.loss[i]['val'] for i in self.loss)
 
@@ -1052,8 +1172,8 @@ class Conv_AE_NestedNamespace(nn.Module):
         #here we will check a couple of things
         initial_sample = X_data[0]
         label_exist = 'label' in initial_sample
-        sparsity_applied = self.weight_sparsity is not None and self.weight_sparsity > 0.0
-        self.clustering_dict['bottleneck_act']['apply'] = label_exist and sparsity_applied
+        sparsity_applied = self.sparsity_weight is not None and self.sparsity_weight > 0.0
+        self.clustering_dict['bottleneck_act']['apply'] = self.clustering_dict['bottleneck_act']['apply'] or (label_exist and sparsity_applied)
         self.clustering_decided = True
 
         self.cluster_any = False
@@ -1070,30 +1190,76 @@ class Conv_AE_NestedNamespace(nn.Module):
                 continue
             if k == 'bottleneck_kmeans':
                 print('bottleneck_kmeans')
-                pred_vec, kc_tr = funcH.clusterData(bottleneck_vec, n_clusters=bottleneck_vec.shape[1], normMode='', applyPca=True, clusterModel='KMeans', verbose=0)
+                pred_vec, kc_tr = funcH.clusterData(bottleneck_vec, n_clusters=bottleneck_vec.shape[1], normMode='', applyPca=False, clusterModel='KMeans', verbose=0)
                 centroid_info_pdf = funcH.get_cluster_centroids(bottleneck_vec, pred_vec, kluster_centers=kc_tr, verbose=0)
             if k == 'bottleneck_act':
                 print('bottleneck_act')
                 pred_vec = np.argmax(bottleneck_vec.T, axis=0).T.squeeze()
                 centroid_info_pdf = funcH.get_cluster_centroids(bottleneck_vec, pred_vec, kluster_centers=None, verbose=0)
-            _confMat_preds, kluster2Classes, kr_pdf, weightedPurity, cnmxh_perc = funcH.countPredictionsForConfusionMat(lab_vec, pred_vec, centroid_info_pdf=centroid_info_pdf, labelNames=None)
+            _confMat_preds, _, kr_pdf, weightedPurity, cnmxh_perc = funcH.countPredictionsForConfusionMat(lab_vec, pred_vec, centroid_info_pdf=centroid_info_pdf, labelNames=None)
             sampleCount = np.sum(np.sum(_confMat_preds))
             acc = 100 * np.sum(np.diag(_confMat_preds)) / sampleCount
-            print(acc)
+            print("--acc({:5.3f}), uniqClustCnt({:d})".format(acc, np.size(np.unique(pred_vec))))
             self.clustering_dict[k]['val'] = acc
 
     def apply_acc(self, loss_dict, lab_vec, bottleneck_vec):
-        if self.cluster_any:
-            lab_vec = np.asarray(torch.cat(lab_vec).to(torch.device('cpu')))
-            bottleneck_vec = np.asarray(torch.cat(bottleneck_vec).to(torch.device('cpu')).detach().numpy())
-            self.cluster_bottleneck(lab_vec, bottleneck_vec)
-            for k in self.clustering_dict:
-                if not self.clustering_dict[k]['apply']:
-                    continue
-                loss_dict[k] = self.clustering_dict[k]['val']
+        if not self.cluster_any:
+            return loss_dict
+        lab_vec = np.asarray(torch.cat(lab_vec).to(torch.device('cpu')))
+        bottleneck_vec = np.asarray(torch.cat(bottleneck_vec).to(torch.device('cpu')).detach().numpy())
+        num_samples, cluster_count = bottleneck_vec.shape
+        rand_sample_ids = np.sort(np.random.permutation(np.arange(num_samples))[:int(cluster_count*1.5)])
+
+        if self.bottleneck_fig['save_fold_name'] is not None and self.bottleneck_fig['save_fig_name'] is not None:
+            ax = plt.imshow(bottleneck_vec[rand_sample_ids, :], cmap='hot', interpolation='nearest')
+            fig = ax.get_figure()
+            plt.colorbar()
+            fig.savefig(os.path.join(self.bottleneck_fig['save_fold_name'], self.bottleneck_fig['save_fig_name']), bbox_inches='tight', dpi=600)
+
+            var_dim = np.var(bottleneck_vec, axis=0)
+            plt.clf()
+            fig, ax = plt.subplots(1, figsize=(15, 8), dpi=80)
+            title_str = 'min_var(' + str(np.min(var_dim)) + '),max_var(' + str(np.max(var_dim)) + ')'
+            ax.plot(np.asarray(range(0, len(var_dim))), var_dim.squeeze(), lw=2, label='variance', color='red')
+            ax.set_title(title_str)
+            fig.savefig(os.path.join(self.bottleneck_fig['save_fold_name'], self.bottleneck_fig['save_fig_name'].replace('.png','_var.png')), bbox_inches='tight', dpi=80)
+
+            # the histogram of the data
+            plt.clf()
+            fig, ax = plt.subplots(1, figsize=(15, 8), dpi=80)
+            pred_vec = np.argmax(bottleneck_vec.T, axis=0).squeeze()
+            to_plot = bottleneck_vec[np.asarray(range(0, bottleneck_vec.shape[0]), dtype=int), pred_vec]
+            # n, bins, patches = plt.hist(to_plot, np.asarray(np.linspace(0.1, 1, 10)), density=False)
+            n, bins, patches = plt.hist(to_plot, bins=10, density=False)
+            plt.xlabel('Bins')
+            plt.ylabel('Softmax(Activation)')
+            plt.title('Winner Bottleneck Activation Histogram')
+            for i in range(0, len(patches)):
+                if i < len(patches)-1:
+                    x_pos = (patches[i].xy[0] + patches[i+1].xy[0])/2
+                else:
+                    x_pos = patches[i].xy[0]
+                height = n[i]
+                plt.text(x_pos, height/2, r'$'+str(height)+'$')
+            # plt.text(0.5, np.max(n)*0.75, r'less than 0.1 :$' + str(int(len(pred_vec)-np.sum(n))) + '$')
+            plt.xlim(np.min(bins), np.max(bins))  # plt.xlim(0.1, 1.0)
+            plt.xticks(bins)
+            plt.grid(True)
+            fig.savefig(os.path.join(self.bottleneck_fig['save_fold_name'],
+                                     self.bottleneck_fig['save_fig_name'].replace('.png', '_hist.png')),
+                                     bbox_inches='tight')
+
+            plt.close('all')
+
+        self.cluster_bottleneck(lab_vec, bottleneck_vec)
+        for k in self.clustering_dict:
+            if not self.clustering_dict[k]['apply']:
+                continue
+            loss_dict[k] = self.clustering_dict[k]['val']
+
         return loss_dict
 
-    def fit(self, X_data, batch_size):
+    def fit(self, X_data, batch_size, out_folder=None, epoch=None):
         self.train()
         self.apply_random_seed()
         running_loss = 0.0
@@ -1127,6 +1293,8 @@ class Conv_AE_NestedNamespace(nn.Module):
         for i in self.loss:
             loss_dict[i] = self.loss[i]['val']
 
+        self.setup_bottleneck_heatmap(out_folder, epoch, sub_data_identifier='fit')
+
         loss_dict = self.apply_acc(loss_dict, lab_vec, bottleneck_vec)
 
         return loss_dict
@@ -1141,6 +1309,12 @@ class Conv_AE_NestedNamespace(nn.Module):
             print('__finding images to print randomly')
             unid = np.random.permutation(np.arange(len(X_vate)))[:10]
         self.export_image_ids_dict[sub_data_identifier] = unid
+
+    def setup_bottleneck_heatmap(self, out_folder, epoch, sub_data_identifier=""):
+        if out_folder is not None and epoch is not None:
+            self.bottleneck_fig['save_fold_name'] = out_folder
+            self.bottleneck_fig['save_fig_name'] = str(self.bottleneck_fig['save_fig_name_base']).replace("XXX", str(epoch).zfill(3))
+            self.bottleneck_fig['save_fig_name'] = str(self.bottleneck_fig['save_fig_name']).replace(".png", "_" + sub_data_identifier + ".png")
 
     def validate(self, X_vate, epoch, batch_size, out_folder, sub_data_identifier):
         self.eval()
@@ -1174,8 +1348,8 @@ class Conv_AE_NestedNamespace(nn.Module):
             data = torch.stack(data_al, dim=0)
             data = data.to(self.device)
             reconstruction, _ = self.forward(data)
-            both = torch.cat((data.view(data_cn, 3, self.input_size, self.input_size)[:data_cn],
-                              reconstruction.view(data_cn, 3, self.input_size, self.input_size)[:data_cn]))
+            both = torch.cat((data.view(data_cn, self.input_channel_size, self.input_size, self.input_size)[:data_cn],
+                              reconstruction.view(data_cn, self.input_channel_size, self.input_size, self.input_size)[:data_cn]))
             f_name = out_folder + "/output_" + sub_data_identifier + "{:03d}.png".format(epoch)
             save_image(both.cpu(), f_name, nrow=data_cn)
 
@@ -1183,6 +1357,8 @@ class Conv_AE_NestedNamespace(nn.Module):
         loss_dict = {"valid loss": running_loss/n}
         for i in self.loss:
             loss_dict[i] = self.loss[i]['val']
+
+        self.setup_bottleneck_heatmap(out_folder, epoch, sub_data_identifier=sub_data_identifier)
 
         loss_dict = self.apply_acc(loss_dict, lab_vec, bottleneck_vec)
 

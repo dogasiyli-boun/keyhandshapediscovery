@@ -14,3 +14,5 @@ venv/
 vae_torch/output*
 
 vae_torch/vae_ft*
+
+experiments/

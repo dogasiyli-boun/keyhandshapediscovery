@@ -7,6 +7,10 @@ import numpy as np
 import pandas as pd
 from helperFuncs import get_mapped_0_k_indices
 
+#fashion mnist
+from torchvision.datasets import FashionMNIST as fashionMNISTds
+from torchvision.utils import save_image
+
 def get_def_from_im_name_hospisign(frame_name, verbose=0):
     khs_name, id_str, hand_char, fr_id_str_rel, fr_id_abs = frame_name.split('_')
     signID = int(id_str[0:3])
@@ -166,6 +170,64 @@ class khs_dataset_v2(Dataset):
 
     def _len_(self):
         return len(self.labels)
+
+class fashion_mnist(Dataset):
+    def __init__(self, fashionMNISTds_fold, is_train, input_size, input_initial_resize=None, load_train_as_test=False, datasetname="fashion_mnist"):
+        self.root_dir = fashionMNISTds_fold
+
+        self.transform = transforms.Compose([
+            transforms.Resize(input_size),
+            transforms.ToTensor()
+        ])
+        if input_initial_resize is not None and is_train:
+            self.transform = transforms.Compose([
+                    transforms.Resize(input_initial_resize),
+                    transforms.RandomResizedCrop(input_size),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.ToTensor()
+                ])
+        elif input_initial_resize is None and is_train and not load_train_as_test:
+            self.transform = transforms.Compose([
+                    transforms.Resize(input_size),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.ToTensor()
+                ])
+
+        self.datasetname = datasetname
+        dataset = fashionMNISTds(
+            root=os.path.join(fashionMNISTds_fold),
+            train=is_train,
+            download=True
+        )
+        img_all = []
+        lab_all = []
+        for i in range(0, len(dataset)):
+            img, lb = dataset[i]
+            img_all.append(img)
+            lab_all.append(lb)
+
+        self.images = img_all
+        self.labels = lab_all
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        image = self.images[idx]
+        label = self.labels[idx]
+        ids = idx
+        sample = {'image': image, 'label': label, 'ids': ids}
+        if self.transform:
+            sample['image'] = self.transform(sample['image'])
+        return sample
+
+    def _len_(self):
+        return len(self.labels)
+
+    @staticmethod
+    def save_decoded_image(img, name):
+        img = img.view(img.size(0), 1, 28, 28)
+        save_image(img, name)
 
 def createDirIfNotExist(dir2create):
     if not os.path.isdir(dir2create):

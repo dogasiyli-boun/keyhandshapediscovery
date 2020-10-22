@@ -1,0 +1,44 @@
+# YAML
+DIR:
+  DATA: '/home/doga/DataFolder/hs_data'
+  RESULTS: '/home/doga/DataFolder/bdResults'
+  CLUSTER: '/home/doga/DataFolder/hs_clusters'
+  COMB: '/home/doga/DataFolder/hs_clustersCombs'
+  MODEL_EXPORTS: '/home/doga/DataFolder/hs_modelExports'
+MODEL:
+  MODEL_CLASS: conv_ae
+  MODEL_NAME: conv_ae_simple
+  DATA_KEY: image
+  INPUT_SIZE: 64
+  WEIGHT_DECAY: 0.005
+  WEIGHT_SPARSITY: 0.0
+  LEARNING_RATE: 0.001
+  BOTTLENECK_FIG_NAME_BASE: 'btl_XXX.png'
+  LAYERS:
+    encoder:
+      l01_conv:   'type: Conv2d,in_channels : 3, out_channels : 32, kernel_size : 5'
+      l01_act:    'type: ReLu'
+      l02_conv:   'type: Conv2d,in_channels :32, out_channels : 32, kernel_size : 5'
+      l02_act:    'type: ReLu'
+      l03_maxp:   'type: MaxPool2d,kernel_size:2'
+      l04_conv:   'type: Conv2d,in_channels :32, out_channels : 16, kernel_size : 5'
+      l04_act:    'type: ReLu'
+      flat:       'type: Flatten'
+      l06_linear: 'type: Linear,in_features:9216, out_features:512'
+      l06_act:    'type: ReLu'
+      l07_linear: 'type: Linear,in_features:512, out_features:256'
+      l07_act1:   'type: ReLu'
+      l07_act2:   'type: Softmax,dim:1'
+    decoder:
+      l07_linear_b: 'type: Linear,in_features:256, out_features:512'
+      l07_act_b:    'type: ReLu'
+      l06_linear_b: 'type: Linear,in_features:512, out_features:9216'
+      l06_act_b:    'type: ReLu'
+      flat_b:       'type: Unflatten'
+      l04_deconv:   'type: ConvTranspose2d,in_channels :16, out_channels : 32, kernel_size : 5'
+      l04_act_b:    'type: ReLu'
+      l03_upsm:     'type: Upsample,scale_factor:2'
+      l02_deconv:   'type: ConvTranspose2d,in_channels :32, out_channels : 32, kernel_size : 5'
+      l02_act_b:    'type: ReLu'
+      l01_deconv:   'type: ConvTranspose2d,in_channels :32, out_channels :  3, kernel_size : 5'
+ 
