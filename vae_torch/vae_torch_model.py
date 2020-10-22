@@ -988,7 +988,7 @@ class Sparse_KL_DivergenceLoss(Sparsity_Loss_Base):
         self.set_kl_rho_by_data(bt)
         if self.sigmoidAct:
             bt = torch.mean(torch.sigmoid(bt), 0)  # sigmoid because we need the probability distributions
-        rho = (self.rho * torch.ones(bt.shape)).to(self.device)
+        rho = (self.rho * torch.ones(bt.shape)).to(super.device)
         # UserWarning: reduction: 'mean' divides the total loss by both the batch size and the support  size.
         # 'batchmean' divides only by the batch size, and aligns with the KL div math definition.
         #  'mean' will be changed to behave the same as 'batchmean' in the next major release.
@@ -998,28 +998,41 @@ class Sparse_KL_DivergenceLoss(Sparsity_Loss_Base):
         return loss_ret_1
 
 class Sparse_Loss_Dim(Sparsity_Loss_Base):
-    def __init__(self, dim):
+    def __init__(self, dim, reduction='batchmean'):
         super(Sparse_Loss_Dim, self).__init__()
         self.dim = dim
+        self.reduction = reduction
+
+    # https: // discuss.pytorch.org / t / how - torch - norm - works - and -how - it - calculates - l1 - and -l2 - loss / 58387
 
     @staticmethod
-    def l2_norm(bt):
-        # loss_ret_1 = torch.sum(((bt * bt)) ** 2, 1).sqrt()
-        loss_ret_2 = torch.norm(((bt * bt)), 2, -1)
-        # loss_ret_3 = torch.mean(torch.pow(bottleneck, torch.tensor(2.0).to(self.device))).sqrt()
-        return loss_ret_2
+    def l2_norm(bt, reduction):
+        loss_ret_1 = torch.sum(((bt * bt)) ** 2, 0).sqrt()
+        # loss_ret_2 = torch.norm(((bt.transpose() * bt.transpose())), 2, -1)
+        # loss_ret_3 = torch.mean(torch.pow(bt, 2.0)).sqrt()
+        if reduction == 'batchmean':
+            #bunu kullanınca hepsi birbirine eşitleniyo
+            loss_ret_1 = torch.mean(loss_ret_1)
+        else:
+            #bunu kullanınca tek bir node bütün sample'larda active oluyor
+            loss_ret_1 = torch.sum(loss_ret_1)
+        return loss_ret_1
 
     @staticmethod
-    def l1_norm(bt):
-        # loss_ret_1 = torch.sum(torch.abs((bottleneck * bottleneck)), 1)
-        loss_ret_2 = torch.norm(((bt * bt)), 1, -1)
-        return loss_ret_2
+    def l1_norm(bt, reduction):
+        loss_ret_1 = torch.sum(torch.abs((bt * bt)), 0)
+        # loss_ret_2 = torch.norm(((bt * bt)), 1, -1)
+        if reduction == 'batchmean':
+            loss_ret_1 = torch.mean(loss_ret_1)
+        else:
+            loss_ret_1 = torch.sum(loss_ret_1)
+        return loss_ret_1
 
     def forward(self, bt):
         if self.dim == 1:
-            return self.l1_norm(bt)
+            return self.l1_norm(bt, self.reduction)
         if self.dim == 2:
-            return self.l2_norm(bt)
+            return self.l2_norm(bt, self.reduction)
         os.error("unknown dimension")
 
 class Conv_AE_NestedNamespace(nn.Module):
@@ -1041,10 +1054,10 @@ class Conv_AE_NestedNamespace(nn.Module):
         self.recons_err_function = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'RECONSTRUCTION_ERROR_FUNCTION', default_type=str, default_val='MSE')
         self.recons_err_reduction = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'RECONSTRUCTION_ERROR_REDUCTION', default_type=str, default_val='mean')
         # model_sub : sparsity stuff
-        self.sparsity_func = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'BOTTLENECK_ERROR', default_type=str, default_val=None)
-        self.sparsity_weight = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'WEIGHT_SPARSITY', default_type=float, default_val=0.0)
+        self.sparsity_func = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'SPARSITY_ERROR', default_type=str, default_val=None)
+        self.sparsity_weight = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'SPARSITY_WEIGHT', default_type=float, default_val=0.0)
+        self.saprsity_reduction = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'SPARSITY_REDUCTION', default_type=str, default_val='mean')
         self.kl_rho = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'KL_DIV_RHO', default_type=float, default_val=0.05)
-        self.kl_reduction = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'KL_ERROR_REDUCTION', default_type=str, default_val='mean')
         # experiment reproducibility
         self.random_seed = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'RANDOM_SEED', default_type=int, default_val=7)
         # evaluation metrics related stuff
@@ -1088,13 +1101,13 @@ class Conv_AE_NestedNamespace(nn.Module):
         if self.sparsity_func is None:
             bottleneck_func = None
         elif self.sparsity_func == 'kl_divergence':
-            bottleneck_func = Sparse_KL_DivergenceLoss(rho=self.kl_rho, reduction=self.kl_reduction)
+            bottleneck_func = Sparse_KL_DivergenceLoss(rho=self.kl_rho, reduction=self.saprsity_reduction)
         elif self.sparsity_func == 'kl_divergence_sigmoid':
-            bottleneck_func = Sparse_KL_DivergenceLoss(rho=self.kl_rho, reduction=self.kl_reduction, sigmoidAct=True)
+            bottleneck_func = Sparse_KL_DivergenceLoss(rho=self.kl_rho, reduction=self.saprsity_reduction, sigmoidAct=True)
         elif self.sparsity_func == 'l1_norm':
-            bottleneck_func = Sparse_Loss_Dim(dim=1)
+            bottleneck_func = Sparse_Loss_Dim(dim=1, reduction=self.saprsity_reduction)
         elif self.sparsity_func == 'l2_norm':
-            bottleneck_func = Sparse_Loss_Dim(dim=2)
+            bottleneck_func = Sparse_Loss_Dim(dim=2, reduction=self.saprsity_reduction)
 
         self.loss = {
             'reconstruction': {'func': reconstruction_err_func, 'val': None},
@@ -1124,7 +1137,7 @@ class Conv_AE_NestedNamespace(nn.Module):
         print("sparsity.func : ", self.sparsity_func)
         print("sparsity_weight : ", self.sparsity_weight)
         print("kl_rho : ", self.kl_rho)
-        print("kl_reduction : ", self.kl_reduction)
+        print("saprsity_reduction : ", self.saprsity_reduction)
         print("bottleneck_act.apply : ", self.bottleneck_act_apply)
         print("bottleneck_kmeans.apply : ", self.bottleneck_kmeans_apply)
 
