@@ -1036,6 +1036,19 @@ class Sparse_Loss_Dim(Sparsity_Loss_Base):
             return self.l2_norm(bt, self.reduction)
         os.error("unknown dimension")
 
+class Sparse_Loss_CrossEntropy(Sparsity_Loss_Base):
+    def __init__(self, reduction='mean', apply_sigmoid_activation=False):
+        super(Sparse_Loss_CrossEntropy, self).__init__()
+        self.sigmoidAct = apply_sigmoid_activation
+        self.loss_fun = torch.nn.CrossEntropyLoss(reduction=reduction)
+
+    def forward(self, bt):
+        if self.sigmoidAct:
+            bt = torch.sigmoid(bt)  # sigmoid because we need the probability distributions
+        _, preds = torch.max(bt, 1)
+        loss_ret_1 = self.loss_fun(bt, preds)
+        return loss_ret_1
+
 class Conv_AE_NestedNamespace(nn.Module):
     def __init__(self, model_NestedNamespace):
         super(Conv_AE_NestedNamespace, self).__init__()
@@ -1109,6 +1122,10 @@ class Conv_AE_NestedNamespace(nn.Module):
             bottleneck_func = Sparse_Loss_Dim(dim=1, reduction=self.saprsity_reduction)
         elif self.sparsity_func == 'l2_norm':
             bottleneck_func = Sparse_Loss_Dim(dim=2, reduction=self.saprsity_reduction)
+        elif self.sparsity_func == 'cross_entropy':
+            bottleneck_func = Sparse_Loss_CrossEntropy(reduction=self.saprsity_reduction, apply_sigmoid_activation=False)
+        elif self.sparsity_func == 'cross_entropy_with_sigmoid':
+            bottleneck_func = Sparse_Loss_CrossEntropy(reduction=self.saprsity_reduction, apply_sigmoid_activation=True)
 
         self.loss = {
             'reconstruction': {'func': reconstruction_err_func, 'val': None},

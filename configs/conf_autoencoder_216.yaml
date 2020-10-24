@@ -1,0 +1,46 @@
+# YAML
+DIR:
+  DATA: '/mnt/USB_HDD_1TB/Datasets'
+  EXPERIMENT: '/mnt/USB_HDD_1TB/GitHub/keyhandshapediscovery/experiments/FM'
+DATA:
+  IDENTIFIER: 'FASHION_MNIST'
+  INPUT_INITIAL_RESIZE: 34
+EXPERIMENT:
+  SAVE_MODEL_AT: 20
+  BATCH_SIZE: 128
+MODEL:
+  MODEL_CLASS: conv_ae
+  MODEL_NAME: conv_ae_simple
+  DATA_KEY: image
+  INPUT_SIZE: 28
+  INPUT_CHANNEL_SIZE: 1
+  WEIGHT_DECAY: 0.005
+  LEARNING_RATE: 0.001
+  RECONSTRUCTION_ERROR_FUNCTION: 'MSE'
+  RECONSTRUCTION_ERROR_REDUCTION: 'sum'
+  SPARSITY_ERROR: 'kl_divergence'
+  SPARSITY_WEIGHT: 0.01
+  SPARSITY_REDUCTION: 'sum'
+  KL_DIV_RHO: 0.0001
+  BOTTLENECK_ACT_APPLY: True
+  BOTTLENECK_KMEANS_APPLY: True
+  BOTTLENECK_FIG_NAME_BASE: 'btl_XXX.png'
+  LAYERS:
+    encoder:
+      l01_conv:   'type: Conv2d,in_channels : 1, out_channels : 32, kernel_size : 3'
+      l01_act:    'type: ReLu'
+      l02_maxp:   'type: MaxPool2d,kernel_size:2'
+      flat:       'type: Flatten'
+      l03_linear: 'type: Linear,in_features:5408, out_features:100'
+      l03_act:    'type: ReLu'
+      l04_linear: 'type: Linear,in_features:100, out_features:16'
+      l04_act:    'type: Softmax,dim:1'
+    decoder:
+      l04_linear_b: 'type: Linear,in_features:16, out_features:100'
+      l04_act_b:    'type: ReLu'
+      l03_linear_b: 'type: Linear,in_features:100, out_features:5408'
+      l04_act_b:    'type: ReLu'
+      flat_b:       'type: Unflatten'
+      l02_upsm:     'type: Upsample,scale_factor:2'
+      l01_deconv:   'type: ConvTranspose2d,in_channels :32, out_channels : 1, kernel_size : 3'
+ 
