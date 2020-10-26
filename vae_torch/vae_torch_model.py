@@ -965,37 +965,33 @@ class Sparsity_Loss_Base(nn.Module):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class Sparse_KL_DivergenceLoss(Sparsity_Loss_Base):
-    def __init__(self, rho=None, reduction='batchmean', sigmoidAct=False):
+    def __init__(self, rho=None, reduction='batchmean'):
         super(Sparse_KL_DivergenceLoss, self).__init__()
         self.rho = rho
         self.rho_set = False
         self.reduction = reduction
-        self.sigmoidAct = sigmoidAct
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def set_kl_rho_by_data(self, bt): #  bt: bottleneck
         if self.rho_set:
             return
         bt_dim = bt.shape[1]
+        wanted_rho = self.rho
+        self.rho = 1 / bt_dim
         if self.rho is None:
             print("self.kl_rho is set to {:f}, dimension of bottleneck is {:d}".format(1 / bt_dim, bt_dim))
-            self.rho = np.minimum(1/bt_dim, self.kl_rho)
-        elif self.rho > (1 / bt.shape[1]):
-            print("self.kl_rho changed from {:f} to {:f}, dimension of bottleneck is {:d}".format(self.rho,1 / bt_dim, bt_dim))
-            self.rho = np.minimum(1/bt_dim, self.kl_rho)
+        elif wanted_rho != 1/bt_dim:
+            print("self.kl_rho changed from {:f} to {:f}, dimension of bottleneck is {:d}".format(wanted_rho, 1/bt_dim, bt_dim))
         self.rho_set = True
 
     def forward(self, bt):
+        # https://discuss.pytorch.org/t/kl-divergence-produces-negative-values/16791/13
+        # KLDLoss(p, q), sum(q) needs to equal one
+        # p = log_softmax(tensor)
         self.set_kl_rho_by_data(bt)
-        if self.sigmoidAct:
-            bt = torch.mean(torch.sigmoid(bt), 0)  # sigmoid because we need the probability distributions
-        rho = (self.rho * torch.ones(bt.shape)).to(self.device)
-        # UserWarning: reduction: 'mean' divides the total loss by both the batch size and the support  size.
-        # 'batchmean' divides only by the batch size, and aligns with the KL div math definition.
-        #  'mean' will be changed to behave the same as 'batchmean' in the next major release.
-        # warnings.warn("reduction: 'mean' divides the total loss by both the batch size and the support size."
-        loss_ret_1 = nn.functional.kl_div(bt, rho, reduction=self.reduction)
-        #loss_ret_2 = torch.sum(rho * torch.log(rho / bottleneck) + (1 - rho) * torch.log((1 - rho) / (1 - bottleneck)))
+        _bt = torch.sigmoid(bt)  # sigmoid because we need the probability distributions
+        rho_mat = torch.tensor([self.rho] * np.ones(_bt.size()), dtype=torch.float32).to(self.device)
+        loss_ret_1 = F.kl_div(F.log_softmax(_bt, dim=1).to(self.device), rho_mat, reduction=self.reduction)
         return loss_ret_1
 
 class Sparse_Loss_Dim(Sparsity_Loss_Base):
@@ -1114,10 +1110,8 @@ class Conv_AE_NestedNamespace(nn.Module):
 
         if self.sparsity_func is None:
             bottleneck_func = None
-        elif self.sparsity_func == 'kl_divergence':
+        elif self.sparsity_func in ['kl_divergence', 'kl_divergence_sigmoid']:
             bottleneck_func = Sparse_KL_DivergenceLoss(rho=self.kl_rho, reduction=self.saprsity_reduction)
-        elif self.sparsity_func == 'kl_divergence_sigmoid':
-            bottleneck_func = Sparse_KL_DivergenceLoss(rho=self.kl_rho, reduction=self.saprsity_reduction, sigmoidAct=True)
         elif self.sparsity_func == 'l1_norm':
             bottleneck_func = Sparse_Loss_Dim(dim=1, reduction=self.saprsity_reduction)
         elif self.sparsity_func == 'l2_norm':
