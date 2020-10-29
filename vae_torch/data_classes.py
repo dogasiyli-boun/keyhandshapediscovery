@@ -175,10 +175,8 @@ class fashion_mnist(Dataset):
     def __init__(self, fashionMNISTds_fold, is_train, input_size, input_initial_resize=None, load_train_as_test=False, datasetname="fashion_mnist"):
         self.root_dir = fashionMNISTds_fold
 
-        self.transform = transforms.Compose([
-            transforms.Resize(input_size),
-            transforms.ToTensor()
-        ])
+        self.transform = transforms.Compose([transforms.Resize(input_size), transforms.ToTensor()])
+        #  self.transform = transforms.Compose([transforms.ToTensor()])
         if input_initial_resize is not None and is_train:
             self.transform = transforms.Compose([
                     transforms.Resize(input_initial_resize),

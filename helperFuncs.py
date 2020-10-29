@@ -100,7 +100,10 @@ def get_attribute_from_dict(_dict, attribute_string, default_type=None, default_
 def get_attribute_from_nested_namespace(_nest_ns, attribute_string, default_type=None, default_val=None):
     if attribute_string in vars(_nest_ns):
         if default_type is not None:
-            return default_type(getattr(_nest_ns, attribute_string))
+            ret_val = getattr(_nest_ns, attribute_string)
+            if ret_val == 'None':
+                return None
+            return default_type(ret_val)
         return getattr(_nest_ns, attribute_string)
     return default_val
 

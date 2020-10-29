@@ -45,9 +45,12 @@ def plot_compare(X_dict, title_str, contain_str, ylabel, figsize=(10, 3), dpi=80
         plot_vars(X['X'], plot_label_add_str=X['file_name'], line_color=X['line_color'], contain_str=contain_str,
                   ylabel=ylabel, create_plot=False, ax=ax, legend_loc=legend_loc, max_epoch=max_epoch)
 
-def plot_cf(cf_int, data_log_keys = ['tr_tr', 'tr_va', 'va', 'te'], k_loss_disp_list=None, max_act_ep=None, plot_cnt = 5, select_id_type='linspace'):
-    ae_fold_name = '/mnt/USB_HDD_1TB/GitHub/keyhandshapediscovery/output_sae_k256_is64_cf' + str(cf_int).zfill(2)
-    ae_f_name = os.path.join(ae_fold_name,'ae_ft_sae_k256_is64.npy')
+def plot_cf(cf_int, data_log_keys = ['tr_tr', 'tr_va', 'va', 'te'], k_loss_disp_list=None, max_act_ep=None, plot_cnt = 5,
+            select_id_type='linspace',
+            experiments_folder='/mnt/USB_HDD_1TB/GitHub/keyhandshapediscovery/',
+            exp_base_name='output_sae_k256_is64_cf', ae_f_name_base='ae_ft_sae_k256_is64.npy'):
+    ae_fold_name = os.path.join(experiments_folder, exp_base_name + str(cf_int).zfill(2))
+    ae_f_name = os.path.join(ae_fold_name, ae_f_name_base)
     vfz = np.load(ae_f_name, allow_pickle=True)
     loss_log_dict = {}
     n = 0

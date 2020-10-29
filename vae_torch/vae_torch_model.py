@@ -15,6 +15,18 @@ import os
 
 import helperFuncs as funcH
 
+class SigmoidModule(nn.Module):
+    '''
+    This model is for conv autoencoders
+    At some point the convolution layers turn to Linear layers
+    This layer will be used for flattening and unflattening such layers
+    '''
+    def __init__(self):
+        super(SigmoidModule, self).__init__()
+
+    def forward(self, input):
+        return torch.sigmoid(input)
+
 class Flatten(nn.Module):
     '''
     This model is for conv autoencoders
@@ -544,6 +556,9 @@ def get_torch_layer_from_dict(definiton_dict):
     if definiton_dict["type"] == 'ReLu':
         return nn.ReLU()
 
+    if definiton_dict["type"] == 'Sigmoid':
+        return SigmoidModule()
+
     if definiton_dict["type"] == 'Softmax':
         dim = funcH.get_attribute_from_dict(definiton_dict, "dim", default_type=int, default_val=0)
         return nn.Softmax(dim=dim)
@@ -965,12 +980,18 @@ class Sparsity_Loss_Base(nn.Module):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class Sparse_KL_DivergenceLoss(Sparsity_Loss_Base):
-    def __init__(self, rho=None, reduction='batchmean'):
+    def __init__(self, rho=None, reduction='batchmean', apply_log_soft_max=True, apply_sigmoid=False, apply_mean=False):
         super(Sparse_KL_DivergenceLoss, self).__init__()
         self.rho = rho
         self.rho_set = False
         self.reduction = reduction
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.apply_sigmoid = apply_sigmoid
+        self.apply_log_soft_max = apply_log_soft_max
+        self.apply_mean = apply_mean
+        print("kl_divergence.apply_sigmoid = ", self.apply_sigmoid)
+        print("kl_divergence.apply_log_soft_max = ", self.apply_log_soft_max)
+        print("kl_divergence.apply_mean = ", self.apply_mean)
 
     def set_kl_rho_by_data(self, bt): #  bt: bottleneck
         if self.rho_set:
@@ -982,6 +1003,7 @@ class Sparse_KL_DivergenceLoss(Sparsity_Loss_Base):
             print("self.kl_rho is set to {:f}, dimension of bottleneck is {:d}".format(1 / bt_dim, bt_dim))
         elif wanted_rho != 1/bt_dim:
             print("self.kl_rho changed from {:f} to {:f}, dimension of bottleneck is {:d}".format(wanted_rho, 1/bt_dim, bt_dim))
+
         self.rho_set = True
 
     def forward(self, bt):
@@ -989,9 +1011,16 @@ class Sparse_KL_DivergenceLoss(Sparsity_Loss_Base):
         # KLDLoss(p, q), sum(q) needs to equal one
         # p = log_softmax(tensor)
         self.set_kl_rho_by_data(bt)
-        _bt = torch.sigmoid(bt)  # sigmoid because we need the probability distributions
-        rho_mat = torch.tensor([self.rho] * np.ones(_bt.size()), dtype=torch.float32).to(self.device)
-        loss_ret_1 = F.kl_div(F.log_softmax(_bt, dim=1).to(self.device), rho_mat, reduction=self.reduction)
+        if self.apply_sigmoid:
+            bt = torch.sigmoid(bt)
+        if self.apply_mean:
+            bt = torch.mean(bt, 1)
+        rho_mat = torch.tensor([self.rho] * np.ones(bt.size()), dtype=torch.float32).to(self.device)
+        # rho_mat = torch.tensor([self.rho] * len(bt)).to(self.device)
+        if self.apply_log_soft_max:
+            loss_ret_1 = F.kl_div(F.log_softmax(bt, dim=1).to(self.device), rho_mat, reduction=self.reduction)
+        else:
+            loss_ret_1 = F.kl_div(bt, rho_mat, reduction=self.reduction)
         return loss_ret_1
 
 class Sparse_Loss_Dim(Sparsity_Loss_Base):
@@ -1066,8 +1095,11 @@ class Conv_AE_NestedNamespace(nn.Module):
         # model_sub : sparsity stuff
         self.sparsity_func = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'SPARSITY_ERROR', default_type=str, default_val=None)
         self.sparsity_weight = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'SPARSITY_WEIGHT', default_type=float, default_val=0.0)
-        self.saprsity_reduction = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'SPARSITY_REDUCTION', default_type=str, default_val='mean')
+        self.sparsity_reduction = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'SPARSITY_REDUCTION', default_type=str, default_val='mean')
         self.kl_rho = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'KL_DIV_RHO', default_type=float, default_val=0.05)
+        self.kl_apply_sigmoid = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'KL_SIGMOID', default_type=bool, default_val=False)
+        self.kl_apply_log_soft_max = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'KL_LOGSOFTMAX', default_type=bool, default_val=True)
+        self.kl_apply_mean = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'KL_MEAN', default_type=bool, default_val=False)
         # experiment reproducibility
         self.random_seed = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'RANDOM_SEED', default_type=int, default_val=7)
         # evaluation metrics related stuff
@@ -1111,15 +1143,18 @@ class Conv_AE_NestedNamespace(nn.Module):
         if self.sparsity_func is None:
             bottleneck_func = None
         elif self.sparsity_func in ['kl_divergence', 'kl_divergence_sigmoid']:
-            bottleneck_func = Sparse_KL_DivergenceLoss(rho=self.kl_rho, reduction=self.saprsity_reduction)
+            bottleneck_func = Sparse_KL_DivergenceLoss(rho=self.kl_rho, reduction=self.sparsity_reduction,
+                                                       apply_sigmoid=self.kl_apply_sigmoid,
+                                                       apply_log_soft_max=self.kl_apply_log_soft_max,
+                                                       apply_mean=self.kl_apply_mean)
         elif self.sparsity_func == 'l1_norm':
-            bottleneck_func = Sparse_Loss_Dim(dim=1, reduction=self.saprsity_reduction)
+            bottleneck_func = Sparse_Loss_Dim(dim=1, reduction=self.sparsity_reduction)
         elif self.sparsity_func == 'l2_norm':
-            bottleneck_func = Sparse_Loss_Dim(dim=2, reduction=self.saprsity_reduction)
+            bottleneck_func = Sparse_Loss_Dim(dim=2, reduction=self.sparsity_reduction)
         elif self.sparsity_func == 'cross_entropy':
-            bottleneck_func = Sparse_Loss_CrossEntropy(reduction=self.saprsity_reduction, apply_sigmoid_activation=False)
+            bottleneck_func = Sparse_Loss_CrossEntropy(reduction=self.sparsity_reduction, apply_sigmoid_activation=False)
         elif self.sparsity_func == 'cross_entropy_with_sigmoid':
-            bottleneck_func = Sparse_Loss_CrossEntropy(reduction=self.saprsity_reduction, apply_sigmoid_activation=True)
+            bottleneck_func = Sparse_Loss_CrossEntropy(reduction=self.sparsity_reduction, apply_sigmoid_activation=True)
 
         self.loss = {
             'reconstruction': {'func': reconstruction_err_func, 'val': None},
@@ -1149,7 +1184,10 @@ class Conv_AE_NestedNamespace(nn.Module):
         print("sparsity.func : ", self.sparsity_func)
         print("sparsity_weight : ", self.sparsity_weight)
         print("kl_rho : ", self.kl_rho)
-        print("saprsity_reduction : ", self.saprsity_reduction)
+        print("kl_apply_mean : ", self.kl_apply_mean)
+        print("kl_apply_log_soft_max : ", self.kl_apply_log_soft_max)
+        print("kl_apply_sigmoid : ", self.kl_apply_sigmoid)
+        print("sparsity_reduction : ", self.sparsity_reduction)
         print("bottleneck_act.apply : ", self.bottleneck_act_apply)
         print("bottleneck_kmeans.apply : ", self.bottleneck_kmeans_apply)
 
@@ -1170,7 +1208,7 @@ class Conv_AE_NestedNamespace(nn.Module):
                 x = f.unflatten(x)
             else:
                 x = f(x)
-        reconstruction = torch.sigmoid(x)
+        reconstruction = x
         return reconstruction
 
     def forward(self, x):
@@ -1180,11 +1218,12 @@ class Conv_AE_NestedNamespace(nn.Module):
 
     def final_loss(self, data, reconstruction, bottleneck):
         loss_reconstruction = self.loss['reconstruction']['func'](reconstruction, data)
+        # loss_reconstruction = self.loss['reconstruction']['func'](reconstruction.view(reconstruction.size(0), -1), data.view(data.size(0), -1))
         self.loss['reconstruction']['val'] += loss_reconstruction.item()
 
         loss_sparsity = 0.0
         if self.sparsity_weight is not None and self.sparsity_weight > 0.0:
-            loss_sparsity = -self.sparsity_weight*self.loss['sparsity']['func'](bottleneck)
+            loss_sparsity = self.sparsity_weight*self.loss['sparsity']['func'](bottleneck)
             self.loss['sparsity']['val'] += loss_sparsity.item()/self.sparsity_weight
 
         return loss_reconstruction + loss_sparsity #sum(self.loss[i]['val'] for i in self.loss)
@@ -1224,7 +1263,10 @@ class Conv_AE_NestedNamespace(nn.Module):
             _confMat_preds, _, kr_pdf, weightedPurity, cnmxh_perc = funcH.countPredictionsForConfusionMat(lab_vec, pred_vec, centroid_info_pdf=centroid_info_pdf, labelNames=None)
             sampleCount = np.sum(np.sum(_confMat_preds))
             acc = 100 * np.sum(np.diag(_confMat_preds)) / sampleCount
-            print("--acc({:5.3f}), uniqClustCnt({:d})".format(acc, np.size(np.unique(pred_vec))))
+            #  print("\n--", k, "confmat:\n", np.asmatrix(_confMat_preds))
+            unique_pred_classes = np.where(np.diag(_confMat_preds) > 0)
+            print("--acc({:5.3f}), uniqClustCnt({:d}), uniqClass({:d})".format(acc, np.size(np.unique(pred_vec)), np.size(unique_pred_classes)))
+            print('--unique last 5 clusters-->', unique_pred_classes[-5:])
             self.clustering_dict[k]['val'] = acc
 
     def apply_acc(self, loss_dict, lab_vec, bottleneck_vec):
