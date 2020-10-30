@@ -9,6 +9,7 @@ from helperFuncs import get_mapped_0_k_indices
 
 #fashion mnist
 from torchvision.datasets import FashionMNIST as fashionMNISTds
+from torchvision.datasets import CIFAR10 as CIFAR10ds
 from torchvision.utils import save_image
 
 def get_def_from_im_name_hospisign(frame_name, verbose=0):
@@ -225,6 +226,68 @@ class fashion_mnist(Dataset):
     @staticmethod
     def save_decoded_image(img, name):
         img = img.view(img.size(0), 1, 28, 28)
+        save_image(img, name)
+
+class cifar10(Dataset):
+    def __init__(self, cifar10ds_fold, is_train, input_size, input_initial_resize=None, load_train_as_test=False, datasetname="cifar10"):
+        self.root_dir = cifar10ds_fold
+        self.input_size = input_size
+
+        self.transform = transforms.Compose(
+            [transforms.Resize(input_size),
+             transforms.ToTensor(),
+             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+
+        if input_initial_resize is not None and is_train:
+            self.transform = transforms.Compose([
+                    transforms.Resize(input_initial_resize),
+                    transforms.RandomResizedCrop(input_size),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                ])
+        elif input_initial_resize is None and is_train and not load_train_as_test:
+            self.transform = transforms.Compose([
+                    transforms.Resize(input_size),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                ])
+
+        self.datasetname = datasetname
+        dataset = CIFAR10ds(
+            root=os.path.join(cifar10ds_fold),
+            train=is_train,
+            download=True
+        )
+        img_all = []
+        lab_all = []
+        for i in range(0, len(dataset)):
+            img, lb = dataset[i]
+            img_all.append(img)
+            lab_all.append(lb)
+
+        self.images = img_all
+        self.labels = lab_all
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        image = self.images[idx]
+        label = self.labels[idx]
+        ids = idx
+        sample = {'image': image, 'label': label, 'ids': ids}
+        if self.transform:
+            sample['image'] = self.transform(sample['image'])
+        return sample
+
+    def _len_(self):
+        return len(self.labels)
+
+    @staticmethod
+    def save_decoded_image(img, name, input_size=32):
+        img = img.view(img.size(0), 1, input_size, input_size)
         save_image(img, name)
 
 def createDirIfNotExist(dir2create):

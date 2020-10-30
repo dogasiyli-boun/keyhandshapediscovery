@@ -83,12 +83,19 @@ def plot_cf(cf_int, data_log_keys = ['tr_tr', 'tr_va', 'va', 'te'], k_loss_disp_
         subplot_ids = (np.linspace(0, max_act_ep, num=plot_cnt)).astype(int)
     plot_cnt = int(len(subplot_ids))
     try :
-        for i in range (0,plot_cnt):
+        for i in range (0, plot_cnt):
             s = subplot_ids[i]
-            f_name = "btl_"+ str(s).zfill(3) +"_tr_va"
-            ful_file_name = os.path.join(ae_fold_name,f_name + "_.png")
-            print(str(i)+"*"+ful_file_name+"*")
-            img = Image.open(ful_file_name)
+            try:
+                f_name = "btl_" + str(s).zfill(3) +"_tr_va"
+                ful_file_name = os.path.join(ae_fold_name, f_name + "_.png")
+                print(str(i)+"*"+ful_file_name+"*")
+                img = Image.open(ful_file_name)
+            except:
+                f_name = "btl_" + str(s).zfill(3) +"_tr_te"
+                ful_file_name = os.path.join(ae_fold_name, f_name + "_.png")
+                print(str(i)+"*"+ful_file_name+"*")
+                img = Image.open(ful_file_name)
+
             if i == 0:
                 fig, ax = plt.subplots(1, plot_cnt, figsize=[30, 30], dpi=300)
             ax[i].set_title(f_name + ' activation')

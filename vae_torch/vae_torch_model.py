@@ -1102,6 +1102,9 @@ class Conv_AE_NestedNamespace(nn.Module):
         self.kl_apply_mean = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'KL_MEAN', default_type=bool, default_val=False)
         # experiment reproducibility
         self.random_seed = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'RANDOM_SEED', default_type=int, default_val=7)
+        self.plot_variance = funcH.get_attribute_from_nested_namespace(model_NestedNamespace.OUTPUTS, 'PLOT_VARIANCE', default_type=bool, default_val=False)
+        self.plot_histogram = funcH.get_attribute_from_nested_namespace(model_NestedNamespace.OUTPUTS, 'PLOT_HISTOGRAM', default_type=bool, default_val=False)
+
         # evaluation metrics related stuff
         self.bottleneck_act_apply = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'BOTTLENECK_ACT_APPLY', default_type=bool, default_val=None)
         self.bottleneck_kmeans_apply = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'BOTTLENECK_KMEANS_APPLY', default_type=bool, default_val=False)
@@ -1264,9 +1267,11 @@ class Conv_AE_NestedNamespace(nn.Module):
             sampleCount = np.sum(np.sum(_confMat_preds))
             acc = 100 * np.sum(np.diag(_confMat_preds)) / sampleCount
             #  print("\n--", k, "confmat:\n", np.asmatrix(_confMat_preds))
-            unique_pred_classes = np.where(np.diag(_confMat_preds) > 0)
-            print("--acc({:5.3f}), uniqClustCnt({:d}), uniqClass({:d})".format(acc, np.size(np.unique(pred_vec)), np.size(unique_pred_classes)))
-            print('--unique last 5 clusters-->', unique_pred_classes[-5:])
+            unique_pred_classes = np.asarray(np.where(np.diag(_confMat_preds) > 0)).squeeze()
+            uniq_clus = np.unique(pred_vec)
+            print("--acc({:5.3f}), uniqClustCnt({:d}), uniqClassCnt({:d})".format(acc, np.size(np.unique(pred_vec)), np.size(unique_pred_classes)))
+            print('--unique last 5 clusters-->', uniq_clus[-5:])
+            print('--unique last 5 classes-->', unique_pred_classes[-5:])
             self.clustering_dict[k]['val'] = acc
 
     def apply_acc(self, loss_dict, lab_vec, bottleneck_vec):
@@ -1283,38 +1288,40 @@ class Conv_AE_NestedNamespace(nn.Module):
             plt.colorbar()
             fig.savefig(os.path.join(self.bottleneck_fig['save_fold_name'], self.bottleneck_fig['save_fig_name']), bbox_inches='tight', dpi=600)
 
-            var_dim = np.var(bottleneck_vec, axis=0)
-            plt.clf()
-            fig, ax = plt.subplots(1, figsize=(15, 8), dpi=80)
-            title_str = 'min_var(' + str(np.min(var_dim)) + '),max_var(' + str(np.max(var_dim)) + ')'
-            ax.plot(np.asarray(range(0, len(var_dim))), var_dim.squeeze(), lw=2, label='variance', color='red')
-            ax.set_title(title_str)
-            fig.savefig(os.path.join(self.bottleneck_fig['save_fold_name'], self.bottleneck_fig['save_fig_name'].replace('.png','_var.png')), bbox_inches='tight', dpi=80)
+            if self.plot_variance:
+                var_dim = np.var(bottleneck_vec, axis=0)
+                plt.clf()
+                fig, ax = plt.subplots(1, figsize=(15, 8), dpi=80)
+                title_str = 'min_var(' + str(np.min(var_dim)) + '),max_var(' + str(np.max(var_dim)) + ')'
+                ax.plot(np.asarray(range(0, len(var_dim))), var_dim.squeeze(), lw=2, label='variance', color='red')
+                ax.set_title(title_str)
+                fig.savefig(os.path.join(self.bottleneck_fig['save_fold_name'], self.bottleneck_fig['save_fig_name'].replace('.png','_var.png')), bbox_inches='tight', dpi=80)
 
             # the histogram of the data
-            plt.clf()
-            fig, ax = plt.subplots(1, figsize=(15, 8), dpi=80)
-            pred_vec = np.argmax(bottleneck_vec.T, axis=0).squeeze()
-            to_plot = bottleneck_vec[np.asarray(range(0, bottleneck_vec.shape[0]), dtype=int), pred_vec]
-            # n, bins, patches = plt.hist(to_plot, np.asarray(np.linspace(0.1, 1, 10)), density=False)
-            n, bins, patches = plt.hist(to_plot, bins=10, density=False)
-            plt.xlabel('Bins')
-            plt.ylabel('Softmax(Activation)')
-            plt.title('Winner Bottleneck Activation Histogram')
-            for i in range(0, len(patches)):
-                if i < len(patches)-1:
-                    x_pos = (patches[i].xy[0] + patches[i+1].xy[0])/2
-                else:
-                    x_pos = patches[i].xy[0]
-                height = n[i]
-                plt.text(x_pos, height/2, r'$'+str(height)+'$')
-            # plt.text(0.5, np.max(n)*0.75, r'less than 0.1 :$' + str(int(len(pred_vec)-np.sum(n))) + '$')
-            plt.xlim(np.min(bins), np.max(bins))  # plt.xlim(0.1, 1.0)
-            plt.xticks(bins)
-            plt.grid(True)
-            fig.savefig(os.path.join(self.bottleneck_fig['save_fold_name'],
-                                     self.bottleneck_fig['save_fig_name'].replace('.png', '_hist.png')),
-                                     bbox_inches='tight')
+            if self.plot_histogram:
+                plt.clf()
+                fig, ax = plt.subplots(1, figsize=(15, 8), dpi=80)
+                pred_vec = np.argmax(bottleneck_vec.T, axis=0).squeeze()
+                to_plot = bottleneck_vec[np.asarray(range(0, bottleneck_vec.shape[0]), dtype=int), pred_vec]
+                # n, bins, patches = plt.hist(to_plot, np.asarray(np.linspace(0.1, 1, 10)), density=False)
+                n, bins, patches = plt.hist(to_plot, bins=10, density=False)
+                plt.xlabel('Bins')
+                plt.ylabel('Softmax(Activation)')
+                plt.title('Winner Bottleneck Activation Histogram')
+                for i in range(0, len(patches)):
+                    if i < len(patches)-1:
+                        x_pos = (patches[i].xy[0] + patches[i+1].xy[0])/2
+                    else:
+                        x_pos = patches[i].xy[0]
+                    height = n[i]
+                    plt.text(x_pos, height/2, r'$'+str(height)+'$')
+                # plt.text(0.5, np.max(n)*0.75, r'less than 0.1 :$' + str(int(len(pred_vec)-np.sum(n))) + '$')
+                plt.xlim(np.min(bins), np.max(bins))  # plt.xlim(0.1, 1.0)
+                plt.xticks(bins)
+                plt.grid(True)
+                fig.savefig(os.path.join(self.bottleneck_fig['save_fold_name'],
+                                         self.bottleneck_fig['save_fig_name'].replace('.png', '_hist.png')),
+                                         bbox_inches='tight')
 
             plt.close('all')
 
