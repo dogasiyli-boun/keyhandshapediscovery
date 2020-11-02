@@ -148,7 +148,7 @@ def plot_cf_compare(cf_int_arr, data_log_keys=['tr_va', 'va', 'te'], mul_before_
                 disp_epoch = np.min([vec_len, max_act_ep]) if max_act_ep is not None else vec_len
                 los_vec_cur = [loss_log_dict[k_data][l][loss_key] for l in range(0, disp_epoch)]
                 plot_x = np.asarray(list(range(0, disp_epoch)))
-                label_str = str(cf_int) + '_' + k_data + '_' + loss_key
+                label_str = str(cf_int) + '_' + k_data + '_' + loss_key + ('*{}'.format(mul_plt) if mul_plt != 1 else ' ')
                 print(label_str, los_vec_cur[-3:], "\nmax({:4.2f}),min({:4.2f})".format(np.max(los_vec_cur), np.min(los_vec_cur)))
                 ax.plot(plot_x, mul_plt*np.asarray(los_vec_cur[:disp_epoch]), lw=2, label=label_str, color=np.random.rand(3))
     ax.legend(loc=legend_loc)

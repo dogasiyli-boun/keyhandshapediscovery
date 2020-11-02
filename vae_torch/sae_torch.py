@@ -104,7 +104,8 @@ def get_last_epoch_completed(out_folder):
     ep_fr = len(epoch_out_img_list)
     return ep_fr
 
-def main(epochs=20, config_folder="/home/doga/GithUBuntU/keyhandshapediscovery/configs", config_file_id=0):
+def main(epochs=20, print_out_last=0,
+         config_folder="/home/doga/GithUBuntU/keyhandshapediscovery/configs", config_file_id=0):
     config_file = os.path.join(config_folder, "conf_autoencoder_" + str(config_file_id).zfill(2) + ".yaml")
     CONF_PARAMS_ = funcH.CustomConfigParser(config_file=config_file)
 
@@ -120,7 +121,7 @@ def main(epochs=20, config_folder="/home/doga/GithUBuntU/keyhandshapediscovery/c
     out_folder = os.path.join(experiment_main_fold, 'exp_' + base_str + '_cf' + str(config_file_id).zfill(2))
     ae_f_name = os.path.join(out_folder, 'ae_ft_' + base_str + '.npy')
     if not os.path.exists(out_folder):
-        os.mkdir(out_folder)
+        os.makedirs(out_folder)
     updatedModelFile = os.path.join(out_folder, "model_" + model_name + "_is" + str(input_size) + "_hs" + '.model')
     _model_ae = get_model(updatedModelFile=updatedModelFile, CONF_PARAMS_=CONF_PARAMS_)
     ep_fr = get_last_epoch_completed(out_folder)
@@ -138,10 +139,11 @@ def main(epochs=20, config_folder="/home/doga/GithUBuntU/keyhandshapediscovery/c
             loss_log_dict[k] = {}
         loss_key_list = None
 
+    np.set_printoptions(precision=3, suppress=True, edgeitems=30, linewidth=100000)
     for epoch in range(ep_fr, epochs):
         print("*-*-*-*-*-*-*-*")
         print(datetime.datetime.now().strftime("%H:%M:%S"))
-        print(f"Epoch {epoch} of {epochs}")
+        print(f"config_file {config_file_id}, Epoch {epoch} of {epochs}")
 
         for k_data in data_log_keys:
             if k_data == 'tr_tr':
@@ -151,24 +153,26 @@ def main(epochs=20, config_folder="/home/doga/GithUBuntU/keyhandshapediscovery/c
                 print("evaluating:", k_data, '--', datetime.datetime.now().strftime("%H:%M:%S"))
                 loss_log_dict[k_data][epoch] = _model_ae.validate(X_dict[k_data], epoch, batch_size, out_folder, sub_data_identifier=k_data + "_")
 
-        if loss_key_list is None:
-            loss_key_list = [key for key in loss_log_dict["tr_tr"][epoch].keys()]
-
-        #for k in loss_key_list:
-        for k_loss in loss_key_list:
-            print(k_loss, ':')
-            for k_data in data_log_keys:
-                if k_loss in loss_log_dict[k_data][0]:
-                    los_vec_cur = [loss_log_dict[k_data][l][k_loss] for l in range(0, len(loss_log_dict[k_data]))]
-                    print('--', k_data, '-->', los_vec_cur[-5:])
-
         torch.save(_model_ae, f=updatedModelFile)
         if (epoch>0 and epoch%save_model_at_epochs==0):
             torch.save(_model_ae, f=str(updatedModelFile).replace(".model", "_ep{:03d}.model".format(epoch)))
 
         np.save(ae_f_name, loss_log_dict, allow_pickle=True)
 
+        if print_out_last > 0:
+            if loss_key_list is None:
+                loss_key_list = [key for key in loss_log_dict["tr_tr"][epoch].keys()]
+
+            #for k in loss_key_list:
+            for k_loss in loss_key_list:
+                print(k_loss, '(last {} params):'.format(print_out_last))
+                for k_data in data_log_keys:
+                    if k_loss in loss_log_dict[k_data][0]:
+                        los_vec_cur = [loss_log_dict[k_data][l][k_loss] for l in range(0, len(loss_log_dict[k_data]))]
+                        los_vec_cur_print = np.asarray(los_vec_cur[-print_out_last:])
+                        print('--{:<10s}-->'.format(k_data), np.array2string(los_vec_cur_print, formatter={'float_kind':lambda x: "%8.3f" % x}))
+
 if __name__ == '__main__':
-    main(epochs=20,
+    main(epochs=20, print_out_last=7,
          config_folder="/home/doga/GithUBuntU/keyhandshapediscovery/configs",
          config_file_id=0)
