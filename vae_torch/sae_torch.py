@@ -35,6 +35,7 @@ def get_model(updatedModelFile=None, CONF_PARAMS_=None):
     if os.path.exists(updatedModelFile):
         _model_ae = torch.load(f=updatedModelFile)
         print("Model loaded from(", updatedModelFile, ")")
+        _model_ae.update_old_models()
     elif CONF_PARAMS_ is not None:
         _model_ae = vtm.Conv_AE_NestedNamespace(CONF_PARAMS_.MODEL).to(device)
         print("Model created from scratch.")

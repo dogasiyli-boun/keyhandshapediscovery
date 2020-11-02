@@ -536,8 +536,10 @@ def get_torch_layer_from_dict(definiton_dict):
         kernel_size = definiton_dict["kernel_size"]
         stride = funcH.get_attribute_from_dict(definiton_dict, "stride", default_type=int, default_val=1)
         padding = funcH.get_attribute_from_dict(definiton_dict, "padding", default_type=int, default_val=0)
-        return nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels,
+        ret_module = nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels,
                          kernel_size=kernel_size, stride=stride, padding=padding)
+        nn.init.kaiming_uniform_(ret_module.weight.data)
+        return ret_module
 
     if definiton_dict["type"] == 'MaxPool2d':
         kernel_size = funcH.get_attribute_from_dict(definiton_dict, "kernel_size", default_type=int, default_val=2)
@@ -551,7 +553,9 @@ def get_torch_layer_from_dict(definiton_dict):
         #{"in_features":in_features,"out_channels":out_features}
         in_features = definiton_dict["in_features"]
         out_features = definiton_dict["out_features"]
-        return nn.Linear(in_features=in_features, out_features=out_features)
+        ret_module = nn.Linear(in_features=in_features, out_features=out_features)
+        nn.init.kaiming_uniform_(ret_module.weight.data)
+        return ret_module
 
     if definiton_dict["type"] == 'ReLu':
         return nn.ReLU()
@@ -980,7 +984,9 @@ class Sparsity_Loss_Base(nn.Module):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class Sparse_KL_DivergenceLoss(Sparsity_Loss_Base):
-    def __init__(self, rho=None, reduction='batchmean', apply_log_soft_max=True, apply_sigmoid=False, apply_mean=False):
+    def __init__(self, rho=None, rho_one_mode=False, kl_rho_one_mode_perc=None,
+                 reduction='batchmean',
+                 apply_log_soft_max=True, apply_sigmoid=False, apply_mean=False):
         super(Sparse_KL_DivergenceLoss, self).__init__()
         self.rho = rho
         self.rho_set = False
@@ -989,12 +995,27 @@ class Sparse_KL_DivergenceLoss(Sparsity_Loss_Base):
         self.apply_sigmoid = apply_sigmoid
         self.apply_log_soft_max = apply_log_soft_max
         self.apply_mean = apply_mean
+        self.rho_one_mode = rho_one_mode
+        self.kl_rho_one_mode_perc = kl_rho_one_mode_perc
+        self.kl_rho_one_vec = None
         print("kl_divergence.apply_sigmoid = ", self.apply_sigmoid)
         print("kl_divergence.apply_log_soft_max = ", self.apply_log_soft_max)
         print("kl_divergence.apply_mean = ", self.apply_mean)
+        print("kl_divergence.rho_one_mode = ", self.rho_one_mode)
+        print("kl_rho_one_mode_perc = ", self.kl_rho_one_mode_perc)
 
     def set_kl_rho_by_data(self, bt): #  bt: bottleneck
         if self.rho_set:
+            return
+        if self.rho_one_mode:
+            self.rho_set = True
+            print("self.kl_rho will be skipped because rho_one=True")
+            if self.kl_rho_one_mode_perc is None:
+                self.kl_rho_one_mode_perc = [0.25, 0.10]
+            else:
+                #  self.kl_rho_one_mode_perc = '0.25/0.10'
+                vec_fr_str = np.asarray(str(self.kl_rho_one_mode_perc).split('/'))
+                self.kl_rho_one_vec = vec_fr_str.astype(np.float).squeeze()
             return
         bt_dim = bt.shape[1]
         wanted_rho = self.rho
@@ -1006,6 +1027,31 @@ class Sparse_KL_DivergenceLoss(Sparsity_Loss_Base):
 
         self.rho_set = True
 
+    def find_predicted_clusters(self, bt):
+        bt_copy = bt.to(torch.device('cpu')).detach().numpy()
+        N, D = bt_copy.shape
+        if self.kl_rho_one_vec is None:
+            predicted_clusters_decided = np.argmax(bt_copy, axis=1).squeeze()
+        else:
+            count = len(self.kl_rho_one_vec)+1
+            predicted_clusters = np.zeros((count, N), dtype=int)
+            max_vals = np.zeros((count, N), dtype=float)
+            for i in range(count-1):
+                predicted_clusters[i, :] = np.argmax(bt_copy, axis=1).squeeze()
+                max_vals[i, :] = bt_copy[np.array(range(0, N)), predicted_clusters[i, :]]
+                bt_copy[np.array(range(0, N)), predicted_clusters[i, :]] = 0
+            predicted_clusters[count-1, :] = np.random.randint(low=0, high=D, size=N, dtype=int)
+
+            predicted_clusters_decided = np.zeros((1, N), dtype=int).squeeze() - 1
+            rand_sample_ids = np.array(np.random.permutation(np.arange(N)), dtype=int)
+            kl_rho_one_vec = np.cumsum(np.concatenate([np.array([1-np.sum(self.kl_rho_one_vec)], float), self.kl_rho_one_vec]))
+            fr = int(0)
+            for i in range(count):
+                to = int(np.floor(kl_rho_one_vec[i]*N))
+                predicted_clusters_decided[rand_sample_ids[fr:to]] = predicted_clusters[i, rand_sample_ids[fr:to]]
+                fr = to
+        return predicted_clusters_decided
+
     def forward(self, bt):
         # https://discuss.pytorch.org/t/kl-divergence-produces-negative-values/16791/13
         # KLDLoss(p, q), sum(q) needs to equal one
@@ -1013,9 +1059,18 @@ class Sparse_KL_DivergenceLoss(Sparsity_Loss_Base):
         self.set_kl_rho_by_data(bt)
         if self.apply_sigmoid:
             bt = torch.sigmoid(bt)
-        if self.apply_mean:
+        if not self.rho_one_mode and self.apply_mean:
+            #"if in rho_one_mode can not apply mean"
             bt = torch.mean(bt, 1)
-        rho_mat = torch.tensor([self.rho] * np.ones(bt.size()), dtype=torch.float32).to(self.device)
+        if self.rho_one_mode:
+            rho_mat = torch.zeros(bt.size(), dtype=torch.float32).to(self.device)
+            predicted_clusters_decided = self.find_predicted_clusters(bt)
+            # print(predicted_clusters_decided)
+            #rho_val = float(torch.mean(torch.mean(bt)) / 4)
+            #bt_add = (torch.randint(2, bt.size()) * torch.tensor([rho_val] * np.ones(bt.size()), dtype=torch.float32)).to(self.device)
+            rho_mat[range(bt.size(0)), predicted_clusters_decided] = 1
+        else:
+            rho_mat = torch.tensor([self.rho] * np.ones(bt.size()), dtype=torch.float32).to(self.device)
         # rho_mat = torch.tensor([self.rho] * len(bt)).to(self.device)
         if self.apply_log_soft_max:
             loss_ret_1 = F.kl_div(F.log_softmax(bt, dim=1).to(self.device), rho_mat, reduction=self.reduction)
@@ -1100,11 +1155,17 @@ class Conv_AE_NestedNamespace(nn.Module):
         self.kl_apply_sigmoid = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'KL_SIGMOID', default_type=bool, default_val=False)
         self.kl_apply_log_soft_max = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'KL_LOGSOFTMAX', default_type=bool, default_val=True)
         self.kl_apply_mean = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'KL_MEAN', default_type=bool, default_val=False)
+        self.kl_rho_one_mode = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'KL_RHO_ONE_MODE', default_type=bool, default_val=False)
+        self.kl_rho_one_mode_perc = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'KL_RHO_ONE_MODE_PERC', default_type=str, default_val=None)
+
         # experiment reproducibility
         self.random_seed = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'RANDOM_SEED', default_type=int, default_val=7)
-        self.plot_variance = funcH.get_attribute_from_nested_namespace(model_NestedNamespace.OUTPUTS, 'PLOT_VARIANCE', default_type=bool, default_val=False)
-        self.plot_histogram = funcH.get_attribute_from_nested_namespace(model_NestedNamespace.OUTPUTS, 'PLOT_HISTOGRAM', default_type=bool, default_val=False)
-
+        try:
+            self.plot_variance = funcH.get_attribute_from_nested_namespace(model_NestedNamespace.OUTPUTS, 'PLOT_VARIANCE', default_type=bool, default_val=False)
+            self.plot_histogram = funcH.get_attribute_from_nested_namespace(model_NestedNamespace.OUTPUTS, 'PLOT_HISTOGRAM', default_type=bool, default_val=False)
+        except:
+            self.plot_variance = False
+            self.plot_histogram = False
         # evaluation metrics related stuff
         self.bottleneck_act_apply = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'BOTTLENECK_ACT_APPLY', default_type=bool, default_val=None)
         self.bottleneck_kmeans_apply = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'BOTTLENECK_KMEANS_APPLY', default_type=bool, default_val=False)
@@ -1149,7 +1210,9 @@ class Conv_AE_NestedNamespace(nn.Module):
             bottleneck_func = Sparse_KL_DivergenceLoss(rho=self.kl_rho, reduction=self.sparsity_reduction,
                                                        apply_sigmoid=self.kl_apply_sigmoid,
                                                        apply_log_soft_max=self.kl_apply_log_soft_max,
-                                                       apply_mean=self.kl_apply_mean)
+                                                       apply_mean=self.kl_apply_mean,
+                                                       rho_one_mode=self.kl_rho_one_mode,
+                                                       kl_rho_one_mode_perc=self.kl_rho_one_mode_perc)
         elif self.sparsity_func == 'l1_norm':
             bottleneck_func = Sparse_Loss_Dim(dim=1, reduction=self.sparsity_reduction)
         elif self.sparsity_func == 'l2_norm':
@@ -1171,6 +1234,31 @@ class Conv_AE_NestedNamespace(nn.Module):
             'bottleneck_act': {'apply': self.bottleneck_act_apply, 'val': None},
         }
 
+    def update_old_models(self):
+        """
+        As the code gets more advanced
+        I add new variables on top of the old class variables
+        Hence when old model is loaded tis function will update it with the new introduced
+        new variables such that no errors will be invoked during runtime
+        So after loading the model this function needs to be called
+        :return:
+        """
+        try:
+            self.kl_rho_one_mode
+        except:
+            self.kl_rho_one_mode = False
+            print("updated self.kl_rho_one_mode = ", False)
+        try:
+            self.plot_histogram
+        except:
+            self.plot_histogram = False
+            print("updated kl_divergence.plot_histogram = ", False)
+        try:
+            self.plot_variance
+        except:
+            self.plot_variance = False
+            print("updated kl_divergence.plot_variance = ", False)
+
     def print_model_def(self):
         print("data_key : ", self.data_key)
         print("model_name : ", self.model_name)
@@ -1190,6 +1278,7 @@ class Conv_AE_NestedNamespace(nn.Module):
         print("kl_apply_mean : ", self.kl_apply_mean)
         print("kl_apply_log_soft_max : ", self.kl_apply_log_soft_max)
         print("kl_apply_sigmoid : ", self.kl_apply_sigmoid)
+        print("kl_rho_one_mode : ", self.kl_rho_one_mode)
         print("sparsity_reduction : ", self.sparsity_reduction)
         print("bottleneck_act.apply : ", self.bottleneck_act_apply)
         print("bottleneck_kmeans.apply : ", self.bottleneck_kmeans_apply)
@@ -1219,15 +1308,16 @@ class Conv_AE_NestedNamespace(nn.Module):
         reconstruction = self.dec(bottleneck)
         return reconstruction, bottleneck
 
-    def final_loss(self, data, reconstruction, bottleneck):
+    def final_loss(self, data, reconstruction, bottleneck, epoch=None):
         loss_reconstruction = self.loss['reconstruction']['func'](reconstruction, data)
         # loss_reconstruction = self.loss['reconstruction']['func'](reconstruction.view(reconstruction.size(0), -1), data.view(data.size(0), -1))
         self.loss['reconstruction']['val'] += loss_reconstruction.item()
 
         loss_sparsity = 0.0
-        if self.sparsity_weight is not None and self.sparsity_weight > 0.0:
-            loss_sparsity = self.sparsity_weight*self.loss['sparsity']['func'](bottleneck)
-            self.loss['sparsity']['val'] += loss_sparsity.item()/self.sparsity_weight
+        if epoch is not None and epoch > 10:
+            if self.sparsity_weight is not None and self.sparsity_weight > 0.0:
+                loss_sparsity = self.sparsity_weight*self.loss['sparsity']['func'](bottleneck)
+                self.loss['sparsity']['val'] += loss_sparsity.item()/self.sparsity_weight
 
         return loss_reconstruction + loss_sparsity #sum(self.loss[i]['val'] for i in self.loss)
 
@@ -1267,11 +1357,13 @@ class Conv_AE_NestedNamespace(nn.Module):
             sampleCount = np.sum(np.sum(_confMat_preds))
             acc = 100 * np.sum(np.diag(_confMat_preds)) / sampleCount
             #  print("\n--", k, "confmat:\n", np.asmatrix(_confMat_preds))
-            unique_pred_classes = np.asarray(np.where(np.diag(_confMat_preds) > 0)).squeeze()
+            unique_pred_classes = np.asarray(np.where(np.diag(_confMat_preds) > 0)).flatten()
             uniq_clus = np.unique(pred_vec)
             print("--acc({:5.3f}), uniqClustCnt({:d}), uniqClassCnt({:d})".format(acc, np.size(np.unique(pred_vec)), np.size(unique_pred_classes)))
-            print('--unique last 5 clusters-->', uniq_clus[-5:])
-            print('--unique last 5 classes-->', unique_pred_classes[-5:])
+            pc = int(np.minimum(uniq_clus.size, 5))
+            print('--unique last ' + str(pc) + ' clusters-->', uniq_clus[-pc:])
+            pc = int(np.minimum(unique_pred_classes.size, 5))
+            print('--unique last ' + str(pc) + ' classes-->', unique_pred_classes[-pc:])
             self.clustering_dict[k]['val'] = acc
 
     def apply_acc(self, loss_dict, lab_vec, bottleneck_vec):
@@ -1288,40 +1380,43 @@ class Conv_AE_NestedNamespace(nn.Module):
             plt.colorbar()
             fig.savefig(os.path.join(self.bottleneck_fig['save_fold_name'], self.bottleneck_fig['save_fig_name']), bbox_inches='tight', dpi=600)
 
-            if self.plot_variance:
-                var_dim = np.var(bottleneck_vec, axis=0)
-                plt.clf()
-                fig, ax = plt.subplots(1, figsize=(15, 8), dpi=80)
-                title_str = 'min_var(' + str(np.min(var_dim)) + '),max_var(' + str(np.max(var_dim)) + ')'
-                ax.plot(np.asarray(range(0, len(var_dim))), var_dim.squeeze(), lw=2, label='variance', color='red')
-                ax.set_title(title_str)
-                fig.savefig(os.path.join(self.bottleneck_fig['save_fold_name'], self.bottleneck_fig['save_fig_name'].replace('.png','_var.png')), bbox_inches='tight', dpi=80)
+            try:
+                if self.plot_variance:
+                    var_dim = np.var(bottleneck_vec, axis=0)
+                    plt.clf()
+                    fig, ax = plt.subplots(1, figsize=(15, 8), dpi=80)
+                    title_str = 'min_var(' + str(np.min(var_dim)) + '),max_var(' + str(np.max(var_dim)) + ')'
+                    ax.plot(np.asarray(range(0, len(var_dim))), var_dim.squeeze(), lw=2, label='variance', color='red')
+                    ax.set_title(title_str)
+                    fig.savefig(os.path.join(self.bottleneck_fig['save_fold_name'], self.bottleneck_fig['save_fig_name'].replace('.png','_var.png')), bbox_inches='tight', dpi=80)
 
-            # the histogram of the data
-            if self.plot_histogram:
-                plt.clf()
-                fig, ax = plt.subplots(1, figsize=(15, 8), dpi=80)
-                pred_vec = np.argmax(bottleneck_vec.T, axis=0).squeeze()
-                to_plot = bottleneck_vec[np.asarray(range(0, bottleneck_vec.shape[0]), dtype=int), pred_vec]
-                # n, bins, patches = plt.hist(to_plot, np.asarray(np.linspace(0.1, 1, 10)), density=False)
-                n, bins, patches = plt.hist(to_plot, bins=10, density=False)
-                plt.xlabel('Bins')
-                plt.ylabel('Softmax(Activation)')
-                plt.title('Winner Bottleneck Activation Histogram')
-                for i in range(0, len(patches)):
-                    if i < len(patches)-1:
-                        x_pos = (patches[i].xy[0] + patches[i+1].xy[0])/2
-                    else:
-                        x_pos = patches[i].xy[0]
-                    height = n[i]
-                    plt.text(x_pos, height/2, r'$'+str(height)+'$')
-                # plt.text(0.5, np.max(n)*0.75, r'less than 0.1 :$' + str(int(len(pred_vec)-np.sum(n))) + '$')
-                plt.xlim(np.min(bins), np.max(bins))  # plt.xlim(0.1, 1.0)
-                plt.xticks(bins)
-                plt.grid(True)
-                fig.savefig(os.path.join(self.bottleneck_fig['save_fold_name'],
-                                         self.bottleneck_fig['save_fig_name'].replace('.png', '_hist.png')),
-                                         bbox_inches='tight')
+                # the histogram of the data
+                if self.plot_histogram:
+                    plt.clf()
+                    fig, ax = plt.subplots(1, figsize=(15, 8), dpi=80)
+                    pred_vec = np.argmax(bottleneck_vec.T, axis=0).squeeze()
+                    to_plot = bottleneck_vec[np.asarray(range(0, bottleneck_vec.shape[0]), dtype=int), pred_vec]
+                    # n, bins, patches = plt.hist(to_plot, np.asarray(np.linspace(0.1, 1, 10)), density=False)
+                    n, bins, patches = plt.hist(to_plot, bins=10, density=False)
+                    plt.xlabel('Bins')
+                    plt.ylabel('Softmax(Activation)')
+                    plt.title('Winner Bottleneck Activation Histogram')
+                    for i in range(0, len(patches)):
+                        if i < len(patches)-1:
+                            x_pos = (patches[i].xy[0] + patches[i+1].xy[0])/2
+                        else:
+                            x_pos = patches[i].xy[0]
+                        height = n[i]
+                        plt.text(x_pos, height/2, r'$'+str(height)+'$')
+                    # plt.text(0.5, np.max(n)*0.75, r'less than 0.1 :$' + str(int(len(pred_vec)-np.sum(n))) + '$')
+                    plt.xlim(np.min(bins), np.max(bins))  # plt.xlim(0.1, 1.0)
+                    plt.xticks(bins)
+                    plt.grid(True)
+                    fig.savefig(os.path.join(self.bottleneck_fig['save_fold_name'],
+                                             self.bottleneck_fig['save_fig_name'].replace('.png', '_hist.png')),
+                                             bbox_inches='tight')
+            except:
+                pass
 
             plt.close('all')
 
@@ -1354,7 +1449,7 @@ class Conv_AE_NestedNamespace(nn.Module):
 
             self.optimizer.zero_grad()
             reconstruction, bottleneck = self.forward(data)
-            loss = self.final_loss(data, reconstruction, bottleneck)
+            loss = self.final_loss(data, reconstruction, bottleneck, epoch)
             running_loss += loss.item()
             loss.backward()
             self.optimizer.step()
@@ -1408,7 +1503,7 @@ class Conv_AE_NestedNamespace(nn.Module):
                     labels = b['label']
                     lab_vec.append(labels)
                 reconstruction, bottleneck = self.forward(data)
-                loss = self.final_loss(data, reconstruction, bottleneck)
+                loss = self.final_loss(data, reconstruction, bottleneck, epoch)
                 running_loss += loss.item()
                 if self.cluster_any:
                     bottleneck_vec.append(bottleneck)

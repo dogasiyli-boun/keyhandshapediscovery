@@ -1,0 +1,59 @@
+# YAML
+DIR:
+  DATA: '/mnt/USB_HDD_1TB/Datasets'
+  EXPERIMENT: '/mnt/USB_HDD_1TB/GitHub/keyhandshapediscovery/experiments/FM'
+DATA:
+  IDENTIFIER: 'FASHION_MNIST'
+  INPUT_INITIAL_RESIZE: None
+  LOAD_TR_AS_TEST: True
+EXPERIMENT:
+  SAVE_MODEL_AT: 20
+  BATCH_SIZE: 32
+MODEL:
+  MODEL_CLASS: conv_ae
+  MODEL_NAME: conv_ae_simple
+  DATA_KEY: image
+  INPUT_SIZE: 28
+  INPUT_CHANNEL_SIZE: 1
+  WEIGHT_DECAY: 0.0
+  LEARNING_RATE: 0.0001
+  RECONSTRUCTION_ERROR_FUNCTION: 'MSE'
+  RECONSTRUCTION_ERROR_REDUCTION: 'mean'
+  SPARSITY_ERROR: 'kl_divergence'
+  SPARSITY_WEIGHT: 0.001
+  SPARSITY_REDUCTION: 'sum'
+  KL_DIV_RHO: 0.0001
+  KL_SIGMOID: True
+  KL_LOGSOFTMAX: True
+  KL_MEAN: False
+  KL_RHO_ONE_MODE: True
+  KL_RHO_ONE_MODE_PERC: None # '0.10/0.20'
+  BOTTLENECK_ACT_APPLY: True
+  BOTTLENECK_KMEANS_APPLY: True
+  BOTTLENECK_FIG_NAME_BASE: 'btl_XXX.png'
+  LAYERS:
+    encoder:
+      flat:       'type: Flatten'
+      l01_lin:    'type: Linear, in_features:784, out_features:256'
+      l01_act:    'type: ReLu'
+      l02_lin:    'type: Linear, in_features:256, out_features:128'
+      l02_act:    'type: ReLu'
+      l03_lin:    'type: Linear, in_features:128, out_features:64'
+      l03_act:    'type: ReLu'
+      l04_lin:    'type: Linear, in_features:64, out_features:32'
+      l04_act:    'type: ReLu'
+      l05_lin:    'type: Linear, in_features:32, out_features:16'
+      l05_act:    'type: ReLu'
+    decoder:
+      l05_lin_b:    'type: Linear, in_features:16, out_features:32'
+      l05_act_b:    'type: ReLu'
+      l04_lin_b:    'type: Linear, in_features:32, out_features:64'
+      l04_act_b:    'type: ReLu'
+      l03_lin_b:    'type: Linear, in_features:64, out_features:128'
+      l03_act_b:    'type: ReLu'
+      l02_lin_b:    'type: Linear, in_features:128, out_features:256'
+      l02_act_b:    'type: ReLu'
+      l01_lin_b:    'type: Linear, in_features:256, out_features:784'
+      l01_act_b:    'type: ReLu'
+      flat_b:       'type: Unflatten'
+
