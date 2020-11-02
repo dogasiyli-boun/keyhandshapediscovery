@@ -1,0 +1,58 @@
+# YAML
+DIR:
+  DATA: '/media/doga/SSD258/DataPath/vae_data/conv_data_te2_va3_nos11' # '/mnt/SSD_Data/DataPath'
+  EXPERIMENT: '/mnt/USB_HDD_1TB/GitHub/keyhandshapediscovery/experiments' #'/mnt/SSD_Data/vaesae_experiments'
+DATA:
+  IDENTIFIER: 'HOSPISIGN'
+  INPUT_INITIAL_RESIZE: None
+  LOAD_TR_AS_TEST: False
+EXPERIMENT:
+  ID: 463 # just to see also in the file
+  EXPLANATION: 'exp453 was FM now KHS, Layers changed'
+  SAVE_MODEL_AT: 20
+  BATCH_SIZE: 32
+MODEL:
+  MODEL_CLASS: conv_ae
+  MODEL_NAME: conv_ae_simple
+  DATA_KEY: image
+  INPUT_SIZE: 64
+  INPUT_CHANNEL_SIZE: 3
+  WEIGHT_DECAY: 0.01
+  LEARNING_RATE: 0.0001  # 1e-3 in exp464
+  RECONSTRUCTION_ERROR_FUNCTION: 'BCE' # MSE in 462
+  RECONSTRUCTION_ERROR_REDUCTION: 'mean'
+  SPARSE_PARAMS:
+    ERROR_FUNC: None #  NO_SPARSITY
+  BOTTLENECK:
+    CHECK_ACTIVATION: True
+    RUN_KMEANS: True
+    FIG_NAME_BASE: 'btl_XXX.png'
+  OUTPUTS:
+    plot_variance: False
+    plot_histogram: False
+  LAYERS:
+    encoder:
+      l01_conv:   'type: Conv2d,in_channels : 3, out_channels : 32, kernel_size : 5'
+      l01_act:    'type: ReLu'
+      l02_conv:   'type: Conv2d,in_channels :32, out_channels : 32, kernel_size : 5'
+      l02_act:    'type: ReLu'
+      l03_maxp:   'type: MaxPool2d,kernel_size:2'
+      l04_conv:   'type: Conv2d,in_channels :32, out_channels : 16, kernel_size : 5'
+      l04_act:    'type: ReLu'
+      flat:       'type: Flatten'
+      l06_linear: 'type: Linear,in_features:9216, out_features:512'
+      l06_act:    'type: ReLu'
+      l07_linear: 'type: Linear,in_features:512, out_features:256'
+    vae:
+    decoder:
+      l07_linear_b: 'type: Linear,in_features:256, out_features:512'
+      l07_act_b:    'type: ReLu'
+      l06_linear_b: 'type: Linear,in_features:512, out_features:9216'
+      l06_act_b:    'type: ReLu'
+      flat_b:       'type: Unflatten'
+      l04_deconv:   'type: ConvTranspose2d,in_channels :16, out_channels : 32, kernel_size : 5'
+      l04_act_b:    'type: ReLu'
+      l03_upsm:     'type: Upsample,scale_factor:2'
+      l02_deconv:   'type: ConvTranspose2d,in_channels :32, out_channels : 32, kernel_size : 5'
+      l02_act_b:    'type: ReLu'
+      l01_deconv:   'type: ConvTranspose2d,in_channels :32, out_channels :  3, kernel_size : 5'

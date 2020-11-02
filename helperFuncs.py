@@ -426,7 +426,7 @@ def get_NMI_Acc(non_zero_labels, non_zero_predictions, average_method='geometric
     return nmi_cur, acc_cur
 
 def get_nmi_deepCluster(featVec, labVec, n_clusters, clusterModel='KMeans', normMode='', applyPca=True):
-    predictedKlusters, _ = clusterData(featVec, n_clusters,
+    predictedKlusters, _, _ = clusterData(featVec, n_clusters,
                                     applyPca=applyPca, normMode=normMode,
                                     clusterModel=clusterModel)
     nmi_score = get_nmi_only(labVec, predictedKlusters, average_method='geometric')
@@ -553,9 +553,12 @@ def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='K
               clusterModel, ", curTol(", str(curTol), "), max_iter(", str(max_iter), "), at ",
               datetime.datetime.now().strftime("%H:%M:%S"))
         kluster_centers = None
+
+        _trained_model_ = None  # TODO implement this for models other than kmeans
         if clusterModel == 'KMeans':
                 #default vals for kmeans --> max_iter=300, 1e-4
                 kmeans_result = KMeans(n_clusters=n_clusters, n_init=5, tol=curTol, max_iter=max_iter).fit(df)
+                _trained_model_ = kmeans_result
                 predictedKlusters = kmeans_result.labels_.astype(float)
                 kluster_centers = kmeans_result.cluster_centers_.astype(float)
         elif clusterModel == 'GMM_full':
@@ -567,6 +570,8 @@ def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='K
             sc = SpectralClustering(n_clusters=n_clusters, affinity='rbf', random_state=0)
             sc_clustering = sc.fit(featVec)
             predictedKlusters = sc_clustering.labels_
+
+
         numOf_1_sample_bins, histSortedInv = analyzeClusterDistribution(predictedKlusters, n_clusters, verbose=0)
         unique_clust_cnt = len(np.unique(predictedKlusters))
         curTol = curTol * 10
@@ -596,7 +601,7 @@ def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='K
     #     print(clusterModel, ' found ', str(n1), ' uniq clusters')
     #     predictedKlusters = predictedKlusters + 1
 
-    return np.asarray(predictedKlusters, dtype=int), kluster_centers
+    return np.asarray(predictedKlusters, dtype=int), kluster_centers, _trained_model_
 
 def backtrack(D, max_x, max_y):
     #https://github.com/gulzi/DTWpy/blob/master/dtwpy.py

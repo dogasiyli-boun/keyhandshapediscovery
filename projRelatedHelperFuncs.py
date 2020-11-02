@@ -207,7 +207,7 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, numOfSign
                 t = time.time()
                 print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                 print(featsFileName, 'clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ') running.')
-                predClusters, _ = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, normMode='', applyPca=False, clusterModel=clusterModel)
+                predClusters, _, _ = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, normMode='', applyPca=False, clusterModel=clusterModel)
                 print('elapsedTime(', time.time() - t, ')')
 
                 nmi_cur, acc_cur = funcH.get_NMI_Acc(labels_all, predClusters)
@@ -291,7 +291,7 @@ def runClusteringOnFeatSet_Aug2020(ft, labels_all, lb_map, dataToUse, numOfSigns
                 t = time.time()
                 print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                 print(featsName, 'clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ') running.')
-                predClusters, kluster_centers = funcH.clusterData(featVec=ft, n_clusters=curClustCnt, normMode='', applyPca=False, clusterModel=clusterModel)
+                predClusters, kluster_centers, _ = funcH.clusterData(featVec=ft, n_clusters=curClustCnt, normMode='', applyPca=False, clusterModel=clusterModel)
                 print('elapsedTime(', funcH.getElapsedTimeFormatted(time.time() - t), ')')
                 #np.savez("/home/doga/DataFolder/bdResults/baseResults/prdclu.npz", predClusters=predClusters, kluster_centers=kluster_centers)
 
@@ -383,7 +383,7 @@ def runOPTICSClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, pca
                 t = time.time()
                 print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                 print(featsFileName, 'clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ') running.')
-                predClusters, _ = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, norMMode='', applyPca=False, clusterModel=clusterModel)
+                predClusters, _, _ = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, norMMode='', applyPca=False, clusterModel=clusterModel)
                 print('elapsedTime(', time.time() - t, ')')
                 np.savez(predictionFileNameFull, labels_all, predClusters)
             else:

@@ -11,6 +11,7 @@ import numpy as np
 from sys import exit as sys_exit
 from sklearn.metrics import accuracy_score
 import matplotlib.pyplot as plt
+from pandas import DataFrame as pd_df
 import os
 from loss_functions import Sparse_KL_DivergenceLoss as Loss_KL
 from loss_functions import Sparse_Loss_Dim as Loss_Dim
@@ -1228,7 +1229,7 @@ class Conv_AE_NestedNamespace(nn.Module):
         bottleneck = self.enc(x)
         #  the bottleneck is useful for sparsity
         #  we can also have a VAE module here
-        if self.apply_vae:
+        if "apply_vae" in vars(self) and self.apply_vae:
             bottleneck, mu = self.apply_vae_module(bottleneck)
         else:
             mu = None
@@ -1251,7 +1252,7 @@ class Conv_AE_NestedNamespace(nn.Module):
             self.cluster_any = self.cluster_any or self.clustering_dict[k]['apply']
 
         return label_exist
-    def cluster_bottleneck(self, lab_vec, bottleneck_vec):
+    def cluster_bottleneck(self, lab_vec, bottleneck_vec, sub_data_identifier):
         if not self.cluster_any:
             return
         for k in self.clustering_dict:
@@ -1259,7 +1260,19 @@ class Conv_AE_NestedNamespace(nn.Module):
                 continue
             if k == 'bottleneck_kmeans':
                 print('bottleneck_kmeans')
-                pred_vec, kc_tr = funcH.clusterData(bottleneck_vec, n_clusters=bottleneck_vec.shape[1], normMode='', applyPca=False, clusterModel='KMeans', verbose=0)
+                if str(sub_data_identifier).__contains__("tr"):
+                    pred_vec, kc_tr, _trained_model_ = funcH.clusterData(bottleneck_vec, n_clusters=bottleneck_vec.shape[1],
+                                                                         normMode='', applyPca=False, clusterModel='KMeans',
+                                                                         verbose=0)
+                    self.kmeans_params = {
+                        "kc_tr": kc_tr,
+                        "_trained_model_": _trained_model_
+                    }
+                else:
+                    df = pd_df(bottleneck_vec)
+                    pred_vec = self.kmeans_params["_trained_model_"].predict(df)
+                    kc_tr = self.kmeans_params["kc_tr"]
+
                 centroid_info_pdf = funcH.get_cluster_centroids(bottleneck_vec, pred_vec, kluster_centers=kc_tr, verbose=0)
             if k == 'bottleneck_act':
                 print('bottleneck_act')
@@ -1277,7 +1290,7 @@ class Conv_AE_NestedNamespace(nn.Module):
             pc = int(np.minimum(unique_pred_classes.size, 5))
             print('--unique last ' + str(pc) + ' classes-->', unique_pred_classes[-pc:])
             self.clustering_dict[k]['val'] = acc
-    def apply_acc(self, loss_dict, lab_vec, bottleneck_vec):
+    def apply_acc(self, loss_dict, lab_vec, bottleneck_vec, sub_data_identifier):
         if not self.cluster_any:
             return loss_dict
         lab_vec = np.asarray(torch.cat(lab_vec).to(torch.device('cpu')))
@@ -1331,7 +1344,7 @@ class Conv_AE_NestedNamespace(nn.Module):
 
             plt.close('all')
 
-        self.cluster_bottleneck(lab_vec, bottleneck_vec)
+        self.cluster_bottleneck(lab_vec, bottleneck_vec, sub_data_identifier)
         for k in self.clustering_dict:
             if not self.clustering_dict[k]['apply']:
                 continue
@@ -1409,7 +1422,7 @@ class Conv_AE_NestedNamespace(nn.Module):
 
         self.setup_bottleneck_heatmap(out_folder, epoch, sub_data_identifier='fit')
 
-        loss_dict = self.apply_acc(loss_dict, lab_vec, bottleneck_vec)
+        loss_dict = self.apply_acc(loss_dict, lab_vec, bottleneck_vec, "tr")
 
         return loss_dict
 
@@ -1457,7 +1470,7 @@ class Conv_AE_NestedNamespace(nn.Module):
 
         self.setup_bottleneck_heatmap(out_folder, epoch, sub_data_identifier=sub_data_identifier)
 
-        loss_dict = self.apply_acc(loss_dict, lab_vec, bottleneck_vec)
+        loss_dict = self.apply_acc(loss_dict, lab_vec, bottleneck_vec, sub_data_identifier)
 
         return loss_dict
 
