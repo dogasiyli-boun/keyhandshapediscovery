@@ -254,7 +254,7 @@ def getVariableByComputerName(variableName):
         if curCompName == 'doga-MSISSD':
             base_dir = '/media/doga/SSD258/DataPath'  # for bogazici kasa
         elif curCompName == 'WsUbuntu05' or curCompName == 'wsubuntu':
-            base_dir = '/media/wsubuntu/SSD_Data/DataPath'  # for WS Doga DHO
+            base_dir = '/mnt/SSD_Data/DataPath'  # for WS Doga DHO
         elif curCompName == 'doga-msi-ubu':
             base_dir = '/home/doga/DataFolder'  # for laptop
         else:
@@ -274,7 +274,7 @@ def getVariableByComputerName(variableName):
         if curCompName == 'doga-MSISSD':
             data_dir = '/media/doga/SSD258/DataPath/bdData'  # for bogazici kasa
         elif curCompName == 'WsUbuntu05' or curCompName == 'wsubuntu':
-            data_dir = '/media/wsubuntu/SSD_Data/DataPath/bdData'  # for WS Doga DHO
+            data_dir = '/mnt/SSD_Data/DataPath/bdData'  # for WS Doga DHO
         elif curCompName == 'doga-msi-ubu':
             data_dir = '/home/doga/DataFolder/bdData'  # for laptop
         else:
@@ -284,7 +284,7 @@ def getVariableByComputerName(variableName):
         if curCompName == 'doga-MSISSD':
             results_dir = '/media/doga/SSD258/DataPath/bdResults'  # for bogazici kasa
         elif curCompName == 'WsUbuntu05' or curCompName == 'wsubuntu':
-            results_dir = '/media/wsubuntu/SSD_Data/DataPath/bdResults'  # for WS Doga DHO
+            results_dir = '/mnt/SSD_Data/DataPath/bdResults'  # for WS Doga DHO
         elif curCompName == 'doga-msi-ubu':
             results_dir = '/home/doga/DataFolder/bdResults'  # for laptop
         else:

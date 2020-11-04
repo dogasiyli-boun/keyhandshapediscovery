@@ -4,6 +4,7 @@ from sklearn.preprocessing import LabelEncoder
 import pandas as pd
 from sklearn.metrics import accuracy_score
 import os
+import importlib as impL
 
 from torch.nn import Linear
 from torch.nn import ReLU
@@ -392,3 +393,18 @@ def run_sup_learner(X=None, hidStateID=7, epochCnt=100,  applyPca=True):
 X = ss.get_data_from_ConvVAE_Multitask_model()
 accvectr, accvecva, accvecte, preds_best, labels_best = ss.run_sup_learner(X=X)
 """
+
+def run_compare_list(experiments_folder,
+                     data_log_keys=['tr_te', 'te'],
+                     loss_key_list=['bottleneck_act', 'bottleneck_kmeans', 'sparsity', 'reconstruction'],
+                     exp_base_name='exp_conv_ae_simple_is28_cf',
+                     ae_f_name_base='ae_ft_conv_ae_simple_is28.npy'):
+    impL.reload(vu)
+    cf_int_arr = np.array([454, 455, 458, 459, 460, 471, 472])
+    title_add_front_str = 'kl-l2 best acc - '
+    max_act_ep = None
+    plot_average_win_size = 5
+    save_to_fold = os.path.join(experiments_folder, 'kl_l2')
+    vu.plot_cf_compare_list(cf_int_arr, data_log_keys, loss_key_list, title_add_front_str,
+                            experiments_folder, exp_base_name, ae_f_name_base, max_act_ep=max_act_ep,
+                            save_to_fold=save_to_fold, plot_average_win_size=plot_average_win_size)

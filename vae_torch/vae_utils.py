@@ -4,6 +4,10 @@ import numpy as np
 import os
 from PIL import Image
 
+def movingaverage(vec, window_size):
+    vec_win = np.ones(int(window_size))/float(window_size)
+    return np.convolve(vec, vec_win, 'same')
+
 def plot_vars(X, contain_str, ylabel,
               save_file_name=None,
               title_str="", plot_label_add_str="",
@@ -32,7 +36,6 @@ def plot_vars(X, contain_str, ylabel,
     ax.grid()
     if save_file_name is not None:
         plt.savefig(save_file_name)
-
 
 def plot_compare(X_dict, title_str, contain_str, ylabel, figsize=(10, 3), dpi=80, max_epoch=None, legend_loc=None):
     fig, ax = plt.subplots(1, figsize=figsize, dpi=dpi)
@@ -114,9 +117,13 @@ def plot_cf_compare(cf_int_arr, data_log_keys=['tr_va', 'va', 'te'],
                     exp_base_name='output_sae_k256_is64_cf', ae_f_name_base='ae_ft_sae_k256_is64.npy',
                     save_to_fold=None, save_as_png_name=None,
                     add_min_to_label=False, add_max_to_label=False,
-                    z_fill_int=2):
+                    z_fill_int=2,
+                    plot_average_win_size=None):
     fig, ax = plt.subplots(1, figsize=(10, 5), dpi=300)
-    ax.set_title(title_add_front_str + loss_key)
+    in_fig_title = title_add_front_str + loss_key
+    if plot_average_win_size is not None:
+        in_fig_title = title_add_front_str + "plotWin("+str(int(plot_average_win_size))+")-" + loss_key
+    ax.set_title(in_fig_title)
 
     if mul_before_plot is None or np.shape(cf_int_arr) != np.shape(mul_before_plot):
         mul_before_plot = np.ones(cf_int_arr.shape, dtype=float)
@@ -168,7 +175,12 @@ def plot_cf_compare(cf_int_arr, data_log_keys=['tr_va', 'va', 'te'],
                 print("color_id:", color_id, ", color_float:", color_float, ", rgba:", rgba)
                 color_id = (color_id + 1) % tab_id
 
-                ax.plot(plot_x, mul_plt*np.asarray(los_vec_cur[:disp_epoch]), lw=2, label=label_str, color=rgba)
+                y_vec = mul_plt*np.asarray(los_vec_cur[:disp_epoch])
+                if plot_average_win_size is not None:
+                    y_vec = movingaverage(y_vec, plot_average_win_size)
+                    plot_x = plot_x[plot_average_win_size:-plot_average_win_size]
+                    y_vec = y_vec[plot_average_win_size:-plot_average_win_size]
+                ax.plot(plot_x, y_vec, lw=2, label=label_str, color=rgba)
 
     ax.legend(loc=legend_loc)
     if save_to_fold is not None and os.path.exists(save_to_fold):
@@ -179,7 +191,8 @@ def plot_cf_compare(cf_int_arr, data_log_keys=['tr_va', 'va', 'te'],
 
 def plot_cf_compare_list(cf_int_arr, data_log_keys, loss_key_list, title_add_front_str,
                          experiments_folder, exp_base_name, ae_f_name_base,
-                         save_to_fold=None, max_act_ep=None):
+                         save_to_fold=None, max_act_ep=None,
+                         plot_average_win_size=None):
     if save_to_fold is not None and not os.path.exists(save_to_fold):
         os.makedirs(save_to_fold)
     for lk in loss_key_list:
@@ -190,12 +203,12 @@ def plot_cf_compare_list(cf_int_arr, data_log_keys, loss_key_list, title_add_fro
             plot_cf_compare(cf_int_arr=cf_int_arr,
                             data_log_keys=[dlk],
                             loss_key=lk,
-                            title_add_front_str=title_add_front_str + dlk + '-',
+                            title_add_front_str=title_add_front_str + str(dlk) + "-",
                             max_act_ep=max_act_ep, legend_loc=legend_loc,
                             experiments_folder=experiments_folder,
                             exp_base_name=exp_base_name, ae_f_name_base=ae_f_name_base,
                             add_min_to_label=add_min_to_label, add_max_to_label=add_max_to_label,
-                            save_to_fold=save_to_fold)
+                            save_to_fold=save_to_fold, plot_average_win_size=plot_average_win_size)
 
 def get_hid_state_vec(hidStateID):
     hid_state_cnt_vec = [2048, 1024, 1024, 512, 512, 256, 256]

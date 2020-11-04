@@ -1,7 +1,7 @@
 # YAML
 DIR:
-  DATA: '/media/wsubuntu/SSD_Data/DataPath'
-  EXPERIMENT: '/media/wsubuntu/SSD_Data/vaesae_experiments/CIFAR'
+  DATA: '/mnt/SSD_Data/DataPath'
+  EXPERIMENT: '/mnt/SSD_Data/vaesae_experiments/CIFAR'
 DATA:
   IDENTIFIER: 'CIFAR10'
   INPUT_INITIAL_RESIZE: None
