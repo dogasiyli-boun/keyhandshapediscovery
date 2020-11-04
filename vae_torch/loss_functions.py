@@ -105,31 +105,39 @@ class Sparse_KL_DivergenceLoss(Sparsity_Loss_Base):
         return loss_ret_1
 
 class Sparse_Loss_Dim(Sparsity_Loss_Base):
-    def __init__(self, dim, reduction='batchmean'):
+    def __init__(self, dim, reduction='batchmean', norm_axis=1, apply_tanh=False):
         super(Sparse_Loss_Dim, self).__init__()
         self.dim = dim
         self.reduction = reduction
+        self.norm_axis = norm_axis
+        self.apply_tanh = apply_tanh
 
     # https: // discuss.pytorch.org / t / how - torch - norm - works - and -how - it - calculates - l1 - and -l2 - loss / 58387
 
     @staticmethod
-    def l2_norm(bt, reduction):
-        loss_ret_1 = torch.sum(((bt * bt)) ** 2, 0).sqrt()
+    def l2_norm(bt, reduction, norm_axis, apply_tanh):
+        if apply_tanh:
+            bt = torch.tanh(bt)
+        #  loss_ret_1 = torch.norm(bt*bt, 1).sqrt()
+        #  loss_ret_2 = torch.norm(bt, dim=1, keepdim=True).sqrt()  # per sample
+        #  loss_ret_3 = torch.norm(bt, dim=0, keepdim=True).sqrt()  # per node
+        loss_ret = torch.norm(bt, dim=norm_axis, keepdim=True).sqrt()  # per node
+        # loss_ret_1 = torch.sum(((bt * bt)) ** 2, 0).sqrt()
         # loss_ret_2 = torch.norm(((bt.transpose() * bt.transpose())), 2, -1)
         # loss_ret_3 = torch.mean(torch.pow(bt, 2.0)).sqrt()
-        if reduction == 'batchmean':
+        if reduction.__contains__('mean'):
             #bunu kullanınca hepsi birbirine eşitleniyo
-            loss_ret_1 = torch.mean(loss_ret_1)
+            loss_ret_1 = torch.mean(loss_ret)
         else:
             #bunu kullanınca tek bir node bütün sample'larda active oluyor
-            loss_ret_1 = torch.sum(loss_ret_1)
+            loss_ret_1 = torch.sum(loss_ret)
         return loss_ret_1
 
     @staticmethod
     def l1_norm(bt, reduction):
         loss_ret_1 = torch.sum(torch.abs(bt), 0)
         # loss_ret_2 = torch.norm(((bt * bt)), 1, -1)
-        if reduction == 'batchmean':
+        if reduction.__contains__('mean'):
             loss_ret_1 = torch.mean(loss_ret_1)
         else:
             loss_ret_1 = torch.sum(loss_ret_1)
@@ -139,7 +147,7 @@ class Sparse_Loss_Dim(Sparsity_Loss_Base):
         if self.dim == 1:
             return self.l1_norm(bt, self.reduction)
         if self.dim == 2:
-            return self.l2_norm(bt, self.reduction)
+            return self.l2_norm(bt, self.reduction, self.norm_axis, self.apply_tanh)
         os.error("unknown dimension")
 
 class Sparse_Loss_CrossEntropy(Sparsity_Loss_Base):

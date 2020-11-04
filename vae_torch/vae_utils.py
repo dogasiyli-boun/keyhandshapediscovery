@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from matplotlib.cm import get_cmap
 import numpy as np
 import os
 from PIL import Image
@@ -104,13 +105,18 @@ def plot_cf(cf_int, data_log_keys = ['tr_tr', 'tr_va', 'va', 'te'], k_loss_disp_
     except Exception as e:
         print(e)
 
-def plot_cf_compare(cf_int_arr, data_log_keys=['tr_va', 'va', 'te'], mul_before_plot=None, loss_key='reconstruction', max_act_ep=None,
+def plot_cf_compare(cf_int_arr, data_log_keys=['tr_va', 'va', 'te'],
+                    mul_before_plot=None,
+                    loss_key='reconstruction', title_add_front_str='',
+                    max_act_ep=None,
                     legend_loc='upper right',
                     experiments_folder='/mnt/USB_HDD_1TB/GitHub/keyhandshapediscovery/',
                     exp_base_name='output_sae_k256_is64_cf', ae_f_name_base='ae_ft_sae_k256_is64.npy',
+                    save_to_fold=None, save_as_png_name=None,
+                    add_min_to_label=False, add_max_to_label=False,
                     z_fill_int=2):
     fig, ax = plt.subplots(1, figsize=(10, 5), dpi=300)
-    ax.set_title(loss_key)
+    ax.set_title(title_add_front_str + loss_key)
 
     if mul_before_plot is None or np.shape(cf_int_arr) != np.shape(mul_before_plot):
         mul_before_plot = np.ones(cf_int_arr.shape, dtype=float)
@@ -118,15 +124,18 @@ def plot_cf_compare(cf_int_arr, data_log_keys=['tr_va', 'va', 'te'], mul_before_
         mul_before_plot = np.asarray(mul_before_plot, dtype=float)
     cf_int_arr = np.asarray(cf_int_arr, dtype=int)
 
-
+    tab_id = 10
+    cmap = get_cmap('tab'+str(tab_id))
+    color_id = 0
     for i in range(0, len(cf_int_arr)):
         cf_int = cf_int_arr[i]
         mul_plt = mul_before_plot[i]
         ae_fold_name = os.path.join(experiments_folder, exp_base_name + str(cf_int).zfill(z_fill_int))
         ae_f_name = os.path.join(ae_fold_name, ae_f_name_base)
+        if not os.path.exists(ae_f_name):
+            continue
         vfz = np.load(ae_f_name, allow_pickle=True)
         loss_log_dict = {}
-        n = 0
         for k in data_log_keys:
             loss_log_dict[k] = vfz.item().get(k)
             if loss_log_dict[k] is None:
@@ -150,8 +159,43 @@ def plot_cf_compare(cf_int_arr, data_log_keys=['tr_va', 'va', 'te'], mul_before_
                 plot_x = np.asarray(list(range(0, disp_epoch)))
                 label_str = str(cf_int) + '_' + k_data + '_' + loss_key + ('*{}'.format(mul_plt) if mul_plt != 1 else ' ')
                 print(label_str, los_vec_cur[-3:], "\nmax({:4.2f}),min({:4.2f})".format(np.max(los_vec_cur), np.min(los_vec_cur)))
-                ax.plot(plot_x, mul_plt*np.asarray(los_vec_cur[:disp_epoch]), lw=2, label=label_str, color=np.random.rand(3))
+                if add_min_to_label:
+                    label_str += "_min({:4.2f})".format(np.min(los_vec_cur[-int(vec_len/2):]))
+                if add_max_to_label:
+                    label_str += "_max({:4.2f}/{:4.2f})".format(np.max(los_vec_cur[:int(vec_len/2)]), np.max(los_vec_cur[-int(vec_len/2):]))
+                color_float = (color_id+0.5)/tab_id
+                rgba = cmap(color_float)
+                print("color_id:", color_id, ", color_float:", color_float, ", rgba:", rgba)
+                color_id = (color_id + 1) % tab_id
+
+                ax.plot(plot_x, mul_plt*np.asarray(los_vec_cur[:disp_epoch]), lw=2, label=label_str, color=rgba)
+
     ax.legend(loc=legend_loc)
+    if save_to_fold is not None and os.path.exists(save_to_fold):
+        if save_as_png_name is None:
+            save_as_png_name = title_add_front_str + loss_key + '.png'
+        png_save_name = os.path.join(save_to_fold, save_as_png_name)
+        fig.savefig(png_save_name, bbox_inches='tight', dpi=300)
+
+def plot_cf_compare_list(cf_int_arr, data_log_keys, loss_key_list, title_add_front_str,
+                         experiments_folder, exp_base_name, ae_f_name_base,
+                         save_to_fold=None, max_act_ep=None):
+    if save_to_fold is not None and not os.path.exists(save_to_fold):
+        os.makedirs(save_to_fold)
+    for lk in loss_key_list:
+        for dlk in data_log_keys:
+            add_min_to_label = not lk.__contains__('bottleneck')
+            add_max_to_label = lk.__contains__('bottleneck')
+            legend_loc = 'lower right' if add_max_to_label else 'upper right'
+            plot_cf_compare(cf_int_arr=cf_int_arr,
+                            data_log_keys=[dlk],
+                            loss_key=lk,
+                            title_add_front_str=title_add_front_str + dlk + '-',
+                            max_act_ep=max_act_ep, legend_loc=legend_loc,
+                            experiments_folder=experiments_folder,
+                            exp_base_name=exp_base_name, ae_f_name_base=ae_f_name_base,
+                            add_min_to_label=add_min_to_label, add_max_to_label=add_max_to_label,
+                            save_to_fold=save_to_fold)
 
 def get_hid_state_vec(hidStateID):
     hid_state_cnt_vec = [2048, 1024, 1024, 512, 512, 256, 256]

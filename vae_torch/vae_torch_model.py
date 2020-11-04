@@ -530,8 +530,10 @@ def get_torch_layer_from_dict(definiton_dict):
         kernel_size = definiton_dict["kernel_size"]
         stride = funcH.get_attribute_from_dict(definiton_dict, "stride", default_type=int, default_val=1)
         padding = funcH.get_attribute_from_dict(definiton_dict, "padding", default_type=int, default_val=0)
-        return nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
+        ret_module = nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
                          kernel_size=kernel_size, stride=stride, padding=padding)
+        nn.init.kaiming_uniform_(ret_module.weight.data)
+        return ret_module
 
     if definiton_dict["type"] == 'ConvTranspose2d':
         #{"in_channels":in_channels,"out_channels":out_channels,"kernel_size":kernel_size,"stride":stride,"padding":padding}
@@ -629,7 +631,7 @@ def get_sparsity_params_from_nested_Namespace(model_NestedNamespace):
         if SPARSE_PARAMS["func"] is None:
             return None
         if "KL_DIV_PARAMS" in vars(model_NestedNamespace.SPARSE_PARAMS):
-            KL_DIV_PARAMS = {
+            SPARSE_PARAMS['KL_DIV_PARAMS'] = {
                 "rho": funcH.get_attribute_from_nested_namespace(model_NestedNamespace.SPARSE_PARAMS.KL_DIV_PARAMS, 'RHO_VALUE',
                                                                  default_type=float, default_val=0.05),  # self.kl_rho
                 "one_mode": funcH.get_attribute_from_nested_namespace(model_NestedNamespace.SPARSE_PARAMS.KL_DIV_PARAMS, 'RHO_ONE_MODE',
@@ -649,7 +651,31 @@ def get_sparsity_params_from_nested_Namespace(model_NestedNamespace):
                                                                         default_type=bool, default_val=False),
                 # self.kl_apply_mean
             }
-            SPARSE_PARAMS['KL_DIV_PARAMS'] = KL_DIV_PARAMS
+        elif str(SPARSE_PARAMS["func"]).__contains__("kl"):
+            SPARSE_PARAMS['KL_DIV_PARAMS'] = {
+                "rho": 0.05,  # self.kl_rho
+                "one_mode": False, # self.kl_rho_one_mode
+                "one_mode_perc":None, # self.kl_rho_one_mode_perc
+                "apply_sigmoid": False, # self.kl_apply_sigmoid
+                "apply_log_soft_max": True, # self.kl_apply_log_soft_max
+                "apply_mean": False # self.kl_apply_mean
+            }
+            print("KL_DIVERGENCE sparsity values set to default")
+            print(SPARSE_PARAMS['KL_DIV_PARAMS'])
+        if "L2_PARAMS" in vars(model_NestedNamespace.SPARSE_PARAMS):
+            SPARSE_PARAMS['L2_PARAMS'] = {
+                "norm_axis": funcH.get_attribute_from_nested_namespace(model_NestedNamespace.SPARSE_PARAMS.L2_PARAMS,
+                                                                 'NORM_AXIS', default_type=int, default_val=1),
+                "apply_tanh": funcH.get_attribute_from_nested_namespace(model_NestedNamespace.SPARSE_PARAMS.L2_PARAMS,
+                                                                        'APPLY_TANH', default_type=bool, default_val=True),
+            }
+        elif str(SPARSE_PARAMS["func"]).__contains__("l2"):
+            SPARSE_PARAMS['L2_PARAMS'] = {
+                "norm_axis": 1,
+                "apply_tanh": True,
+            }
+            print("L2 sparsity values set to default")
+            print(SPARSE_PARAMS['L2_PARAMS'])
     else:
         SPARSE_PARAMS = None
     return SPARSE_PARAMS
@@ -1150,10 +1176,12 @@ class Conv_AE_NestedNamespace(nn.Module):
                                           apply_mean=self.SPARSE_PARAMS["KL_DIV_PARAMS"]["apply_mean"],
                                           rho_one_mode=self.SPARSE_PARAMS["KL_DIV_PARAMS"]["one_mode"],
                                           rho_one_mode_perc=self.SPARSE_PARAMS["KL_DIV_PARAMS"]["one_mode_perc"])
-            elif self.SPARSE_PARAMS["func"] == 'l1_norm':
+            elif str(self.SPARSE_PARAMS["func"]).__contains__('l1'): # 'l1_norm':
                 bottleneck_func = Loss_Dim(dim=1, reduction=self.SPARSE_PARAMS["reduction"])
-            elif self.SPARSE_PARAMS["func"] == 'l2_norm':
-                bottleneck_func = Loss_Dim(dim=2, reduction=self.SPARSE_PARAMS["reduction"])
+            elif str(self.SPARSE_PARAMS["func"]).__contains__('l2'): #'l2', 'l2_norm':
+                bottleneck_func = Loss_Dim(dim=2, reduction=self.SPARSE_PARAMS["reduction"],
+                                           norm_axis=self.SPARSE_PARAMS['L2_PARAMS']["norm_axis"],
+                                           apply_tanh=self.SPARSE_PARAMS['L2_PARAMS']["apply_tanh"])
             elif self.SPARSE_PARAMS["func"] == 'cross_entropy':
                 bottleneck_func = Loss_CE(reduction=self.SPARSE_PARAMS["reduction"], apply_sigmoid_activation=False)
             elif self.SPARSE_PARAMS["func"] == 'cross_entropy_with_sigmoid':
@@ -1176,7 +1204,7 @@ class Conv_AE_NestedNamespace(nn.Module):
         So after loading the model this function needs to be called
         :return:
         """
-        if self.SPARSE_PARAMS is not None:
+        if self.SPARSE_PARAMS is not None and "KL_DIV_PARAMS" in self.SPARSE_PARAMS:
             try:
                 self.SPARSE_PARAMS["KL_DIV_PARAMS"]["rho_one_mode"]
             except:
@@ -1372,7 +1400,7 @@ class Conv_AE_NestedNamespace(nn.Module):
         self.loss['reconstruction']['val'] += loss_reconstruction.item()
 
         loss_sparsity = 0.0
-        apply_sparsity = (self.SPARSE_PARAMS is not None) and ((epoch is None) or (epoch is not None and epoch > self.SPARSE_PARAMS["apply_after_epoch"]))
+        apply_sparsity = (self.SPARSE_PARAMS is not None) and ((epoch is None) or (epoch is not None and epoch >= self.SPARSE_PARAMS["apply_after_epoch"]))
         if apply_sparsity:
             if self.SPARSE_PARAMS["weight"] is not None and self.SPARSE_PARAMS["weight"] > 0.0:
                 loss_sparsity = self.SPARSE_PARAMS["weight"]*self.loss['sparsity']['func'](bottleneck)

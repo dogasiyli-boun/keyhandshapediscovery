@@ -1,0 +1,60 @@
+# YAML
+DIR:
+  DATA: '/mnt/SSD_Data/DataPath' # '/mnt/USB_HDD_1TB/Datasets'
+  EXPERIMENT: '/mnt/SSD_Data/vaesae_experiments/FM' #'/mnt/USB_HDD_1TB/GitHub/keyhandshapediscovery/experiments/FM'
+DATA:
+  IDENTIFIER: 'FASHION_MNIST'
+  INPUT_INITIAL_RESIZE: None
+  LOAD_TR_AS_TEST: True
+EXPERIMENT:
+  ID: 455 # just to see also in the file
+  EXPLANATION: 'Exp454 kl -> l2_norm with NORM_AXIS and apply tanh'
+  SAVE_MODEL_AT: 20
+  BATCH_SIZE: 32
+MODEL:
+  MODEL_CLASS: conv_ae
+  MODEL_NAME: conv_ae_simple
+  DATA_KEY: image
+  INPUT_SIZE: 28
+  INPUT_CHANNEL_SIZE: 1
+  WEIGHT_DECAY: 0.0
+  LEARNING_RATE: 0.001
+  RECONSTRUCTION_ERROR_FUNCTION: 'BCE'
+  RECONSTRUCTION_ERROR_REDUCTION: 'mean'
+  SPARSE_PARAMS:
+    ERROR_FUNC: 'l2_norm'
+    WEIGHT: 0.001
+    REDUCTION: 'sum'
+    APPLY_AFTER_EPOCH: 0
+    L2_PARAMS:
+      NORM_AXIS: 1
+      APPLY_TANH: True
+  BOTTLENECK:
+    CHECK_ACTIVATION: True # bottleneck_act_apply
+    RUN_KMEANS: True # bottleneck_kmeans_apply
+    FIG_NAME_BASE: 'btl_XXX.png'
+  OUTPUTS:
+    plot_variance: False
+    plot_histogram: False
+  LAYERS:
+    encoder:
+      flat:       'type: Flatten'
+      l01_lin:    'type: Linear, in_features:784, out_features:256'
+      l01_act:    'type: ReLu'
+      l02_lin:    'type: Linear, in_features:256, out_features:128'
+      l02_act:    'type: ReLu'
+      l03_lin:    'type: Linear, in_features:128, out_features:64'
+      l03_act:    'type: ReLu'
+      l04_lin:    'type: Linear, in_features:64, out_features:64'
+      l04_act:    'type: ReLu'
+    decoder:
+      l04_lin_b:    'type: Linear, in_features:64, out_features:64'
+      l04_act_b:    'type: ReLu'
+      l03_lin_b:    'type: Linear, in_features:64, out_features:128'
+      l03_act_b:    'type: ReLu'
+      l02_lin_b:    'type: Linear, in_features:128, out_features:256'
+      l02_act_b:    'type: ReLu'
+      l01_lin_b:    'type: Linear, in_features:256, out_features:784'
+      l01_act_b:    'type: Sigmoid'
+      flat_b:       'type: Unflatten'
+
