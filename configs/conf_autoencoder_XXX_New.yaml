@@ -1,0 +1,65 @@
+# YAML
+DIR:
+  DATA: '/mnt/SSD_Data/DataPath' # '/mnt/USB_HDD_1TB/Datasets'
+  EXPERIMENT: '/mnt/SSD_Data/vaesae_experiments/FM' #'/mnt/USB_HDD_1TB/GitHub/keyhandshapediscovery/experiments/FM'
+DATA:
+  IDENTIFIER: 'FASHION_MNIST'
+  INPUT_INITIAL_RESIZE: None
+  LOAD_TR_AS_TEST: True #to load the training data with 
+EXPERIMENT:
+  ID: 101 # just to see also in the file
+  EXPLANATION: 'Exp100 changes are as follows:'
+  SAVE_MODEL_AT: 20 # the model will be uploaded at every <this> epoch
+  BATCH_SIZE: 32 # batch size used for training
+
+NETWORKS:
+  NET1: #  MODEL_NAME-conv_ae_simple - wasnt used so just deleted
+    Key: 'Net-img-1' # identifies the network
+    Class: 'linear_ae'  # does nothing MODEL_CLASS=conv_ae
+    Data:
+      key: 'image'  # MODEL.DATA_KEY= image
+      size_in: 28  #  MODEL.INPUT_SIZE=28
+      size_channel: 1  # MODEL.INPUT_CHANNEL_SIZE=1
+    Model:
+      encoder:
+        flat:       'type: Flatten'
+        l01_lin:    'type: Linear, in_features:784, out_features:256'
+        l01_act:    'type: ReLu'
+        l02_lin:    'type: Linear, in_features:256, out_features:128'
+        l02_act:    'type: ReLu'
+        l03_lin:    'type: Linear, in_features:128, out_features:64'
+        l03_act:    'type: ReLu'
+        l04_lin:    'type: Linear, in_features:64, out_features:64'
+        l04_act:    'type: ReLu'
+      decoder:
+        l04_lin_b:    'type: Linear, in_features:64, out_features:64'
+        l04_act_b:    'type: ReLu'
+        l03_lin_b:    'type: Linear, in_features:64, out_features:128'
+        l03_act_b:    'type: ReLu'
+        l02_lin_b:    'type: Linear, in_features:128, out_features:256'
+        l02_act_b:    'type: ReLu'
+        l01_lin_b:    'type: Linear, in_features:256, out_features:784'
+        l01_act_b:    'type: Sigmoid'
+        flat_b:       'type: Unflatten'
+      reconstruction:
+        err_func: 'BCE'  # MODEL.RECONSTRUCTION_ERROR_FUNCTION='BCE'
+        err_reduction: 'mean'  # MODEL.RECONSTRUCTION_ERROR_REDUCTION='mean'
+      training:
+        weight_decay: 0.001  #  MODEL.WEIGHT_DECAY=0.0
+        learning_rate: 0.001 #  LEARNING_RATE: 0.001
+      bottle_neck_sparsity: # MODEL.SPARSE_PARAMS:
+        err_func: 'l2_norm' # ERROR_FUNC='l2_norm'
+        err_weight: 0.0001  # MODEL.WEIGHT: 0.0001
+    REDUCTION: 'mean'
+    APPLY_AFTER_EPOCH: 0
+    L2_PARAMS:
+      NORM_AXIS: 1
+      APPLY_TANH: False
+  BOTTLENECK:
+    CHECK_ACTIVATION: True # bottleneck_act_apply
+    RUN_KMEANS: True # bottleneck_kmeans_apply
+    FIG_NAME_BASE: 'btl_XXX.png'
+  OUTPUTS:
+    plot_variance: False
+    plot_histogram: False
+
