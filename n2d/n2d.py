@@ -6,8 +6,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-plt.style.use(['seaborn-white', 'seaborn-paper'])
-sns.set_context("paper", font_scale=1.3)
 import pandas as pd
 import numpy as np
 import sys
@@ -347,6 +345,9 @@ def n_run_autoencode(x, args):
     return hl
 
 def init():
+    plt.style.use(['seaborn-white', 'seaborn-paper'])
+    sns.set_context("paper", font_scale=1.3)
+
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # str(sys.argv[2])
     os.environ['PYTHONHASHSEED'] = '0'
@@ -373,10 +374,12 @@ def init():
     np.set_printoptions(threshold=sys.maxsize)
     matplotlib.use('agg')
 
-def get_args():
+def get_args(argv):
     parser = argparse.ArgumentParser(
         description='(Not Too) Deep',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--mode", default='client')
+    parser.add_argument("--port", default=52162)
     parser.add_argument('--dataset', default='mnist', )
     parser.add_argument('--gpu', default=0, )
     parser.add_argument('--n_clusters', default=10, type=int)
@@ -392,13 +395,18 @@ def get_args():
     parser.add_argument('--eval_all', default=False, action='store_true')
     parser.add_argument('--manifold_learner', default='UMAP', type=str)
     parser.add_argument('--visualize', default=False, type=bool)
-    args = parser.parse_args()
+    args = parser.parse_args(args=argv)
+    if isinstance(args, tuple):
+        try:
+            args = args[0]
+        except:
+            pass
     print(args)
     return args
 
 def main(argv):
     init()
-    args = get_args()
+    args = get_args(argv)
     x, y, label_names = n_load_data(args)
     hl = n_run_autoencode(x, args)
 
