@@ -19,40 +19,13 @@ from keras.models import Model
 from sklearn import metrics
 from sklearn import mixture
 from sklearn.cluster import KMeans, SpectralClustering
-from sklearn.manifold import Isomap
+from sklearn.manifold import TSNE, Isomap
 from sklearn.manifold import LocallyLinearEmbedding
-from sklearn.utils.linear_assignment_ import linear_assignment
+from scipy.optimize import linear_sum_assignment as linear_assignment
 from time import time
-import helperFuncs_n2d as funcH
+import helperFuncs as funcH
 
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # str(sys.argv[2])
-os.environ['PYTHONHASHSEED'] = '0'
-os.environ['TF_CUDNN_USE_AUTOTUNE'] = '0'
-
-rn.seed(0)
-tf.set_random_seed(0)
-np.random.seed(0)
-
-if len(K.tensorflow_backend._get_available_gpus()) > 0:
-    print("Using GPU")
-    session_conf = tf.ConfigProto(intra_op_parallelism_threads=1,
-                                  inter_op_parallelism_threads=1,
-                                  )
-    sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
-    K.set_session(sess)
-
-try:
-    from MulticoreTSNE import MulticoreTSNE as TSNE
-except BaseException:
-    print("Missing MulticoreTSNE package.. Only important if evaluating other manifold learners.")
-
-np.set_printoptions(threshold=sys.maxsize)
-
-matplotlib.use('agg')
-
-
-def eval_other_methods(x, y, names=None):
+def eval_other_methods(x, y, args, names=None):
     gmm = mixture.GaussianMixture(
         covariance_type='full',
         n_components=args.n_clusters,
@@ -143,9 +116,9 @@ def eval_other_methods(x, y, names=None):
     print('=' * 80)
 
     if args.visualize:
-        plot(hle, y, 'UMAP', names)
+        n2d_plot(hle, y, 'UMAP', args.save_dir, args.dataset, args.n_clusters, names)
         y_pred_viz, _, _ = best_cluster_fit(y, y_pred)
-        plot(hle, y_pred_viz, 'UMAP-predicted', names)
+        n2d_plot(hle, y_pred_viz, 'UMAP-predicted', args.save_dir, args.dataset, args.n_clusters, names)
 
         return
 
@@ -251,14 +224,14 @@ def n_eval_result(definition_string, pngnameadd, args, hle, y, y_pred, label_nam
 
     if args.visualize:
         try:
-            plot(hle, y, 'n2d'+pngnameadd, label_names)
+            n2d_plot(hle, y, 'n2d'+pngnameadd, args.save_dir, args.dataset, args.n_clusters, label_names)
             y_pred_viz, _, _ = best_cluster_fit(y, y_pred)
-            plot(hle, y_pred_viz, 'n2d-predicted'+pngnameadd, label_names)
+            n2d_plot(hle, y_pred_viz, 'n2d-predicted'+pngnameadd, args.save_dir, args.dataset, args.n_clusters, label_names)
         except:
             print("exception")
     return y_pred, acc, nmi, ari
 
-def cluster_manifold_in_embedding(hl, y, label_names=None):
+def cluster_manifold_in_embedding(hl, y, args, label_names=None):
     print('=' * 80)
     y_pred_hl = n_run_cluster(args, hl)
     y_pred_hl, acc_hl, nmi_hl, ari_hl = n_eval_result("if no manifold stuff", '-nm', args, hl, y, y_pred_hl, label_names)
@@ -291,26 +264,26 @@ def cluster_acc(y_true, y_pred):
     _, ind, w = best_cluster_fit(y_true, y_pred)
     return sum([w[i, j] for i, j in ind]) * 1.0 / y_pred.size
 
-def plot(x, y, plot_id, names=None):
+def n2d_plot(x, y, plot_id, save_dir, dataset_name, n_clusters, label_names=None):
     viz_df = pd.DataFrame(data=x[:5000])
     viz_df['Label'] = y[:5000]
-    if names is not None:
-        viz_df['Label'] = viz_df['Label'].map(names)
+    if label_names is not None:
+        viz_df['Label'] = viz_df['Label'].map(label_names)
 
-    viz_df.to_csv(args.save_dir + '/' + args.dataset + '.csv')
+    viz_df.to_csv(save_dir + '/' + dataset_name + '.csv')
     plt.subplots(figsize=(8, 5))
     sns.scatterplot(x=0, y=1, hue='Label', legend='full', hue_order=sorted(viz_df['Label']),
-                    palette=sns.color_palette("hls", n_colors=args.n_clusters),
+                    palette=sns.color_palette("hls", n_colors=n_clusters),
                     alpha=.5,
                     data=viz_df)
     l = plt.legend(bbox_to_anchor=(-.1, 1.00, 1.1, .5), loc="lower left", markerfirst=True,
-                   mode="expand", borderaxespad=0, ncol=args.n_clusters + 1, handletextpad=0.01, )
+                   mode="expand", borderaxespad=0, ncol=n_clusters + 1, handletextpad=0.01, )
 
     l.texts[0].set_text("")
     plt.ylabel("")
     plt.xlabel("")
     plt.tight_layout()
-    plt.savefig(args.save_dir + '/' + args.dataset +
+    plt.savefig(save_dir + '/' + dataset_name +
                 '-' + plot_id + '.png', dpi=300)
     plt.clf()
 
@@ -328,7 +301,7 @@ def _autoencoder(dims, act='relu'):
     return Model(inputs=x, outputs=h)
 
 def n_load_data(args):
-    from datasets import load_cifar10, load_mnist, load_mnist_test, load_usps, load_pendigits, load_fashion, load_har
+    from .datasets import load_cifar10, load_mnist, load_mnist_test, load_usps, load_pendigits, load_fashion, load_har
     label_names = None
     if args.dataset == 'cifar10':
         x, y, label_names = load_cifar10()
@@ -356,6 +329,7 @@ def n_run_autoencode(x, args):
 
     # Pretrain autoencoders before clustering
     if args.ae_weights is None:
+        optimizer = 'adam'
         ae.compile(loss='mse', optimizer=optimizer)
         ae.fit(x, x, batch_size=args.batch_size, epochs=args.pretrain_epochs, verbose=1)
         pretrain_time = time() - pretrain_time
@@ -372,13 +346,39 @@ def n_run_autoencode(x, args):
     hl = encoder.predict(x)
     return hl
 
-if __name__ == "__main__":
+def init():
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # str(sys.argv[2])
+    os.environ['PYTHONHASHSEED'] = '0'
+    os.environ['TF_CUDNN_USE_AUTOTUNE'] = '0'
 
+    rn.seed(0)
+    try:
+        tf.set_random_seed(seed=0)
+    except:
+        tf.random.set_seed(seed=0)
+    np.random.seed(0)
+
+    if len(K.tensorflow_backend._get_available_gpus()) > 0:
+        print("Using GPU")
+        session_conf = tf.ConfigProto(intra_op_parallelism_threads=1,
+                                      inter_op_parallelism_threads=1,
+                                      )
+        sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
+        K.set_session(sess)
+    try:
+        from MulticoreTSNE import MulticoreTSNE as TSNE
+    except BaseException:
+        print("Missing MulticoreTSNE package.. Only important if evaluating other manifold learners.")
+    np.set_printoptions(threshold=sys.maxsize)
+    matplotlib.use('agg')
+
+def get_args():
     parser = argparse.ArgumentParser(
         description='(Not Too) Deep',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('dataset', default='mnist', )
-    parser.add_argument('gpu', default=0, )
+    parser.add_argument('--dataset', default='mnist', )
+    parser.add_argument('--gpu', default=0, )
     parser.add_argument('--n_clusters', default=10, type=int)
     parser.add_argument('--batch_size', default=256, type=int)
     parser.add_argument('--pretrain_epochs', default=1000, type=int)
@@ -394,13 +394,20 @@ if __name__ == "__main__":
     parser.add_argument('--visualize', default=False, type=bool)
     args = parser.parse_args()
     print(args)
+    return args
 
-    optimizer = 'adam'
+def main(argv):
+    init()
+    args = get_args()
     x, y, label_names = n_load_data(args)
     hl = n_run_autoencode(x, args)
 
     if args.eval_all:
-        eval_other_methods(x, y, label_names)
+        eval_other_methods(x, y, args, label_names)
 
-    clusters, t_acc, t_nmi, t_ari = cluster_manifold_in_embedding(hl, y, label_names)
+    clusters, t_acc, t_nmi, t_ari = cluster_manifold_in_embedding(hl, y, args, label_names)
     np.savetxt(args.save_dir + "/" + args.dataset + '-clusters.txt', clusters, fmt='%i', delimiter=',')
+
+if __name__ == '__main__':
+    # n2d.main("n2d.py", "mnist", "0", "--ae_weights", "mnist-1000-ae_weights.h5","--umap_dim", "10", "--umap_neighbors", "20", "--manifold_learner", "UMAP", "--save_dir", "mnist-n2d", "--umap_min_dist", "0.00")
+    main(sys.argv)
