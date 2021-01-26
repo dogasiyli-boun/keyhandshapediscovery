@@ -318,11 +318,26 @@ def n_load_data(args):
     return x, y, label_names
 
 def n_run_autoencode(x, args):
+    # input_dict :
+    # fit_verbose
+    input_dict = argparse.ArgumentParser(description='func_autoencode', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    input_dict.add_argument('--n_clusters', default=10, type=int)
+    input_dict.add_argument('--dataset', default='mnist')
+    input_dict.add_argument("--ae_weights", default=None)
+    input_dict.add_argument('--save_dir', default=os.path.join(os.getcwd(), "experiments"))
+    input_dict.add_argument('--weights_folder_base', default=os.getcwd())
+    input_dict.add_argument('--weights_folder', default="weights_folder")
+    input_dict.add_argument('--batch_size', default=256, type=int)
+    input_dict.add_argument('--pretrain_epochs', default=100, type=int)
+    input_dict.add_argument('--fit_verbose', default=True, type=bool)
+    args = funcH._parse_args(input_dict, args, print_args=True)
+
     shape = [x.shape[-1], 500, 500, 2000, args.n_clusters]
     ae = _autoencoder(shape)
     hidden = ae.get_layer(name='encoder_%d' % (len(shape) - 2)).output
     encoder = Model(inputs=ae.input, outputs=hidden)
 
+    weights_folder = os.path.join(args.weights_folder_base, args.weights_folder)
     pretrain_time = time()
 
     # Pretrain autoencoders before clustering
@@ -331,15 +346,16 @@ def n_run_autoencode(x, args):
         ae.compile(loss='mse', optimizer=optimizer)
         ae.fit(x, x, batch_size=args.batch_size, epochs=args.pretrain_epochs, verbose=1)
         pretrain_time = time() - pretrain_time
-        ae.save_weights('weights/' + args.dataset +
-                        "-" + str(args.pretrain_epochs) + '-ae_weights.h5')
+        funcH.createDirIfNotExist(weights_folder)
+        weights_file = os.path.join(weights_folder, args.dataset + "-" + str(args.pretrain_epochs) + "-ae_weights.h5")
+        ae.save_weights(weights_file)
         print("Time to train the ae: " + str(pretrain_time))
     else:
-        ae.load_weights('weights/' + args.ae_weights)
+        weights_file = os.path.join(weights_folder, args.ae_weights)
+        ae.load_weights(weights_file)
 
-    if not os.path.exists(args.save_dir):
-        os.makedirs(args.save_dir)
-    with open(args.save_dir + '/args.txt', 'w') as f:
+    funcH.createDirIfNotExist(args.save_dir)
+    with open(os.path.join(args.save_dir, 'args.txt'), 'w') as f:
         f.write("\n".join(sys.argv))
     hl = encoder.predict(x)
     return hl
@@ -395,13 +411,7 @@ def get_args(argv):
     parser.add_argument('--eval_all', default=False, action='store_true')
     parser.add_argument('--manifold_learner', default='UMAP', type=str)
     parser.add_argument('--visualize', default=False, type=bool)
-    args = parser.parse_args(args=argv)
-    if isinstance(args, tuple):
-        try:
-            args = args[0]
-        except:
-            pass
-    print(args)
+    args = funcH._parse_args(parser, argv, print_args=True)
     return args
 
 def main(argv):
@@ -414,7 +424,8 @@ def main(argv):
         eval_other_methods(x, y, args, label_names)
 
     clusters, t_acc, t_nmi, t_ari = cluster_manifold_in_embedding(hl, y, args, label_names)
-    np.savetxt(args.save_dir + "/" + args.dataset + '-clusters.txt', clusters, fmt='%i', delimiter=',')
+    cluster_text_file = os.path.join(args.save_dir, args.dataset + '-clusters.txt')
+    np.savetxt( cluster_text_file, clusters, fmt='%i', delimiter=',')
 
 if __name__ == '__main__':
     # n2d.main("n2d.py", "mnist", "0", "--ae_weights", "mnist-1000-ae_weights.h5","--umap_dim", "10", "--umap_neighbors", "20", "--manifold_learner", "UMAP", "--save_dir", "mnist-n2d", "--umap_min_dist", "0.00")

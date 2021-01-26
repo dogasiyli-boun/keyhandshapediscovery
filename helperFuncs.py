@@ -1564,3 +1564,26 @@ def reset_labels(allLabels, labelIDs, labelStrings, sortBy=None, verbose=0):
         print("12(reset_labels)***************************\n")
 
     return sortedLabelsAll, sortedLabelsMap
+
+def _parse_args(default_params_as_ArgumentParser, passed_arguments, print_args=True):
+    # default_params_as_ArgumentParser = argparse.ArgumentParser(description='what_parser',formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    try:
+        args = default_params_as_ArgumentParser.parse_args(args=passed_arguments)
+    except:
+        _pa = []
+        for k in passed_arguments.__dict__:
+            _pa.append('--'+k)
+            if passed_arguments.__dict__[k] is not None:
+                _pa.append(str(passed_arguments.__dict__[k]))
+            else:
+                _pa.append(None)
+        args = default_params_as_ArgumentParser.parse_known_args(args=_pa)
+
+    if isinstance(args, tuple):
+        try:
+            args = args[0]
+        except:
+            pass
+    if print_args:
+        print(args)
+    return args
