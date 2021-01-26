@@ -445,7 +445,7 @@ def get_args(argv):
         ae_cnt_str = '_lw_' + str(args.ae_weights).replace('-ae_weights.h5', '')
     else:
         ae_cnt_str = '_ae_' + str(args.dataset) + '-' + str(args.pretrain_epochs)
-    args.exp_date_str = str(datetime.datetime.now().strftime("%Y%m%d_%H%M")).replace('-', '') #%S
+    args.exp_date_str = str(datetime.datetime.now().strftime("%Y%m%d_%H")).replace('-', '') #%M%S
     args.experiments_folder = os.path.join(args.experiments_folder_base, args.dataset, args.exp_date_str + ae_cnt_str + '_' + args.manifold_learner + '_' + args.cluster)
     funcH.createDirIfNotExist(args.experiments_folder)
     with open(os.path.join(args.experiments_folder, 'args_'+args.exp_date_str+'.txt'), 'w') as f:
@@ -459,10 +459,16 @@ def script():
     for ds in dataset_names_all:
         for ml in manifold_learners_all:
             try:
-                main(["--dataset", ds, "--gpu", "0",
-                  "--pretrain_epochs", str(pretrain_epochs),
-                  "--umap_dim", "20", "--umap_neighbors", "40",
-                  "--manifold_learner", ml, "--umap_min_dist", "0.00"])
+                if ml=="UMAP":
+                    main(["--dataset", ds, "--gpu", "0",
+                      "--pretrain_epochs", str(pretrain_epochs),
+                      "--umap_dim", "20", "--umap_neighbors", "40",
+                      "--manifold_learner", ml, "--umap_min_dist", "0.00"])
+                else:
+                    main(["--dataset", ds, "--gpu", "0",
+                      "--ae_weights", ds+"-"+str(pretrain_epochs)+"-ae_weights.h5",
+                      "--umap_dim", "20", "--umap_neighbors", "40",
+                      "--manifold_learner", ml, "--umap_min_dist", "0.00"])
             except:
                 global args_out
                 args_out = funcH.print_and_add(ds + '_' + ml + " - problem", args_out)
@@ -473,6 +479,10 @@ def script():
 def main(argv):
     init()
     args = get_args(argv)
+    args_out_file = os.path.join(args.experiments_folder, args.dataset + '-args_out.txt')
+    if os.path.isfile(args_out_file):
+        print("skipping experiment already done")
+        return
     x, y, label_names = n_load_data(args)
     hl = n_run_autoencode(x, args)
 
@@ -487,7 +497,7 @@ def main(argv):
     np.savetxt(clusters_before_manifold, results_dict["pred_before_manifold"], fmt='%i', delimiter=',')
 
     global args_out
-    with open(os.path.join(args.experiments_folder, args.dataset + '-args_out.txt'), 'w') as f:
+    with open(args_out_file, 'w') as f:
         f.write("\n".join(args_out))
 
     result_csv_file = os.path.join(args.experiments_folder_base, 'results.csv')
