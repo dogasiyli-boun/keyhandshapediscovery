@@ -485,26 +485,25 @@ def get_args(argv):
 
 def script():
     global debug_string_out
-    pretrain_epochs = 50
-    n_clusters_ae = 20
-    umap_dim = 20
-    umap_neighbors = 40
-    manifold_learners_all = ["UMAP", "LLE", "tSNE", "isomap"]
+    pretrain_epochs = [10, 50]
+    manifold_learners_all = ["UMAP"]
     dataset_names_all = ["cifar10", "mnist", "pendigits", "fashion"]  # , "usps", "har"
     for ds in dataset_names_all:
         for ml in manifold_learners_all:
-            try:
-                debug_string_out = []
-                main(["--dataset", ds, "--gpu", "0",
-                      "--pretrain_epochs", str(pretrain_epochs),
-                      "--n_clusters", str(n_clusters_ae),
-                      "--umap_dim", str(umap_dim), "--umap_neighbors", str(umap_neighbors),
-                      "--manifold_learner", ml, "--umap_min_dist", "0.00"])
-            except:
-                debug_string_out = funcH.print_and_add(ds + '_' + ml + " - problem", debug_string_out)
-                exp_date_str = str(datetime.datetime.now().strftime("%Y%m%d_%H%M")).replace('-', '')  # %S
-                with open(os.path.join(funcH.getVariableByComputerName("n2d_experiments"), ds + '_' + ml + '_error_' + exp_date_str + '.txt'), 'w') as f:
-                    f.write("\n".join(debug_string_out))
+            for ae_epoc in pretrain_epochs:
+                for clust_cnt in [10, 20]: #  umap_dim = 20, n_clusters_ae = 20, umap_neighbors = 40
+                    try:
+                        debug_string_out = []
+                        main(["--dataset", ds, "--gpu", "0",
+                              "--pretrain_epochs", str(ae_epoc),
+                              "--n_clusters", str(clust_cnt),
+                              "--umap_dim", str(clust_cnt), "--umap_neighbors", str(2*clust_cnt),
+                              "--manifold_learner", ml, "--umap_min_dist", "0.00"])
+                    except:
+                        debug_string_out = funcH.print_and_add(ds + '_' + ml + " - problem", debug_string_out)
+                        exp_date_str = str(datetime.datetime.now().strftime("%Y%m%d_%H%M")).replace('-', '')  # %S
+                        with open(os.path.join(funcH.getVariableByComputerName("n2d_experiments"), ds + '_' + ml + '_error_' + exp_date_str + '.txt'), 'w') as f:
+                            f.write("\n".join(debug_string_out))
 
 # args.experiment_names_and_folders - adopted
 def append_to_results(args, results_dict):
