@@ -5,7 +5,7 @@ import os
 from shutil import copyfile, rmtree
 import numpy as np
 import pandas as pd
-from helperFuncs import get_mapped_0_k_indices
+from helperFuncs import get_mapped_0_k_indices, createDirIfNotExist, getFileList, getFolderList
 
 #fashion mnist
 from torchvision.datasets import FashionMNIST as fashionMNISTds
@@ -289,26 +289,6 @@ class cifar10(Dataset):
     def save_decoded_image(img, name, input_size=32):
         img = img.view(img.size(0), 1, input_size, input_size)
         save_image(img, name)
-
-def createDirIfNotExist(dir2create):
-    if not os.path.isdir(dir2create):
-        os.makedirs(dir2create)
-
-def getFileList(dir2Search, startString="", endString="", sortList=False):
-    fileList = [f for f in os.listdir(dir2Search) if f.startswith(startString) and
-                f.endswith(endString) and
-                os.path.isfile(os.path.join(dir2Search, f))]
-    if sortList:
-        fileList = np.sort(fileList)
-    return fileList
-
-def getFolderList(dir2Search, startString="", endString="", sortList=False):
-    folderList = [f for f in os.listdir(dir2Search) if f.startswith(startString) and
-                  f.endswith(endString) and
-                  os.path.isdir(os.path.join(dir2Search, f))]
-    if sortList:
-        folderList = np.sort(folderList)
-    return folderList
 
 def create_sub_folders(targets, dir_path):
     """Creates empty folders which have the same name as given targets in dir_path"""
