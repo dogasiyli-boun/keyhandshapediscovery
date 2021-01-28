@@ -24,6 +24,7 @@ from scipy.optimize import linear_sum_assignment as linear_assignment
 from time import time
 import helperFuncs as funcH
 import projRelatedHelperFuncs as prHF
+import hdbscan
 
 debug_string_out = []
 
@@ -210,6 +211,10 @@ def n_run_cluster(args, hle):
             random_state=0,
             n_init=20)
         y_pred = km.fit_predict(hle)
+    elif args.cluster == 'HDBSCAN':
+        clusterer = hdbscan.HDBSCAN()
+        clusterer.fit(hle)
+        y_pred = clusterer.labels_
     elif args.cluster == 'SC':
         sc = SpectralClustering(
             n_clusters=args.n_clusters,
@@ -224,6 +229,12 @@ def n_eval_result(definition_string, pngnameadd, args, hle, y, y_pred, label_nam
     # y_pred = y_pred.reshape(len(y_pred), )
     y = np.asarray(y)
     # y = y.reshape(len(y), )
+    if args.cluster == 'HDBSCAN':
+        debug_string_out = funcH.print_and_add("removed sample count(" + str(np.sum(y_pred==-1)) + ")", debug_string_out)
+        debug_string_out = funcH.print_and_add("cluster_count(" + str(len(np.unique(y_pred))) + ")", debug_string_out)
+        y = y[y_pred!=-1]
+        y_pred = y_pred[y_pred!=-1]
+
     _confMat, kluster2Classes, kr_pdf, weightedPurity, cnmxh_perc = funcH.countPredictionsForConfusionMat(y, y_pred)
     sampleCount = np.sum(np.sum(_confMat))
     acc_doga = 100 * np.sum(np.diag(_confMat)) / sampleCount
@@ -248,12 +259,16 @@ def cluster_manifold_in_embedding(hl, y, args, label_names=None):
     debug_string_out = funcH.print_and_add('=' * 80, debug_string_out)
     y_pred_hl = n_run_cluster(args, hl)
     y_pred_hl, acc_hl, nmi_hl, ari_hl, acc_hl_dg = n_eval_result("if no manifold stuff", '-nm', args, hl, y, y_pred_hl, label_names)
+    saveToFileName = os.path.join(args.experiment_names_and_folders["folder_experiment"], 'data_' + args.experiment_names_and_folders["exp_extended"] + '_before.npz')
+    np.savez(saveToFileName, featVec=hl, labels=y, preds=y_pred_hl, label_names=label_names, acc=acc_hl_dg)
     debug_string_out = funcH.print_and_add('-' * 40, debug_string_out)
     # find manifold on autoencoded embedding
     hle = n_learn_manifold(args, hl)
     # clustering on new manifold of autoencoded embedding
     y_pred_hle = n_run_cluster(args, hle)
     y_pred_hle, acc, nmi, ari, acc_dg = n_eval_result("hle", '-hle', args, hle, y, y_pred_hle, label_names)
+    saveToFileName = os.path.join(args.experiment_names_and_folders["folder_experiment"], 'data_' + args.experiment_names_and_folders["exp_extended"] + '_after.npz')
+    np.savez(saveToFileName, featVec=hle, labels=y, preds=y_pred_hle, label_names=label_names, acc=acc_dg)
     debug_string_out = funcH.print_and_add('=' * 80, debug_string_out)
     results_dict = {
         "acc_before_manifold": acc_hl,
@@ -332,25 +347,25 @@ def _autoencoder(dims, act='relu'):
     return Model(inputs=x, outputs=h)
 
 # args.experiment_names_and_folders - no need to adopt
-def n_load_data(args):
+def n_load_data(dataset_name):
     from .datasets import load_cifar10, load_mnist, load_mnist_test, load_usps, load_pendigits, load_fashion, load_har
     label_names = None
-    if args.dataset == 'cifar10':
+    if dataset_name == 'cifar10':
         x, y, label_names = load_cifar10()
-    elif args.dataset == 'mnist':
+    elif dataset_name == 'mnist':
         x, y = load_mnist()
-    elif args.dataset == 'mnist-test':
+    elif dataset_name == 'mnist-test':
         x, y = load_mnist_test()
-    elif args.dataset == 'usps':
+    elif dataset_name == 'usps':
         x, y = load_usps()
-    elif args.dataset == 'pendigits':
+    elif dataset_name == 'pendigits':
         x, y = load_pendigits()
-    elif args.dataset == 'fashion':
+    elif dataset_name == 'fashion':
         x, y, label_names = load_fashion()
-    elif args.dataset == 'har':
+    elif dataset_name == 'har':
         x, y, label_names = load_har()
-    elif "_" in args.dataset:
-        dataIdent, pca_dim, nos = str(args.dataset).split('_')
+    elif "_" in dataset_name:
+        dataIdent, pca_dim, nos = str(dataset_name).split('_')
         x, labels_all, labels_sui, labels_map = prHF.combine_pca_hospisign_data(dataIdent=dataIdent, pca_dim=int(pca_dim),
                                                                                        nos=int(nos), verbose=2)
         y = np.asarray(labels_all, dtype=int).squeeze()
@@ -495,19 +510,20 @@ def script():
     pretrain_epochs = [10, 50]
     manifold_learners_all = ["UMAP"]
     dataset_names_all = ["cifar10", "mnist", "pendigits", "fashion"]  # , "usps", "har"
+    cluster_func = "HDBSCAN"
     for ds in dataset_names_all:
         for ml in manifold_learners_all:
             for ae_epoc in pretrain_epochs:
-                for clust_cnt in [10, 20]: #  umap_dim = 20, n_clusters_ae = 20, umap_neighbors = 40
+                for clust_cnt in [20]: #  umap_dim = 20, n_clusters_ae = 20, umap_neighbors = 40
                     try:
                         debug_string_out = []
                         main(["--dataset", ds, "--gpu", "0",
                               "--pretrain_epochs", str(ae_epoc),
-                              "--n_clusters", str(clust_cnt),
+                              "--n_clusters", str(clust_cnt), '--cluster', str(cluster_func),
                               "--umap_dim", str(clust_cnt), "--umap_neighbors", str(2*clust_cnt),
                               "--manifold_learner", ml, "--umap_min_dist", "0.00"])
-                    except:
-                        debug_string_out = funcH.print_and_add(ds + '_' + ml + " - problem", debug_string_out)
+                    except Exception as e:
+                        debug_string_out = funcH.print_and_add(ds + '_' + ml + " - problem \n" + str(e), debug_string_out)
                         exp_date_str = str(datetime.datetime.now().strftime("%Y%m%d_%H%M")).replace('-', '')  # %S
                         with open(os.path.join(funcH.getVariableByComputerName("n2d_experiments"), ds + '_' + ml + '_error_' + exp_date_str + '.txt'), 'w') as f:
                             f.write("\n".join(debug_string_out))
@@ -556,7 +572,7 @@ def main(argv):
     if os.path.isfile(debug_string_out_file):
         print("skipping experiment already done (" + debug_string_out_file + ")")
         return
-    x, y, label_names = n_load_data(args)
+    x, y, label_names = n_load_data(args.dataset)
     hl = n_run_autoencode(x, args)
 
     if args.eval_all:
