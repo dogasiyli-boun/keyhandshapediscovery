@@ -273,11 +273,9 @@ def main(argv):
 
     checkpointer = ModelCheckpoint(filepath=model_name, verbose=0, save_best_only=False, period=1)
     csv_logger = CSVLogger(csv_name, append=True, separator=';')
-    callbacks = [csv_logger, ES, checkpointer]
 
     #%%
     trainFromScratch = False
-    epochCnt = trainParams["epochs"]
     predictionLabelsDir = results_dir + os.sep + 'results' + os.sep + exp_name
     model, epochFr, epochTo = initEpochIDsModelParams(trainFromScratch, trainParams, model, model_name, predictionLabelsDir)
 
@@ -285,7 +283,7 @@ def main(argv):
         print("+*-+*-+*-+*-epochs completed+*-+*-+*-+*-")
         exit(12)
 
-    modelParams["callbacks"] = [csv_logger, checkpointer]
+    modelParams["callbacks"] = [csv_logger, ES, checkpointer]
     modelParams["model_name"] = model_name
     trainParams["subEpochs"] = subEpochs
     trainParams["epochFr"] = epochFr

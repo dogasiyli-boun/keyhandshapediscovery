@@ -23,6 +23,7 @@ from sklearn.manifold import LocallyLinearEmbedding
 from scipy.optimize import linear_sum_assignment as linear_assignment
 from time import time
 import helperFuncs as funcH
+import projRelatedHelperFuncs as prHF
 
 debug_string_out = []
 
@@ -348,6 +349,12 @@ def n_load_data(args):
         x, y, label_names = load_fashion()
     elif args.dataset == 'har':
         x, y, label_names = load_har()
+    elif "_" in args.dataset:
+        dataIdent, pca_dim, nos = str(args.dataset).split('_')
+        x, labels_all, labels_sui, labels_map = prHF.combine_pca_hospisign_data(dataIdent=dataIdent, pca_dim=int(pca_dim),
+                                                                                       nos=int(nos), verbose=2)
+        y = np.asarray(labels_all, dtype=int).squeeze()
+        label_names = np.asarray(labels_map["khsName"])
     return x, y, label_names
 
 # args.experiment_names_and_folders - adopted
@@ -394,7 +401,7 @@ def n_run_autoencode(x, args):
 # args.experiment_names_and_folders - no need to adopt
 def init():
     global debug_string_out
-    debug_string_out = []
+    debug_string_out.clear()
     plt.style.use(['seaborn-white', 'seaborn-paper'])
     sns.set_context("paper", font_scale=1.3)
 
@@ -505,6 +512,27 @@ def script():
                         with open(os.path.join(funcH.getVariableByComputerName("n2d_experiments"), ds + '_' + ml + '_error_' + exp_date_str + '.txt'), 'w') as f:
                             f.write("\n".join(debug_string_out))
 
+def script_hgsk():
+    global debug_string_out
+    pretrain_epochs = [10, 50]
+    ml = "UMAP"
+    ds = "hgsk_256_41"
+    for cluster in ['GMM', 'KM']:
+        for ae_epoc in pretrain_epochs:
+            for clust_cnt in [128, 256, 512, 1024]: #  umap_dim = 20, n_clusters_ae = 20, umap_neighbors = 40
+                try:
+                    debug_string_out.clear()
+                    main(["--dataset", ds, "--gpu", "0",
+                          "--pretrain_epochs", str(ae_epoc),
+                          "--n_clusters", str(clust_cnt), "--cluster", cluster,
+                          "--umap_dim", str(clust_cnt), "--umap_neighbors", str(20),
+                          "--manifold_learner", ml, "--umap_min_dist", "0.00"])
+                except:
+                    debug_string_out = funcH.print_and_add(ds + '_' + ml + " - problem", debug_string_out)
+                    exp_date_str = str(datetime.datetime.now().strftime("%Y%m%d_%H%M")).replace('-', '')  # %S
+                    with open(os.path.join(funcH.getVariableByComputerName("n2d_experiments"), ds + '_' + ml + '_error_' + exp_date_str + '.txt'), 'w') as f:
+                        f.write("\n".join(debug_string_out))
+
 # args.experiment_names_and_folders - adopted
 def append_to_results(args, results_dict):
     result_csv_file = args.experiment_names_and_folders["file_name_result_csv_file_full"]
@@ -522,7 +550,7 @@ def append_to_results(args, results_dict):
 def main(argv):
     init()
     global debug_string_out
-    debug_string_out = []
+    debug_string_out.clear()
     args = get_args(argv)
     debug_string_out_file = args.experiment_names_and_folders["file_name_debug_string_out_full"]
     if os.path.isfile(debug_string_out_file):

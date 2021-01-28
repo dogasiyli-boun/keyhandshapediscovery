@@ -4,7 +4,7 @@ import pandas as pd
 from keras.datasets import fashion_mnist
 from keras.datasets import mnist
 from keras.datasets import cifar10
-from helperFuncs import getVariableByComputerName, createDirIfNotExist
+from helperFuncs import getVariableByComputerName, createDirIfNotExist, download_file
 
 def load_cifar10():
     (x_train, y_train), (x_test, y_test) = cifar10.load_data()
@@ -58,15 +58,23 @@ def load_har(data_path = os.path.join(getVariableByComputerName("n2d_experiments
     fname_test_y = os.path.join(fold_test, 'y_test.txt')
 
     # https://github.com/mollybostic/cleaning-data-assignment/tree/master/UCI%20HAR%20Dataset
+    # for windows = https://sourceforge.net/projects/gnuwin32/files/wget/1.11.4-1/wget-1.11.4-1-setup.exe/download
+    # https://stackoverflow.com/questions/29113456/wget-not-recognized-as-internal-or-external-command
+
+    link_adr_path = 'https://raw.githubusercontent.com/mollybostic/cleaning-data-assignment/master/UCI%20HAR%20Dataset/<trte>/<Xy>_<trte>.txt'
     if not os.path.isfile(fname_train_x):
         print('downloading X_train.txt(66.0MB)')
-        os.system("wget --no-verbose 'https://raw.githubusercontent.com/mollybostic/cleaning-data-assignment/master/UCI HAR Dataset/train/X_train.txt' -P %s" % fold_train)
+        download_file(link_adr_path.replace("<trte>", "train").replace("<Xy>", "X"), save2path=fold_train, savefilename='X_train.txt')
+        #os.system("wget --no-verbose 'https://raw.githubusercontent.com/mollybostic/cleaning-data-assignment/master/UCI HAR Dataset/train/X_train.txt' -P %s" % fold_train)
         print('downloading y_train.txt(14.7kB)')
-        os.system("wget --no-verbose 'https://raw.githubusercontent.com/mollybostic/cleaning-data-assignment/master/UCI HAR Dataset/train/y_train.txt' -P %s" % fold_train)
+        download_file(link_adr_path.replace("<trte>", "train").replace("<Xy>", "y"), save2path=fold_train, savefilename='y_train.txt')
+        #os.system("wget --no-verbose 'https://raw.githubusercontent.com/mollybostic/cleaning-data-assignment/master/UCI HAR Dataset/train/y_train.txt' -P %s" % fold_train)
         print('downloading X_test.txt(26.5MB)')
-        os.system("wget --no-verbose 'https://raw.githubusercontent.com/mollybostic/cleaning-data-assignment/master/UCI HAR Dataset/test/X_test.txt' -P %s" % fold_test)
+        download_file(link_adr_path.replace("<trte>", "test").replace("<Xy>", "X"), save2path=fold_test, savefilename='X_test.txt')
+        #os.system("wget --no-verbose 'https://raw.githubusercontent.com/mollybostic/cleaning-data-assignment/master/UCI HAR Dataset/test/X_test.txt' -P %s" % fold_test)
         print('downloading y_test.txt(5.9kB)')
-        os.system("wget --no-verbose 'https://raw.githubusercontent.com/mollybostic/cleaning-data-assignment/master/UCI HAR Dataset/test/y_test.txt' -P %s" % fold_test)
+        download_file(link_adr_path.replace("<trte>", "test").replace("<Xy>", "y"), save2path=fold_test, savefilename='y_test.txt')
+        #os.system("wget --no-verbose 'https://raw.githubusercontent.com/mollybostic/cleaning-data-assignment/master/UCI HAR Dataset/test/y_test.txt' -P %s" % fold_test)
 
     x_train = pd.read_csv(fname_train_x, sep=r'\s+', header=None)
     y_train = pd.read_csv(fname_train_y, header=None)
@@ -86,12 +94,12 @@ def load_usps(data_path = os.path.join(getVariableByComputerName("n2d_experiment
 
     file_name_tr = os.path.join(data_path, 'usps_train.jf')
     file_name_te = os.path.join(data_path, 'usps_test.jf')
+    link_adr_path = 'https://raw.githubusercontent.com/cvjena/ITAL/master/data/usps_<trte>.jf'
     if not os.path.exists(file_name_tr):
-        if not os.path.exists(file_name_tr + '.gz'):
-            os.system('wget http://www-i6.informatik.rwth-aachen.de/~keysers/usps_train.jf.gz -P %s' % data_path)
-            os.system('wget http://www-i6.informatik.rwth-aachen.de/~keysers/usps_test.jf.gz -P %s' % data_path)
-        os.system('gunzip %s/usps_train.jf.gz' % data_path)
-        os.system('gunzip %s/usps_test.jf.gz' % data_path)
+        download_file(link_adr_path.replace("<trte>", "train"), save2path=data_path, savefilename='usps_train.jf')
+        #os.system('wget http://www-i6.informatik.rwth-aachen.de/~keysers/usps_train.jf.gz -P %s' % data_path)
+        download_file(link_adr_path.replace("<trte>", "test"), save2path=data_path, savefilename='usps_test.jf')
+        #os.system('wget http://www-i6.informatik.rwth-aachen.de/~keysers/usps_test.jf.gz -P %s' % data_path)
 
     with open(file_name_tr) as f:
         data = f.readlines()
@@ -116,11 +124,15 @@ def load_pendigits(data_path = os.path.join(getVariableByComputerName("n2d_exper
     createDirIfNotExist(data_path)
     file_name_tr = os.path.join(data_path, 'pendigits.tra')
     file_name_te = os.path.join(data_path, 'pendigits.tes')
+    link_adr_path = 'https://archive.ics.uci.edu/ml/machine-learning-databases/pendigits/pendigits<file_ending>'
     if not os.path.exists(file_name_tr):
         os.makedirs(data_path,  exist_ok=True)
-        os.system('wget https://archive.ics.uci.edu/ml/machine-learning-databases/pendigits/pendigits.tra -P %s' % data_path)
-        os.system('wget https://archive.ics.uci.edu/ml/machine-learning-databases/pendigits/pendigits.tes -P %s' % data_path)
-        os.system('wget https://archive.ics.uci.edu/ml/machine-learning-databases/pendigits/pendigits.names -P %s' % data_path)
+        download_file(link_adr_path.replace("<file_ending>", ".tra"), save2path=data_path, savefilename='pendigits.tra')
+        #os.system('wget https://archive.ics.uci.edu/ml/machine-learning-databases/pendigits/pendigits.tra -P %s' % data_path)
+        download_file(link_adr_path.replace("<file_ending>", ".tes"), save2path=data_path, savefilename='pendigits.tes')
+        #os.system('wget https://archive.ics.uci.edu/ml/machine-learning-databases/pendigits/pendigits.tes -P %s' % data_path)
+        download_file(link_adr_path.replace("<file_ending>", ".names"), save2path=data_path, savefilename='pendigits.names')
+        #os.system('wget https://archive.ics.uci.edu/ml/machine-learning-databases/pendigits/pendigits.names -P %s' % data_path)
 
     # load training data
     with open(file_name_tr) as file:

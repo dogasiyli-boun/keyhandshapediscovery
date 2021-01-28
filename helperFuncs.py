@@ -1612,3 +1612,15 @@ def print_and_add(str_to_print, arr_2_append=[]):
     print(str_to_print)
     arr_2_append.append(str_to_print)
     return arr_2_append
+
+# link_adr = 'https://raw.githubusercontent.com/mollybostic/cleaning-data-assignment/master/UCI%20HAR%20Dataset/test/X_test.txt'
+# save2path = X_test.txt
+def download_file(link_adr, save2path=os.getcwd(), savefilename=''):
+    createDirIfNotExist(save2path)
+    if os.name == 'nt':# Windows
+        command_str = 'curl -H "Accept: application/vnd.github.v3+json" -o ' + os.path.join(save2path, savefilename) + ' ' + link_adr
+    else:# other (unix)
+        command_str = "wget --no-verbose '" + link_adr.replace("%20", " ") + "' -P %s" % save2path
+    print("run<" + command_str + ">")
+    os.system(command_str)
+    #funcH.download_file(link_adr, save2path=save2path, savefilename=savefilename)

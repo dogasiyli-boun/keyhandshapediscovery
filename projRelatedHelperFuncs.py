@@ -431,13 +431,15 @@ def loadData(model_params, numOfSigns, data_dir):
     featsFileName = funcD.getFileName(dataToUse=model_params["dataToUse"], normMode=str(model_params["normMode"]), pcaCount=model_params["pcaCount"],
                                       numOfSigns=numOfSigns, expectedFileType='Data')
     fileName_detailedLabels = funcD.getFileName(dataToUse=model_params["dataToUse"], normMode=str(model_params["normMode"]), pcaCount=model_params["pcaCount"],
-                                                numOfSigns=numOfSigns,expectedFileType='DetailedLabels')
+                                                numOfSigns=numOfSigns, expectedFileType='DetailedLabels')
     fileName_labels = funcD.getFileName(dataToUse=model_params["dataToUse"], normMode=str(model_params["normMode"]), pcaCount=model_params["pcaCount"],
                                         numOfSigns=numOfSigns, expectedFileType='Labels')
 
     feat_set = funcD.loadFileIfExist(data_dir, featsFileName)
     if feat_set.size == 0:
-        _ = funcH.createPCAOfData(data_dir, dataToUse=model_params["dataToUse"], sign_count=numOfSigns, recreate=False, normMode=str(model_params["normMode"]))
+        feats_pca, exp_var_rat = createPCAOfData(data_dir, dataToUse=model_params["dataToUse"], sign_count=numOfSigns, recreate=False, normMode=str(model_params["normMode"]))
+        feat_set = feats_pca[:, 0:model_params["pcaCount"]]
+        np.save(os.path.join(data_dir, featsFileName), feat_set)
         feat_set = funcD.loadFileIfExist(data_dir, featsFileName)
         if feat_set.size == 0:
             os.error("finish here")
