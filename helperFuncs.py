@@ -27,13 +27,17 @@ from types import SimpleNamespace
 from sklearn.metrics import silhouette_samples, silhouette_score
 import matplotlib.cm as cm
 
-def analyze_silhouette_values(sample_silhouette_values, cluster_labels, real_labels):
+def analyze_silhouette_values(sample_silhouette_values, cluster_labels, real_labels, bin_count = 20):
     _confMat, kluster2Classes, kr_pdf, _, _ = countPredictionsForConfusionMat(real_labels, cluster_labels)
     sampleCount = np.sum(np.sum(_confMat))
     acc_doga_base = 100 * np.sum(np.diag(_confMat)) / sampleCount
     print("accuracy for {:d} clusters = {:4.3f}".format(len(np.unique(cluster_labels)), acc_doga_base))
 
-    for t in [0.00, 0.05, 0.10, 0.15, 0.20, 0.25]:
+    hist, bins = np.histogram(sample_silhouette_values, bins=bin_count)
+    print("bin_count = ", bin_count)
+    print("silhouette bins = ", hist, bins)
+
+    for t in bins[1:-1]:
         inds_ok_samples = np.array([i for i, e in enumerate(sample_silhouette_values) if e >= t])
         print("--there are {:d} bad assignments given treshold({})".format(sampleCount-len(inds_ok_samples), t))
         _confMat, kluster2Classes, kr_pdf, _, _ = countPredictionsForConfusionMat(real_labels[inds_ok_samples], cluster_labels[inds_ok_samples])

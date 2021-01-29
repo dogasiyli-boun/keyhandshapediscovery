@@ -1348,6 +1348,12 @@ def get_hospisign_labels(nos=11, sortBy=None, verbose=0):
     base_dir = funcH.getVariableByComputerName('base_dir')
     baseFold = os.path.join(base_dir, "neuralNetHandImages_nos" + str(nos) + "_rs224", "imgs")
     list_dict_file = os.path.join(baseFold, "list_dict.txt")
+    if not os.path.isfile(list_dict_file):
+        savefilename = "list_dict.txt"
+        web_filename = "list_dict_" + ("Dev" if nos == 11 else "Exp") + "Set.txt"
+        print(web_filename, "-->", savefilename)
+        download_hospisign_data(baseFold, web_filename, savefilename)
+
     a = pd.read_csv(list_dict_file, delimiter="*", header=None,
                     names=["sign", "user", "rep", "frameID", "khsID", "khsName", "hand"])
     b, uniqKHSinds = np.unique(np.asarray(a["khsID"]), return_index=True)
@@ -1418,12 +1424,31 @@ def get_hospisign_labels(nos=11, sortBy=None, verbose=0):
 
     return hospisign_labels
 
+def download_hospisign_data(baseFold, web_filename, savefilename):
+    mat = os.path.join(baseFold, savefilename)
+    if not os.path.isfile(mat):
+        url = "ftp://dogasiyli:Doga.Siyli@dogasiyli.com/hospisign.dogasiyli.com/extractedData/" + web_filename
+        funcH.download_file(link_adr=url, save2path=baseFold, savefilename=savefilename)
+        web_to_disk_fname = os.path.join(baseFold, web_filename)
+        if os.path.isfile(web_to_disk_fname) and not os.path.isfile(mat):
+            os.rename(web_to_disk_fname, mat)
+    return
+
 def get_hospisign_feats(nos=11, labelsSortBy=None, verbose=0):
     base_dir = funcH.getVariableByComputerName('base_dir')
     baseFold = os.path.join(base_dir, "neuralNetHandImages_nos" + str(nos) + "_rs224", "imgs")
+
     hogMat = os.path.join(baseFold, "hog_10_9.mat")
     skelMat = os.path.join(baseFold, "skel.mat")
     snMat = os.path.join(baseFold, "sn.mat")
+
+    funcH.createDirIfNotExist(baseFold)
+    #download data from mendeleyData to reuired place
+    for f in ['hog', 'skel', 'sn']:
+        savefilename = f.replace("hog", "hog_10_9") + ".mat"
+        web_filename = f.replace("hog", "hog_").replace("skel", "skeleton_").replace("sn", "snv_") + ("Dev" if nos==11 else "Exp") + "Set.mat"
+        print(web_filename, "-->", savefilename)
+        download_hospisign_data(baseFold, web_filename, savefilename)
 
     hg_ft = funcH.loadMatFile(hogMat, verbose=verbose)
     sn_ft = funcH.loadMatFile(snMat, verbose=verbose)

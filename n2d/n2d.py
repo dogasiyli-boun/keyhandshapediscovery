@@ -262,6 +262,8 @@ def cluster_manifold_in_embedding(hl, y, args, label_names=None):
     saveToFileName = os.path.join(args.experiment_names_and_folders["folder_experiment"], 'data_' + args.experiment_names_and_folders["exp_extended"] + '_before.npz')
     np.savez(saveToFileName, featVec=hl, labels=y, preds=y_pred_hl, label_names=label_names, acc=acc_hl_dg)
     debug_string_out = funcH.print_and_add('-' * 40, debug_string_out)
+    _, silhouette_values_hl = funcH.calc_silhouette_params(hl, y_pred_hl)
+
     # find manifold on autoencoded embedding
     hle = n_learn_manifold(args, hl)
     # clustering on new manifold of autoencoded embedding
@@ -270,6 +272,8 @@ def cluster_manifold_in_embedding(hl, y, args, label_names=None):
     saveToFileName = os.path.join(args.experiment_names_and_folders["folder_experiment"], 'data_' + args.experiment_names_and_folders["exp_extended"] + '_after.npz')
     np.savez(saveToFileName, featVec=hle, labels=y, preds=y_pred_hle, label_names=label_names, acc=acc_dg)
     debug_string_out = funcH.print_and_add('=' * 80, debug_string_out)
+    _, silhouette_values_hle = funcH.calc_silhouette_params(hle, y_pred_hle)
+
     results_dict = {
         "acc_before_manifold": acc_hl,
         "acc_before_manifold_dg": acc_hl_dg,
@@ -281,6 +285,8 @@ def cluster_manifold_in_embedding(hl, y, args, label_names=None):
         "ari_after_manifold": ari,
         "pred_before_manifold": y_pred_hl,
         "pred_after_manifold": y_pred_hle,
+        "silhouette_values_before": silhouette_values_hl,
+        "silhouette_values_after": silhouette_values_hle,
     }
     return results_dict
 
@@ -581,6 +587,9 @@ def main(argv):
     results_dict = cluster_manifold_in_embedding(hl, y, args, label_names)
     np.savetxt(args.experiment_names_and_folders["file_name_clusters_after_manifold_full"], results_dict["pred_after_manifold"], fmt='%i', delimiter=',')
     np.savetxt(args.experiment_names_and_folders["file_name_clusters_before_manifold_full"], results_dict["pred_before_manifold"], fmt='%i', delimiter=',')
+
+    funcH.analyze_silhouette_values(results_dict["silhouette_values_before"], results_dict["pred_before_manifold"], y)
+    funcH.analyze_silhouette_values(results_dict["silhouette_values_after"], results_dict["pred_after_manifold"], y)
 
     with open(debug_string_out_file, 'w') as f:
         f.write("\n".join(debug_string_out))
