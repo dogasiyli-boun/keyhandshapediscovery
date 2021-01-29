@@ -42,7 +42,7 @@ MODEL:
       flat:       'type: Flatten'
       l06_linear: 'type: Linear,in_features:9216, out_features:512'
       l06_act:    'type: ReLu'
-      l07_linear: 'type: Linear,in_features:512, out_features:256'
+      l07_linear: 'type: Linear,in_features:512, out_features:512'
     vae:
     decoder:
       l07_linear_b: 'type: Linear,in_features:256, out_features:512'
