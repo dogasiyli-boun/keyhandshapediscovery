@@ -27,12 +27,12 @@ class Slider_Class():
 
         self.img_id = (self.img_id + 1) % 3
         if self.img_id == 1:
-            img_path = '/home/doga/Downloads/DogaSiyli.png'
+            img_path = '/home/wsubuntu/Downloads/DogaSiyli.png'
         elif self.img_id == 2:
             data = np.array(np.random.random((200, 200))*100, dtype=int)
             img_path = Image.frombytes('L', (data.shape[1], data.shape[0]), data.astype('b').tostring())
         else:
-            img_path = '/home/doga/Downloads/luna_col.png'
+            img_path = '/home/wsubuntu/Downloads/luna_col.png'
 
         self.update_img_canvas(img_path)
 
@@ -65,7 +65,7 @@ class Slider_Class():
                                                               sticky='w' + 'e' + 'n' + 's')
         self.canvas = tk.Canvas(right_frame, width=200, height=200)
         self.canvas.place(x=-2, y=-2)
-        img = Image.open('/home/doga/Downloads/luna_col.png').resize((200, 200))
+        img = Image.open('/home/wsubuntu/Downloads/luna_col.png').resize((200, 200))
         self.photo = ImageTk.PhotoImage(image=img)
         self.image_on_canvas = self.canvas.create_image(0, 0, image=self.photo, anchor=tk.NW)
         self.canvas.grid(row=0, column=0)
