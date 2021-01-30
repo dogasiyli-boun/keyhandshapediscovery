@@ -126,14 +126,37 @@ def analyze_silhouette_values(sample_silhouette_values, cluster_labels, real_lab
 
     first_neg_sample_id = np.argmax(sample_silhouette_values_sorted < 0.00)-1
     accuracy_at_last_pos = pred_cumsum[first_neg_sample_id]
+    print("first_neg_sample_id(", str(first_neg_sample_id), ") accuracy_at_last_pos(", "{:4.2f}".format(100*accuracy_at_last_pos) ,")", end=',')
     centroid_info_pdf_new = centroid_info_pdf.copy()
+    clusters_to_remove = []
+    samples_to_remove = []
     for r in range(len(centroid_info_pdf_new)):
         old_index = centroid_info_pdf_new["sampleID"].values[r]
-        print("old centroid index(", old_index, ") changed to new index(", end=',')
+        print("\n old centroid index(", old_index, ") changed to new index(", end='')
         centroid_info_pdf_new["sampleID"].values[r] = np.argmax(idx == old_index)
-        print(centroid_info_pdf_new["sampleID"].values[r], ")")
+        print(centroid_info_pdf_new["sampleID"].values[r], "),", end='')
+        if centroid_info_pdf_new["sampleID"].values[r] > first_neg_sample_id:
+            clusters_to_remove.append(r)
+            print("this row will be dropped("+str(r)+")", end='')
+            klusterID_to_remove = centroid_info_pdf_new["klusterID"].values[r]
+            samples_to_remove_cur = getInds(cluster_labels_sorted,klusterID_to_remove)
+            samples_to_remove.append(np.asarray(samples_to_remove_cur).squeeze())
 
-    confMat_new, _, _, _, _ = countPredictionsForConfusionMat(labels_sorted[:first_neg_sample_id], cluster_labels_sorted[:first_neg_sample_id],
+    samples_to_remove = np.asarray(samples_to_remove).squeeze()
+    valid_sample_cnt = np.sum(samples_to_remove<first_neg_sample_id)
+    labels_sorted = np.delete(labels_sorted, samples_to_remove)
+    cluster_labels_sorted = np.delete(cluster_labels_sorted, samples_to_remove)
+    centroid_info_pdf_new = centroid_info_pdf_new.drop(np.asarray(clusters_to_remove))
+    for r in range(len(centroid_info_pdf_new)):
+        new_index = centroid_info_pdf_new["sampleID"].values[r]
+        before_sample_cnt = np.sum(samples_to_remove < new_index)
+        newer_index = new_index-before_sample_cnt
+        if new_index!= newer_index:
+            print("\nnew centroid index(", new_index, ") changed to newer index(", end='')
+            centroid_info_pdf_new["sampleID"].values[r] = newer_index
+            print(centroid_info_pdf_new["sampleID"].values[r], ")", end='')
+
+    confMat_new, _, _, _, _ = countPredictionsForConfusionMat(labels_sorted[:first_neg_sample_id-valid_sample_cnt], cluster_labels_sorted[:first_neg_sample_id-valid_sample_cnt],
                                                                               centroid_info_pdf=centroid_info_pdf_new)
     title_str = "first_neg_at " + str(first_neg_sample_id) + "(" + "{:4.2f}".format(100*first_neg_sample_id/sampleCount) + ")\n"
     title_str += str(sampleCount - first_neg_sample_id) + " samples to remove\n"
@@ -1456,10 +1479,13 @@ def countPredictionsForConfusionMat(labels_true, labels_pred, labelNames=None, c
         labels_k = getIndicedList(labels_true, inds)
 
         if centroid_info_pdf is not None:
-            klusterID, sampleID = centroid_info_pdf['klusterID'][i], centroid_info_pdf['sampleID'][i]
-            if klusterID == klust_cur:
-                mappedClass = labels_true[sampleID]
-            else:
+            try:
+                klusterID, sampleID = centroid_info_pdf['klusterID'][i], centroid_info_pdf['sampleID'][i]
+                if klusterID == klust_cur:
+                    mappedClass = labels_true[sampleID]
+                else:
+                    mappedClass = None
+            except:
                 mappedClass = None
         else:
             mappedClass = None
