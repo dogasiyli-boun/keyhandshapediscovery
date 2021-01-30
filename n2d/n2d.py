@@ -11,265 +11,131 @@ import pandas as pd
 import numpy as np
 import sys
 import tensorflow as tf
-import umap
 from keras import backend as K
 from keras.layers import Dense, Input
 from keras.models import Model
 from sklearn import metrics
-from sklearn import mixture
-from sklearn.cluster import KMeans, SpectralClustering
-from sklearn.manifold import TSNE, Isomap
-from sklearn.manifold import LocallyLinearEmbedding
 from scipy.optimize import linear_sum_assignment as linear_assignment
 from time import time
 import helperFuncs as funcH
 import projRelatedHelperFuncs as prHF
-import hdbscan
+from manifoldLearner import ManifoldLearner
+from clusteringWrapper import Clusterer
 
 debug_string_out = []
 
-def eval_other_methods(x, y, args, names=None):
-    global debug_string_out
-    gmm = mixture.GaussianMixture(
-        covariance_type='full',
-        n_components=args.n_clusters,
-        random_state=0)
-    gmm.fit(x)
-    y_pred_prob = gmm.predict_proba(x)
-    y_pred = y_pred_prob.argmax(1)
-    acc = np.round(cluster_acc(y, y_pred), 5)
-    nmi = np.round(metrics.normalized_mutual_info_score(y, y_pred), 5)
-    ari = np.round(metrics.adjusted_rand_score(y, y_pred), 5)
-    debug_string_out = funcH.print_and_add(args.dataset + " | GMM clustering on raw data", debug_string_out)
-    debug_string_out = funcH.print_and_add('=' * 80, debug_string_out)
-    debug_string_out = funcH.print_and_add(acc, debug_string_out)
-    debug_string_out = funcH.print_and_add(nmi, debug_string_out)
-    debug_string_out = funcH.print_and_add(ari, debug_string_out)
-    debug_string_out = funcH.print_and_add('=' * 80, debug_string_out)
+# args.experiment_names_and_folders - adopted
+def n2d_plot(x, y, clusters_count, plot_id, file_name_plot_fig_full=None, file_name_plot_csv_full=None, label_names=None):
+    viz_df = pd.DataFrame(data=x[:5000])
+    viz_df['Label'] = y[:5000]
+    if label_names is not None:
+        viz_df['Label'] = viz_df['Label'].map(label_names)
 
-    y_pred = KMeans(
-        n_clusters=args.n_clusters,
-        random_state=0).fit_predict(x)
-    acc = np.round(cluster_acc(y, y_pred), 5)
-    nmi = np.round(metrics.normalized_mutual_info_score(y, y_pred), 5)
-    ari = np.round(metrics.adjusted_rand_score(y, y_pred), 5)
-    debug_string_out = funcH.print_and_add(args.dataset + " | K-Means clustering on raw data", debug_string_out)
-    debug_string_out = funcH.print_and_add('=' * 80, debug_string_out)
-    debug_string_out = funcH.print_and_add(acc, debug_string_out)
-    debug_string_out = funcH.print_and_add(nmi, debug_string_out)
-    debug_string_out = funcH.print_and_add(ari, debug_string_out)
-    debug_string_out = funcH.print_and_add('=' * 80, debug_string_out)
+    if file_name_plot_csv_full is not None:
+        viz_df.to_csv(file_name_plot_csv_full.replace(".csv", "_" + str(plot_id) + "_.csv"))
+    plt.subplots(figsize=(8, 5))
+    sns.scatterplot(x=0, y=1, hue='Label', legend='full', hue_order=sorted(viz_df['Label']),
+                    palette=sns.color_palette("hls", n_colors=clusters_count),
+                    alpha=.5,
+                    data=viz_df)
+    l = plt.legend(bbox_to_anchor=(-.1, 1.00, 1.1, .5), loc="lower left", markerfirst=True,
+                   mode="expand", borderaxespad=0, ncol=clusters_count + 1, handletextpad=0.01, )
 
-    sc = SpectralClustering(
-        n_clusters=args.n_clusters,
-        random_state=0,
-        affinity='nearest_neighbors')
-    y_pred = sc.fit_predict(x)
-    acc = np.round(cluster_acc(y, y_pred), 5)
-    nmi = np.round(metrics.normalized_mutual_info_score(y, y_pred), 5)
-    ari = np.round(metrics.adjusted_rand_score(y, y_pred), 5)
-    print(args.dataset + " | Spectral Clustering on raw data")
-    print('=' * 80)
-    print(acc)
-    print(nmi)
-    print(ari)
-    print('=' * 80)
-
-    if args.manifold_learner == 'UMAP':
-        md = float(args.umap_min_dist)
-        hle = umap.UMAP(
-            random_state=0,
-            metric=args.umap_metric,
-            n_components=args.umap_dim,
-            n_neighbors=args.umap_neighbors,
-            min_dist=md).fit_transform(x)
-    elif args.manifold_learner == 'LLE':
-        from sklearn.manifold import LocallyLinearEmbedding
-        hle = LocallyLinearEmbedding(
-            n_components=args.umap_dim,
-            n_neighbors=args.umap_neighbors).fit_transform(x)
-    elif args.manifold_learner == 'tSNE':
-        method = 'exact'
-        hle = TSNE(
-            n_components=args.umap_dim,
-            n_jobs=16,
-            random_state=0,
-            verbose=0).fit_transform(x)
-    elif args.manifold_learner == 'isomap':
-        hle = Isomap(
-            n_components=args.umap_dim,
-            n_neighbors=5,
-        ).fit_transform(x)
-
-    gmm = mixture.GaussianMixture(
-        covariance_type='full',
-        n_components=args.n_clusters,
-        random_state=0)
-    gmm.fit(hle)
-    y_pred_prob = gmm.predict_proba(hle)
-    y_pred = y_pred_prob.argmax(1)
-    acc = np.round(cluster_acc(y, y_pred), 5)
-    nmi = np.round(metrics.normalized_mutual_info_score(y, y_pred), 5)
-    ari = np.round(metrics.adjusted_rand_score(y, y_pred), 5)
-    print(args.dataset + " | GMM clustering on " +
-          str(args.manifold_learner) + " embedding")
-    print('=' * 80)
-    print(acc)
-    print(nmi)
-    print(ari)
-    print('=' * 80)
-
-    if args.visualize:
-        n2d_plot(hle, y, args, 'UMAP', names)
-        y_pred_viz, _, _ = best_cluster_fit(y, y_pred)
-        n2d_plot(hle, y_pred_viz, args, 'UMAP-predicted', names)
-
-        return
-
-    y_pred = KMeans(
-        n_clusters=args.n_clusters,
-        random_state=0).fit_predict(hle)
-    acc = np.round(cluster_acc(y, y_pred), 5)
-    nmi = np.round(metrics.normalized_mutual_info_score(y, y_pred), 5)
-    ari = np.round(metrics.adjusted_rand_score(y, y_pred), 5)
-    print(args.dataset + " | K-Means " +
-          str(args.manifold_learner) + " embedding")
-    print('=' * 80)
-    print(acc)
-    print(nmi)
-    print(ari)
-    print('=' * 80)
-
-    sc = SpectralClustering(
-        n_clusters=args.n_clusters,
-        random_state=0,
-        affinity='nearest_neighbors')
-    y_pred = sc.fit_predict(hle)
-    acc = np.round(cluster_acc(y, y_pred), 5)
-    nmi = np.round(metrics.normalized_mutual_info_score(y, y_pred), 5)
-    ari = np.round(metrics.adjusted_rand_score(y, y_pred), 5)
-    print(args.dataset + " | Spectral Clustering on " +
-          str(args.manifold_learner) + " embedding")
-    print('=' * 80)
-    print(acc)
-    print(nmi)
-    print(ari)
-    print('=' * 80)
+    l.texts[0].set_text("")
+    plt.ylabel("")
+    plt.xlabel("")
+    plt.tight_layout()
+    if file_name_plot_fig_full is not None:
+        plt.savefig(file_name_plot_fig_full.replace("<plot_id>", str(plot_id)), dpi=300)
+        plt.clf()
+    plt.show()
 
 # args.experiment_names_and_folders - adopted
-def n_learn_manifold(args, hidden_representation):
+def n_learn_manifold(hidden_representation, embedding_dim, manifold_learner="UMAP", manifold_out_file_name=None, optional_params=None):
+    min_dist = funcH.get_attribute(optional_params, "umap_min_dist", default_type=float, default_val=0.0)
+    distance_metric = funcH.get_attribute(optional_params, "umap_metric", default_type=str, default_val='euclidean')
+    num_of_neighbours = funcH.get_attribute(optional_params, "umap_neighbors", default_type=int, default_val=10)
+    mfl = ManifoldLearner(manifold_dimension=embedding_dim, manifold_learner=manifold_learner,
+                          min_dist=min_dist, distance_metric=distance_metric, num_of_neighbours=num_of_neighbours)
+    manifold_feats, dbg_str = mfl.learn_manifold(X=hidden_representation, manifold_out_file_name=manifold_out_file_name)
     global debug_string_out
-    debug_string_out = funcH.print_and_add("Learning manifold(" + args.manifold_learner + ")" + str(datetime.datetime.now()), debug_string_out)
-    learn_time = time()
-    manifold_out_file_name = args.experiment_names_and_folders["file_name_umap_data_full"]
-    if os.path.isfile(manifold_out_file_name):  # check the learned manifold existance
-        hle = np.load(manifold_out_file_name, allow_pickle=True)
-        debug_string_out = funcH.print_and_add("Manifold loaded(" + manifold_out_file_name + ")", debug_string_out)
-        return hle
-    elif args.manifold_learner == 'UMAP':
-        md = float(args.umap_min_dist)
-        hle = umap.UMAP(
-            random_state=0,
-            metric=args.umap_metric,
-            n_components=args.umap_dim,
-            n_neighbors=args.umap_neighbors,
-            min_dist=md).fit_transform(hidden_representation)
-    elif args.manifold_learner == 'LLE':
-        hle = LocallyLinearEmbedding(
-            n_components=args.umap_dim,
-            n_neighbors=args.umap_neighbors).fit_transform(hidden_representation)
-    elif args.manifold_learner == 'tSNE':
-        hle = TSNE(
-            n_components=args.umap_dim,
-            random_state=0,
-            verbose=0).fit_transform(hidden_representation)
-    elif args.manifold_learner == 'isomap':
-        hle = Isomap(
-            n_components=args.umap_dim,
-            n_neighbors=5,
-        ).fit_transform(hidden_representation)
-    debug_string_out = funcH.print_and_add("Time to learn manifold: " + str(time() - learn_time), debug_string_out)
-    np.save(manifold_out_file_name, hle, allow_pickle=True)
-    debug_string_out = funcH.print_and_add("Manifold saved(" + manifold_out_file_name + ")", debug_string_out)
-    return hle
-def n_run_cluster(args, hle):
+    debug_string_out.append(dbg_str)
+    return manifold_feats
+
+def n_run_cluster(hle, n_clusters, cluster_func_name='GMM'):
     global debug_string_out
-    debug_string_out = funcH.print_and_add("Clustering(" + args.cluster + ")", debug_string_out)
+    debug_string_out = funcH.print_and_add("Clustering(" + cluster_func_name + ")" + str(datetime.datetime.now()), debug_string_out)
     cluster_time = time()
-    if args.cluster == 'GMM':
-        gmm = mixture.GaussianMixture(
-            covariance_type='full',
-            n_components=args.n_clusters,
-            random_state=0)
-        gmm.fit(hle)
-        y_pred_prob = gmm.predict_proba(hle)
-        y_pred = y_pred_prob.argmax(1)
-    elif args.cluster == 'KM':
-        km = KMeans(
-            init='k-means++',
-            n_clusters=args.n_clusters,
-            random_state=0,
-            n_init=20)
-        y_pred = km.fit_predict(hle)
-    elif args.cluster == 'HDBSCAN':
-        clusterer = hdbscan.HDBSCAN()
-        clusterer.fit(hle)
-        y_pred = clusterer.labels_
-    elif args.cluster == 'SC':
-        sc = SpectralClustering(
-            n_clusters=args.n_clusters,
-            random_state=0,
-            affinity='nearest_neighbors')
-        y_pred = sc.fit_predict(hle)
-    debug_string_out = funcH.print_and_add("Time to cluster: " + str(time() - cluster_time), debug_string_out)
+    y_pred, kluster_centroids = Clusterer(cluster_model=cluster_func_name, n_clusters=n_clusters).fit_predict(hle, post_analyze_distribution=True, verbose=1)
+    debug_string_out = funcH.print_and_add("Time to cluster: " + str(funcH.getElapsedTimeFormatted(time() - cluster_time)), debug_string_out)
     return y_pred
-def n_eval_result(definition_string, pngnameadd, args, hle, y, y_pred, label_names):
+def n_eval_result(hle, y, y_pred, label_names, cluster_func_name, clusters_count, dataset_name, definition_string, pngnameadd, experiment_names_and_folders, optional_params=None, visualize=False):
     global debug_string_out
     y_pred = np.asarray(y_pred)
     # y_pred = y_pred.reshape(len(y_pred), )
     y = np.asarray(y)
     # y = y.reshape(len(y), )
-    if args.cluster == 'HDBSCAN':
-        debug_string_out = funcH.print_and_add("removed sample count(" + str(np.sum(y_pred==-1)) + ")", debug_string_out)
-        debug_string_out = funcH.print_and_add("cluster_count(" + str(len(np.unique(y_pred))) + ")", debug_string_out)
-        y = y[y_pred!=-1]
-        y_pred = y_pred[y_pred!=-1]
+    manifold_learner = funcH.get_attribute(optional_params, "manifold_learner", default_type=str, default_val='UMAP')
 
-    _confMat, kluster2Classes, kr_pdf, weightedPurity, cnmxh_perc = funcH.countPredictionsForConfusionMat(y, y_pred)
+    kluster_centroids = funcH.get_cluster_centroids(hle, y_pred, kluster_centers=None, verbose=0)
+    _confMat, kluster2Classes, kr_pdf, weightedPurity, cnmxh_perc = funcH.countPredictionsForConfusionMat(y, y_pred, centroid_info_pdf=kluster_centroids)
     sampleCount = np.sum(np.sum(_confMat))
     acc_doga = 100 * np.sum(np.diag(_confMat)) / sampleCount
     acc = np.round(cluster_acc(y, y_pred), 5)
     nmi = np.round(metrics.normalized_mutual_info_score(y, y_pred), 5)
     ari = np.round(metrics.adjusted_rand_score(y, y_pred), 5)
-    debug_string_out = funcH.print_and_add(definition_string + "-" + args.dataset + " | " + args.manifold_learner +
-          " on autoencoded embedding with " + args.cluster + " - N2D", debug_string_out)
+    debug_string_out = funcH.print_and_add(definition_string + "-" + dataset_name + " | " + manifold_learner +
+          " on autoencoded embedding with " + cluster_func_name + " - N2D", debug_string_out)
     debug_string_out = funcH.print_and_add("acc_doga(%6.3f),acc(%6.3f),nmi(%6.3f),ari(%6.3f)" % (acc_doga, acc, nmi, ari), debug_string_out)
-    if args.visualize:
+    if visualize:
         try:
-            n2d_plot(hle, y, args, 'n2d'+pngnameadd, label_names)
+            n2d_plot(hle, y, clusters_count=clusters_count, plot_id='n2d'+pngnameadd,
+                     file_name_plot_fig_full=experiment_names_and_folders["file_name_plot_fig_full"],
+                     file_name_plot_csv_full=experiment_names_and_folders["file_name_plot_csv_full"],
+                     label_names=label_names)
             y_pred_viz, _, _ = best_cluster_fit(y, y_pred)
-            n2d_plot(hle, y_pred_viz, args, 'n2d-predicted'+pngnameadd, label_names)
+            n2d_plot(hle, y_pred_viz, clusters_count=clusters_count, plot_id='n2d-predicted'+pngnameadd,
+                     file_name_plot_fig_full=experiment_names_and_folders["file_name_plot_fig_full"],
+                     file_name_plot_csv_full=experiment_names_and_folders["file_name_plot_csv_full"],
+                     label_names=label_names)
         except:
             debug_string_out = funcH.print_and_add("could not visualize", debug_string_out)
     return y_pred, acc, nmi, ari, acc_doga
 
 # args.experiment_names_and_folders - no need to adopt
-def cluster_manifold_in_embedding(hl, y, args, label_names=None):
+def cluster_manifold_in_embedding(hl, y, cluster_func_name, clusters_count, dataset_name, experiment_names_and_folders, label_names=None, optional_params=None):
     global debug_string_out
     debug_string_out = funcH.print_and_add('=' * 80, debug_string_out)
-    y_pred_hl = n_run_cluster(args, hl)
-    y_pred_hl, acc_hl, nmi_hl, ari_hl, acc_hl_dg = n_eval_result("if no manifold stuff", '-nm', args, hl, y, y_pred_hl, label_names)
-    saveToFileName = os.path.join(args.experiment_names_and_folders["folder_experiment"], 'data_' + args.experiment_names_and_folders["exp_extended"] + '_before.npz')
-    np.savez(saveToFileName, featVec=hl, labels=y, preds=y_pred_hl, label_names=label_names, acc=acc_hl_dg)
+
+    umap_dim = funcH.get_attribute(optional_params, "umap_dim", default_type=int, default_val=clusters_count)
+    manifold_learner = funcH.get_attribute(optional_params, "manifold_learner", default_type=str, default_val="UMAP")
+
+    funcH.add_attribute(optional_params, "umap_min_dist", funcH.get_attribute(optional_params, "umap_min_dist", default_type=float, default_val=0.0))
+    funcH.add_attribute(optional_params, "umap_metric", funcH.get_attribute(optional_params, "umap_metric", default_type=str, default_val='euclidean'))
+    funcH.add_attribute(optional_params, "umap_neighbors", funcH.get_attribute(optional_params, "umap_neighbors", default_type=int, default_val=10))
+
+    y_pred_hl = n_run_cluster(hl, n_clusters=clusters_count, cluster_func_name=cluster_func_name)
+    y_pred_hl, acc_hl, nmi_hl, ari_hl, acc_hl_dg = \
+        n_eval_result(hl, y, y_pred_hl, label_names, cluster_func_name, clusters_count,
+                      dataset_name, definition_string="if no manifold stuff",
+                      pngnameadd='-nm', experiment_names_and_folders=experiment_names_and_folders,
+                      optional_params=None, visualize=False)
+    np.savez(experiment_names_and_folders["file_name_data_before_manifold"], featVec=hl, labels=y, preds=y_pred_hl, label_names=label_names, acc=acc_hl_dg)
     debug_string_out = funcH.print_and_add('-' * 40, debug_string_out)
     _, silhouette_values_hl = funcH.calc_silhouette_params(hl, y_pred_hl)
 
     # find manifold on autoencoded embedding
-    hle = n_learn_manifold(args, hl)
+    hle = n_learn_manifold(hl, embedding_dim=umap_dim, manifold_learner=manifold_learner,
+                           manifold_out_file_name=experiment_names_and_folders["file_name_umap_data_full"],
+                           optional_params=optional_params)
     # clustering on new manifold of autoencoded embedding
-    y_pred_hle = n_run_cluster(args, hle)
-    y_pred_hle, acc, nmi, ari, acc_dg = n_eval_result("hle", '-hle', args, hle, y, y_pred_hle, label_names)
-    saveToFileName = os.path.join(args.experiment_names_and_folders["folder_experiment"], 'data_' + args.experiment_names_and_folders["exp_extended"] + '_after.npz')
+    y_pred_hle = n_run_cluster(hle, n_clusters=clusters_count, cluster_func_name=cluster_func_name)
+    y_pred_hle, acc, nmi, ari, acc_dg = \
+        n_eval_result(hle, y, y_pred_hle, label_names, cluster_func_name, clusters_count,
+                      dataset_name, definition_string="after manifold stuff",
+                      pngnameadd='-hle', experiment_names_and_folders=experiment_names_and_folders,
+                      optional_params=None, visualize=False)
+    saveToFileName = experiment_names_and_folders["file_name_data_after_manifold"]
     np.savez(saveToFileName, featVec=hle, labels=y, preds=y_pred_hle, label_names=label_names, acc=acc_dg)
     debug_string_out = funcH.print_and_add('=' * 80, debug_string_out)
     _, silhouette_values_hle = funcH.calc_silhouette_params(hle, y_pred_hle)
@@ -314,29 +180,6 @@ def cluster_acc(y_true, y_pred):
     except:
         retval = sum([w[ind[0][i], ind[1][i]] for i in range(len(ind[0]))]) * 1.0 / y_pred.size
     return retval
-
-# args.experiment_names_and_folders - adopted
-def n2d_plot(x, y, args, plot_id, label_names=None):
-    viz_df = pd.DataFrame(data=x[:5000])
-    viz_df['Label'] = y[:5000]
-    if label_names is not None:
-        viz_df['Label'] = viz_df['Label'].map(label_names)
-
-    viz_df.to_csv(args.experiment_names_and_folders["file_name_plot_csv_full"])
-    plt.subplots(figsize=(8, 5))
-    sns.scatterplot(x=0, y=1, hue='Label', legend='full', hue_order=sorted(viz_df['Label']),
-                    palette=sns.color_palette("hls", n_colors=args.n_clusters),
-                    alpha=.5,
-                    data=viz_df)
-    l = plt.legend(bbox_to_anchor=(-.1, 1.00, 1.1, .5), loc="lower left", markerfirst=True,
-                   mode="expand", borderaxespad=0, ncol=args.n_clusters + 1, handletextpad=0.01, )
-
-    l.texts[0].set_text("")
-    plt.ylabel("")
-    plt.xlabel("")
-    plt.tight_layout()
-    plt.savefig(args.experiment_names_and_folders["file_name_plot_fig_full"].replace("<plot_id>", str(plot_id)), dpi=300)
-    plt.clf()
 
 # args.experiment_names_and_folders - no need to adopt
 def _autoencoder(dims, act='relu'):
@@ -411,7 +254,7 @@ def n_run_autoencode(x, args):
         ae.fit(x, x, batch_size=args2.batch_size, epochs=args2.pretrain_epochs, verbose=1)
         pretrain_time = time() - pretrain_time
         ae.save_weights(weights_file)
-        debug_string_out = funcH.print_and_add("Time to train the ae: " + str(pretrain_time), debug_string_out)
+        debug_string_out = funcH.print_and_add("Time to train the ae: " + str(funcH.getElapsedTimeFormatted(pretrain_time)), debug_string_out)
 
     with open(args.experiment_names_and_folders["file_name_ae_params_text_full"], 'w') as f:
         f.write("\n".join([str(k)+":"+str(args2.__dict__[k]) for k in args2.__dict__]))
@@ -472,7 +315,6 @@ def get_args(argv):
     parser.add_argument('--umap_min_dist', default="0.00", type=str)
     parser.add_argument('--umap_metric', default='euclidean', type=str)
     parser.add_argument('--cluster', default='GMM', type=str)
-    parser.add_argument('--eval_all', default=False, action='store_true')
     parser.add_argument('--manifold_learner', default='UMAP', type=str)
     parser.add_argument('--visualize', default=False, type=bool)
     args = funcH._parse_args(parser, argv, print_args=True)
@@ -499,6 +341,8 @@ def get_args(argv):
     experiment_names_and_folders["file_name_clusters_before_manifold_full"] = os.path.join(experiment_names_and_folders["folder_experiment"], 'clusters_before_manifold-' + experiment_names_and_folders["exp_extended"] + "_" + experiment_names_and_folders["exp_date_str"] + '.txt')
     experiment_names_and_folders["file_name_debug_string_out_full"] = os.path.join(experiment_names_and_folders["folder_experiment"], 'debug_string_out-' + experiment_names_and_folders["exp_extended"] + "_" + experiment_names_and_folders["exp_date_str"] + '.txt')
     experiment_names_and_folders["file_name_result_csv_file_full"] = os.path.join(args.experiments_folder_base, 'results.csv')
+    experiment_names_and_folders["file_name_data_before_manifold"] = os.path.join(experiment_names_and_folders["folder_experiment"], 'data_' + experiment_names_and_folders["exp_extended"] + '_before.npz')
+    experiment_names_and_folders["file_name_data_after_manifold"] = os.path.join(experiment_names_and_folders["folder_experiment"], 'data_' + experiment_names_and_folders["exp_extended"] + '_after.npz')
 
     args.experiment_names_and_folders = experiment_names_and_folders
 
@@ -581,20 +425,22 @@ def main(argv):
     x, y, label_names = n_load_data(args.dataset)
     hl = n_run_autoencode(x, args)
 
-    if args.eval_all:
-        eval_other_methods(x, y, args, label_names)
-
-    results_dict = cluster_manifold_in_embedding(hl, y, args, label_names)
+    results_dict = cluster_manifold_in_embedding(hl, y, cluster_func_name=args.cluster,
+                                                 clusters_count=args.n_clusters,
+                                                 dataset_name=args.dataset,
+                                                 experiment_names_and_folders=args.experiment_names_and_folders,
+                                                 label_names=label_names, optional_params=None)
     np.savetxt(args.experiment_names_and_folders["file_name_clusters_after_manifold_full"], results_dict["pred_after_manifold"], fmt='%i', delimiter=',')
     np.savetxt(args.experiment_names_and_folders["file_name_clusters_before_manifold_full"], results_dict["pred_before_manifold"], fmt='%i', delimiter=',')
 
     funcH.analyze_silhouette_values(results_dict["silhouette_values_before"], results_dict["pred_before_manifold"], y)
     funcH.analyze_silhouette_values(results_dict["silhouette_values_after"], results_dict["pred_after_manifold"], y)
 
+    append_to_results(args, results_dict)
+
     with open(debug_string_out_file, 'w') as f:
         f.write("\n".join(debug_string_out))
 
-    append_to_results(args, results_dict)
 
 if __name__ == '__main__':
     # n2d.main("n2d.py", "mnist", "0", "--ae_weights", "mnist-1000-ae_weights.h5","--umap_dim", "10", "--umap_neighbors", "20", "--manifold_learner", "UMAP", "--save_dir", "mnist-n2d", "--umap_min_dist", "0.00")

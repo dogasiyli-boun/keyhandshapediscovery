@@ -13,6 +13,7 @@ from torchvision import transforms
 
 import helperFuncs as funcH
 from dataset import HandShapeDataset
+from clusteringWrapper import Clusterer
 
 # Freeze layers
 def freeze_layers(model, feature_extracting):
@@ -260,7 +261,14 @@ def initSomeVals(params_dict):
     return input_initial_resize, input_size, batch_size, num_workers
 
 def calc_stats_on_iterate(featTrInit, labelsTrInit, predictionsTr, k, clusterModel):
-    nmi_lab, predClusters, nmi_lab_nonzero = funcH.get_nmi_deepCluster(featTrInit, labelsTrInit, k, clusterModel=clusterModel)
+    #  nmi_score, predictedKlusters, nmi_score_nonzero =
+    #   def get_nmi_deepCluster(featVec, labVec, n_clusters, clusterModel='KMeans', normMode='', applyPca=False)
+    featTrInit = np.array(featTrInit)
+    predClusters, _ = Clusterer(cluster_model=clusterModel, n_clusters=k).fit_predict(X=featTrInit, post_analyze_distribution=True, verbose=1)
+    nmi_lab = funcH.get_nmi_only(labelsTrInit, predClusters, average_method='geometric')
+    labVec_nonzero, predictedKlusters_nonzero = funcH.getNonZeroLabels(labelsTrInit, predClusters)
+    nmi_lab_nonzero = funcH.get_nmi_only(labVec_nonzero, predictedKlusters_nonzero, average_method='geometric')
+
     acc_lab, _ = funcH.accFromKlusterLabels(labelsTrInit, predClusters, removeZeroLabels=False)
     acc_lab_nonzero, _ = funcH.accFromKlusterLabels(labelsTrInit, predClusters, removeZeroLabels=True)
     nmi_pred = funcH.get_nmi_only(predictionsTr, predClusters, average_method='geometric')

@@ -18,6 +18,7 @@ from loss_functions import Sparse_Loss_Dim as Loss_Dim
 from loss_functions import Sparse_Loss_CrossEntropy as Loss_CE
 
 import helperFuncs as funcH
+from clusteringWrapper import Clusterer
 
 class SigmoidModule(nn.Module):
     '''
@@ -1289,9 +1290,9 @@ class Conv_AE_NestedNamespace(nn.Module):
             if k == 'bottleneck_kmeans':
                 print('bottleneck_kmeans')
                 if str(sub_data_identifier).__contains__("tr"):
-                    pred_vec, kc_tr, _trained_model_ = funcH.clusterData(bottleneck_vec, n_clusters=bottleneck_vec.shape[1],
-                                                                         normMode='', applyPca=False, clusterModel='KMeans',
-                                                                         verbose=0)
+                    _trained_model_ = Clusterer(cluster_model='KMeans', n_clusters=bottleneck_vec.shape[1]).fit(X=bottleneck_vec, post_analyze_distribution=True, verbose=1)
+                    pred_vec = _trained_model_.predictedKlusters
+                    kc_tr = _trained_model_.kluster_centers
                     self.kmeans_params = {
                         "kc_tr": kc_tr,
                         "_trained_model_": _trained_model_
@@ -1299,9 +1300,7 @@ class Conv_AE_NestedNamespace(nn.Module):
                 else:
                     df = pd_df(bottleneck_vec)
                     pred_vec = self.kmeans_params["_trained_model_"].predict(df)
-                    kc_tr = self.kmeans_params["kc_tr"]
-
-                centroid_info_pdf = funcH.get_cluster_centroids(bottleneck_vec, pred_vec, kluster_centers=kc_tr, verbose=0)
+                centroid_info_pdf = self.kmeans_params["_trained_model_"].kluster_centroids
             if k == 'bottleneck_act':
                 print('bottleneck_act')
                 pred_vec = np.argmax(bottleneck_vec.T, axis=0).T.squeeze()

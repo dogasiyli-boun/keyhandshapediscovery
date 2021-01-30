@@ -12,6 +12,7 @@ import time
 import datetime
 from sklearn.metrics import confusion_matrix
 from collections import Counter
+from clusteringWrapper import Clusterer
 
 from torch.utils.data import DataLoader
 import csv
@@ -207,7 +208,7 @@ def runClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, numOfSign
                 t = time.time()
                 print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                 print(featsFileName, 'clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ') running.')
-                predClusters, _, _ = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, normMode='', applyPca=False, clusterModel=clusterModel)
+                predClusters, _ = Clusterer(cluster_model=clusterModel, n_clusters=curClustCnt).fit_predict(X=featSet, post_analyze_distribution=True, verbose=1)
                 print('elapsedTime(', time.time() - t, ')')
 
                 nmi_cur, acc_cur = funcH.get_NMI_Acc(labels_all, predClusters)
@@ -291,11 +292,9 @@ def runClusteringOnFeatSet_Aug2020(ft, labels_all, lb_map, dataToUse, numOfSigns
                 t = time.time()
                 print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                 print(featsName, 'clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ') running.')
-                predClusters, kluster_centers, _ = funcH.clusterData(featVec=ft, n_clusters=curClustCnt, normMode='', applyPca=False, clusterModel=clusterModel)
+                predClusters, centroid_info_pdf = Clusterer(cluster_model=clusterModel, n_clusters=curClustCnt).fit_predict(X=ft, post_analyze_distribution=True, verbose=1)
                 print('elapsedTime(', funcH.getElapsedTimeFormatted(time.time() - t), ')')
                 #np.savez("/home/doga/DataFolder/bdResults/baseResults/prdclu.npz", predClusters=predClusters, kluster_centers=kluster_centers)
-
-                centroid_info_pdf = funcH.get_cluster_centroids(ft, predClusters, kluster_centers, verbose=0)
 
                 nmi_cur = 100*funcH.get_nmi_only(labels_all, predClusters)
                 _confMat_mapped_preds_center, _, kr_pdf_center, weightedPurity_center, cnmxh_perc = funcH.countPredictionsForConfusionMat(labels_all, predClusters, labelNames=class_names, centroid_info_pdf=centroid_info_pdf, verbose=0)
@@ -383,7 +382,7 @@ def runOPTICSClusteringOnFeatSet(data_dir, results_dir, dataToUse, normMode, pca
                 t = time.time()
                 print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                 print(featsFileName, 'clusterModel(', clusterModel, '), clusterCount(', curClustCnt, ') running.')
-                predClusters, _, _ = funcH.clusterData(featVec=featSet, n_clusters=curClustCnt, norMMode='', applyPca=False, clusterModel=clusterModel)
+                predClusters, _ = Clusterer(cluster_model=clusterModel, n_clusters=curClustCnt).fit_predict(X=featSet, post_analyze_distribution=True, verbose=1)
                 print('elapsedTime(', time.time() - t, ')')
                 np.savez(predictionFileNameFull, labels_all, predClusters)
             else:

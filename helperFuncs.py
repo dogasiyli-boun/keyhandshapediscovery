@@ -215,6 +215,25 @@ def get_attribute_from_nested_namespace(_nest_ns, attribute_string, default_type
         return getattr(_nest_ns, attribute_string)
     return default_val
 
+def get_attribute(_nest_ns_or_dict, attribute_string, default_type=None, default_val=None):
+    if _nest_ns_or_dict is None:
+        return default_val
+    if isinstance(_nest_ns_or_dict, dict):
+        return get_attribute_from_dict(_nest_ns_or_dict, attribute_string, default_type=default_type, default_val=default_val)
+    try:
+        return get_attribute_from_nested_namespace(_nest_ns_or_dict, attribute_string, default_type=default_type, default_val=default_val)
+    except:
+        os.error("_nest_ns_or_dict passed into function is not either nested namespace or a dictionary")
+
+def add_attribute(_nest_ns_or_dict, attribute_string, value):
+    if isinstance(_nest_ns_or_dict, dict):
+        _nest_ns_or_dict[attribute_string] = value
+    try:
+        setattr(_nest_ns_or_dict, attribute_string, value)
+    except:
+        os.error("_nest_ns_or_dict passed into function is not either nested namespace or a dictionary")
+    return _nest_ns_or_dict
+
 def appendZerosSampleToConfMat(_confMat, toEnd=True, classNames=None):
     # a = np.array([[2, 1, 0, 0],
     #               [1, 2, 0, 0],
@@ -553,15 +572,6 @@ def get_NMI_Acc(non_zero_labels, non_zero_predictions, average_method='geometric
     acc_cur, _, _ = getAccFromConf(non_zero_labels, non_zero_predictions)
     return nmi_cur, acc_cur
 
-def get_nmi_deepCluster(featVec, labVec, n_clusters, clusterModel='KMeans', normMode='', applyPca=True):
-    predictedKlusters, _, _ = clusterData(featVec, n_clusters,
-                                    applyPca=applyPca, normMode=normMode,
-                                    clusterModel=clusterModel)
-    nmi_score = get_nmi_only(labVec, predictedKlusters, average_method='geometric')
-    labVec_nonzero, predictedKlusters_nonzero = getNonZeroLabels(labVec, predictedKlusters)
-    nmi_score_nonzero = get_nmi_only(labVec_nonzero, predictedKlusters_nonzero, average_method='geometric')
-    return nmi_score, predictedKlusters, nmi_score_nonzero
-
 def applyMatTransform(featVec, applyPca=True, whiten=True, normMode='', verbose=0):
     exp_var_rat = []
     if applyPca:
@@ -658,78 +668,6 @@ def get_cluster_centroids(ft, predClusters, kluster_centers=None, verbose=0):
     centroid_df = pd.DataFrame(centroid_info_mat, columns=['klusterID', 'sampleID', 'distanceEuc'])
     centroid_df = centroid_df.astype({'klusterID': int, 'sampleID': int, 'distanceEuc': float})
     return centroid_df
-
-def clusterData(featVec, n_clusters, normMode='', applyPca=True, clusterModel='KMeans', verbose=1):
-    featVec, exp_var_rat = applyMatTransform(np.array(featVec), applyPca=applyPca, normMode=normMode)
-    df = pd_df(featVec)
-
-    curTol = 0.0001 if clusterModel == 'KMeans' else 0.01
-    max_iter = 300 if clusterModel == 'KMeans' else 200
-
-    numOf_1_sample_bins = 1
-    unique_clust_cnt = 1
-    expCnt = 0
-    while (unique_clust_cnt == 1 or numOf_1_sample_bins-expCnt > 0) and expCnt < 5:
-        t = time.time()
-        if expCnt > 0:
-            if numOf_1_sample_bins > 0:
-                print("running ", clusterModel, " for the ", str(expCnt), " time due to numOf_1_sample_bins(", str(numOf_1_sample_bins), ")")
-            if unique_clust_cnt == 1:
-                print("running ", clusterModel, " for the ", str(expCnt), " time due to unique_clust_cnt==1")
-        if verbose > 0:
-            print('Clustering the featVec(', featVec.shape, ') with n_clusters(', str(n_clusters), ') and model = ',
-              clusterModel, ", curTol(", str(curTol), "), max_iter(", str(max_iter), "), at ",
-              datetime.datetime.now().strftime("%H:%M:%S"))
-        kluster_centers = None
-
-        _trained_model_ = None  # TODO implement this for models other than kmeans
-        if clusterModel == 'KMeans':
-                #default vals for kmeans --> max_iter=300, 1e-4
-                kmeans_result = KMeans(n_clusters=n_clusters, n_init=5, tol=curTol, max_iter=max_iter).fit(df)
-                _trained_model_ = kmeans_result
-                predictedKlusters = kmeans_result.labels_.astype(float)
-                kluster_centers = kmeans_result.cluster_centers_.astype(float)
-        elif clusterModel == 'GMM_full':
-            # default vals for gmm --> max_iter=100, 1e-3
-            predictedKlusters = GaussianMixture(n_components=n_clusters, covariance_type='full', tol=curTol, max_iter=max_iter).fit_predict(df)
-        elif clusterModel == 'GMM_diag':
-            predictedKlusters = GaussianMixture(n_components=n_clusters, covariance_type='diag', tol=curTol, max_iter=max_iter).fit_predict(df)
-        elif clusterModel == 'Spectral':
-            sc = SpectralClustering(n_clusters=n_clusters, affinity='rbf', random_state=0)
-            sc_clustering = sc.fit(featVec)
-            predictedKlusters = sc_clustering.labels_
-
-
-        numOf_1_sample_bins, histSortedInv = analyzeClusterDistribution(predictedKlusters, n_clusters, verbose=0)
-        unique_clust_cnt = len(np.unique(predictedKlusters))
-        curTol = curTol * 10
-        max_iter = max_iter + 50
-        expCnt = expCnt + 1
-        elapsed = time.time() - t
-        if verbose > 0:
-            print('Clustering done in (', getElapsedTimeFormatted(elapsed), '), ended at ', datetime.datetime.now().strftime("%H:%M:%S"))
-    removeLastLine()
-    if verbose > 0:
-        print('Clustering completed with (', np.unique(predictedKlusters).shape, ') clusters,  expCnt(', str(expCnt), ')')
-    # elif 'OPTICS' in clusterModel:
-    #     N = featVec.shape[0]
-    #     min_cluster_size = int(np.ceil(N / (n_clusters * 4)))
-    #     pars = clusterModel.split('_')  # 'OPTICS_hamming_dbscan', 'OPTICS_russellrao_xi'
-    #     #  metricsAvail = np.sort(['braycurtis', 'canberra', 'chebyshev', 'correlation', 'dice', 'hamming', 'jaccard', 'kulsinski',
-    #     #                'mahalanobis', 'minkowski', 'rogerstanimoto', 'russellrao', 'seuclidean', 'sokalmichener',
-    #     #                'sokalsneath', 'sqeuclidean', 'yule',
-    #     #                'cityblock', 'cosine', 'euclidean', 'l1', 'l2', 'manhattan'])
-    #     #  cluster_methods_avail = ['xi', 'dbscan']
-    #     clust = ClusterOPT(min_samples=50, xi=.05, min_cluster_size=min_cluster_size, metric=pars[1], cluster_method=pars[2])
-    #     clust.fit(featVec)
-    #     predictedKlusters = cluster_optics_dbscan(reachability=clust.reachability_,
-    #                                                core_distances=clust.core_distances_,
-    #                                                ordering=clust.ordering_, eps=0.5)
-    #     n1 = np.unique(predictedKlusters)
-    #     print(clusterModel, ' found ', str(n1), ' uniq clusters')
-    #     predictedKlusters = predictedKlusters + 1
-
-    return np.asarray(predictedKlusters, dtype=int), kluster_centers, _trained_model_
 
 def backtrack(D, max_x, max_y):
     #https://github.com/gulzi/DTWpy/blob/master/dtwpy.py
