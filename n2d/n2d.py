@@ -16,7 +16,6 @@ from keras.layers import Dense, Input
 from keras.models import Model
 from sklearn import metrics
 from scipy.optimize import linear_sum_assignment as linear_assignment
-from time import time
 import helperFuncs as funcH
 import projRelatedHelperFuncs as prHF
 from manifoldLearner import ManifoldLearner
@@ -59,16 +58,23 @@ def n_learn_manifold(hidden_representation, embedding_dim, manifold_learner="UMA
                           min_dist=min_dist, distance_metric=distance_metric, num_of_neighbours=num_of_neighbours)
     manifold_feats, dbg_str = mfl.learn_manifold(X=hidden_representation, manifold_out_file_name=manifold_out_file_name)
     global debug_string_out
-    debug_string_out.append(dbg_str)
+    debug_string_out = debug_string_out + dbg_str
     return manifold_feats
 
-def n_run_cluster(hle, n_clusters, cluster_func_name='GMM'):
+def n_run_cluster(hle, n_clusters, cluster_func_name='GMM', experiment_names_and_folders=None, file_name_add=""):
     global debug_string_out
     debug_string_out = funcH.print_and_add("Clustering(" + cluster_func_name + ")" + str(datetime.datetime.now()), debug_string_out)
-    cluster_time = time()
-    y_pred, kluster_centroids = Clusterer(cluster_model=cluster_func_name, n_clusters=n_clusters).fit_predict(hle, post_analyze_distribution=True, verbose=1)
-    debug_string_out = funcH.print_and_add("Time to cluster: " + str(funcH.getElapsedTimeFormatted(time() - cluster_time)), debug_string_out)
-    return y_pred
+    t = funcH.Timer()
+    if experiment_names_and_folders is not None:
+        file_name_cluster_obj = experiment_names_and_folders["file_name_cluster_obj"].replace("<bef_aft>", file_name_add)
+        if os.path.isfile(file_name_cluster_obj):
+            cluster_obj = funcH.load_dict_fr_file(file_name_cluster_obj)
+        else:
+            cluster_obj = Clusterer(cluster_model=cluster_func_name, n_clusters=n_clusters, max_try_cnt=1).fit(hle, post_analyze_distribution=True, verbose=1)
+            funcH.dump_dict_to_file(file_name_cluster_obj, cluster_obj)
+    y_pred, kluster_centroids = cluster_obj.predict(hle, post_analyze_distribution=True, verbose=1)
+    debug_string_out = funcH.print_and_add("Time to cluster: " + t.get_elapsed_time(), debug_string_out)
+    return y_pred, kluster_centroids
 def n_eval_result(hle, y, y_pred, label_names, cluster_func_name, clusters_count, dataset_name, definition_string, pngnameadd, experiment_names_and_folders, optional_params=None, visualize=False):
     global debug_string_out
     y_pred = np.asarray(y_pred)
@@ -114,22 +120,32 @@ def cluster_manifold_in_embedding(hl, y, cluster_func_name, clusters_count, data
     funcH.add_attribute(optional_params, "umap_metric", funcH.get_attribute(optional_params, "umap_metric", default_type=str, default_val='euclidean'))
     funcH.add_attribute(optional_params, "umap_neighbors", funcH.get_attribute(optional_params, "umap_neighbors", default_type=int, default_val=10))
 
-    y_pred_hl = n_run_cluster(hl, n_clusters=clusters_count, cluster_func_name=cluster_func_name)
-    y_pred_hl, acc_hl, nmi_hl, ari_hl, acc_hl_dg = \
-        n_eval_result(hl, y, y_pred_hl, label_names, cluster_func_name, clusters_count,
-                      dataset_name, definition_string="if no manifold stuff",
-                      pngnameadd='-nm', experiment_names_and_folders=experiment_names_and_folders,
-                      optional_params=None, visualize=False)
+    y_pred_hl, kluster_centroids_before = n_run_cluster(hl, n_clusters=clusters_count, cluster_func_name=cluster_func_name, experiment_names_and_folders=experiment_names_and_folders, file_name_add="-nm")
+    y_pred_hl, acc_hl, nmi_hl, ari_hl, acc_hl_dg = n_eval_result(hl, y, y_pred_hl, label_names,
+                                                                 cluster_func_name, clusters_count,
+                                                                 dataset_name, definition_string="if no manifold stuff",
+                                                                 pngnameadd='-nm',
+                                                                 experiment_names_and_folders=experiment_names_and_folders,
+                                                                 optional_params=None, visualize=False)
     np.savez(experiment_names_and_folders["file_name_data_before_manifold"], featVec=hl, labels=y, preds=y_pred_hl, label_names=label_names, acc=acc_hl_dg)
     debug_string_out = funcH.print_and_add('-' * 40, debug_string_out)
-    _, silhouette_values_hl = funcH.calc_silhouette_params(hl, y_pred_hl)
+
+    file_name_silhouette_results = experiment_names_and_folders["file_name_silhouette_results"].replace("<bef_aft>", "before")
+    if os.path.isfile(file_name_silhouette_results):
+        print("loading silhouette_values from ", file_name_silhouette_results)
+        silhouette_values_hl = np.load(file_name_silhouette_results, allow_pickle=True)
+    else:
+        _, silhouette_values_hl = funcH.calc_silhouette_params(hl, y_pred_hl)
+        print("saving silhouette_values to ", file_name_silhouette_results)
+        np.save(file_name_silhouette_results, silhouette_values_hl, allow_pickle=True)
+
 
     # find manifold on autoencoded embedding
     hle = n_learn_manifold(hl, embedding_dim=umap_dim, manifold_learner=manifold_learner,
                            manifold_out_file_name=experiment_names_and_folders["file_name_umap_data_full"],
                            optional_params=optional_params)
     # clustering on new manifold of autoencoded embedding
-    y_pred_hle = n_run_cluster(hle, n_clusters=clusters_count, cluster_func_name=cluster_func_name)
+    y_pred_hle, kluster_centroids_after = n_run_cluster(hle, n_clusters=clusters_count, cluster_func_name=cluster_func_name, experiment_names_and_folders=experiment_names_and_folders, file_name_add="-hle")
     y_pred_hle, acc, nmi, ari, acc_dg = \
         n_eval_result(hle, y, y_pred_hle, label_names, cluster_func_name, clusters_count,
                       dataset_name, definition_string="after manifold stuff",
@@ -138,7 +154,15 @@ def cluster_manifold_in_embedding(hl, y, cluster_func_name, clusters_count, data
     saveToFileName = experiment_names_and_folders["file_name_data_after_manifold"]
     np.savez(saveToFileName, featVec=hle, labels=y, preds=y_pred_hle, label_names=label_names, acc=acc_dg)
     debug_string_out = funcH.print_and_add('=' * 80, debug_string_out)
-    _, silhouette_values_hle = funcH.calc_silhouette_params(hle, y_pred_hle)
+
+    file_name_silhouette_results = experiment_names_and_folders["file_name_silhouette_results"].replace("<bef_aft>", "after")
+    if os.path.isfile(file_name_silhouette_results):
+        print("loading silhouette_values from ", file_name_silhouette_results)
+        silhouette_values_hle = np.load(file_name_silhouette_results, allow_pickle=True)
+    else:
+        _, silhouette_values_hle = funcH.calc_silhouette_params(hle, y_pred_hle)
+        print("saving silhouette_values to ", file_name_silhouette_results)
+        np.save(file_name_silhouette_results, silhouette_values_hle, allow_pickle=True)
 
     results_dict = {
         "acc_before_manifold": acc_hl,
@@ -153,6 +177,8 @@ def cluster_manifold_in_embedding(hl, y, cluster_func_name, clusters_count, data
         "pred_after_manifold": y_pred_hle,
         "silhouette_values_before": silhouette_values_hl,
         "silhouette_values_after": silhouette_values_hle,
+        "kluster_centroids_before": kluster_centroids_before,
+        "kluster_centroids_after": kluster_centroids_after,
     }
     return results_dict
 
@@ -242,7 +268,7 @@ def n_run_autoencode(x, args):
 
     weights_file = args.experiment_names_and_folders["file_name_ae_weights_full"]
     load_file_skip_learning = os.path.isfile(weights_file)
-    pretrain_time = time()
+    t = funcH.Timer()
 
     # Pretrain autoencoders before clustering
     if load_file_skip_learning:
@@ -252,9 +278,9 @@ def n_run_autoencode(x, args):
         optimizer = 'adam'
         ae.compile(loss='mse', optimizer=optimizer)
         ae.fit(x, x, batch_size=args2.batch_size, epochs=args2.pretrain_epochs, verbose=1)
-        pretrain_time = time() - pretrain_time
+        t.end()
         ae.save_weights(weights_file)
-        debug_string_out = funcH.print_and_add("Time to train the ae: " + str(funcH.getElapsedTimeFormatted(pretrain_time)), debug_string_out)
+        debug_string_out = funcH.print_and_add("Time to train the ae: " + t.get_elapsed_time(), debug_string_out)
 
     with open(args.experiment_names_and_folders["file_name_ae_params_text_full"], 'w') as f:
         f.write("\n".join([str(k)+":"+str(args2.__dict__[k]) for k in args2.__dict__]))
@@ -321,7 +347,7 @@ def get_args(argv):
     debug_string_out = funcH.print_and_add('-' * 80)
 
     experiment_names_and_folders = {
-        "exp_date_str": str(datetime.datetime.now().strftime("%Y%m%d_%H")).replace('-', ''),  # %M%S,
+        "exp_date_str": str(datetime.datetime.now().strftime("%Y%m%d_")).replace('-', ''),  # %M%S,
         "exp_base_str": "_".join([args.dataset, "c" + str(args.n_clusters), "e" + str(args.pretrain_epochs)]),
         "folder_umap_data": os.path.join(args.experiments_folder_base, "exported_manifolds"),
         "folder_ae_weights": os.path.join(args.experiments_folder_base, "weights"),
@@ -343,6 +369,9 @@ def get_args(argv):
     experiment_names_and_folders["file_name_result_csv_file_full"] = os.path.join(args.experiments_folder_base, 'results.csv')
     experiment_names_and_folders["file_name_data_before_manifold"] = os.path.join(experiment_names_and_folders["folder_experiment"], 'data_' + experiment_names_and_folders["exp_extended"] + '_before.npz')
     experiment_names_and_folders["file_name_data_after_manifold"] = os.path.join(experiment_names_and_folders["folder_experiment"], 'data_' + experiment_names_and_folders["exp_extended"] + '_after.npz')
+    experiment_names_and_folders["file_name_cluster_obj"] = os.path.join(experiment_names_and_folders["folder_experiment"], 'cluster_obj_' + experiment_names_and_folders["exp_extended"] + '_<bef_aft>.dictionary')
+    experiment_names_and_folders["file_name_silhouette_results"] = os.path.join(experiment_names_and_folders["folder_experiment"], 'silhouette_results_' + experiment_names_and_folders["exp_extended"] + '_<bef_aft>.npy')
+    experiment_names_and_folders["file_name_results"] = os.path.join(experiment_names_and_folders["folder_experiment"], 'results_' + experiment_names_and_folders["exp_extended"] + '.dictionary')
 
     args.experiment_names_and_folders = experiment_names_and_folders
 
@@ -425,16 +454,23 @@ def main(argv):
     x, y, label_names = n_load_data(args.dataset)
     hl = n_run_autoencode(x, args)
 
-    results_dict = cluster_manifold_in_embedding(hl, y, cluster_func_name=args.cluster,
-                                                 clusters_count=args.n_clusters,
-                                                 dataset_name=args.dataset,
-                                                 experiment_names_and_folders=args.experiment_names_and_folders,
-                                                 label_names=label_names, optional_params=None)
+    if os.path.isfile(args.experiment_names_and_folders["file_name_results"]):
+        results_dict = funcH.load_dict_fr_file(args.experiment_names_and_folders["file_name_results"], "Results")
+    else:
+        results_dict = cluster_manifold_in_embedding(hl, y, cluster_func_name=args.cluster,
+                                                     clusters_count=args.n_clusters,
+                                                     dataset_name=args.dataset,
+                                                     experiment_names_and_folders=args.experiment_names_and_folders,
+                                                     label_names=label_names, optional_params=None)
+        funcH.dump_dict_to_file(args.experiment_names_and_folders["file_name_results"], results_dict, "Results")
+
     np.savetxt(args.experiment_names_and_folders["file_name_clusters_after_manifold_full"], results_dict["pred_after_manifold"], fmt='%i', delimiter=',')
     np.savetxt(args.experiment_names_and_folders["file_name_clusters_before_manifold_full"], results_dict["pred_before_manifold"], fmt='%i', delimiter=',')
 
-    funcH.analyze_silhouette_values(results_dict["silhouette_values_before"], results_dict["pred_before_manifold"], y)
-    funcH.analyze_silhouette_values(results_dict["silhouette_values_after"], results_dict["pred_after_manifold"], y)
+    conf_plot_save_to = args.experiment_names_and_folders["file_name_plot_fig_full"].replace("<plot_id>", "conf_before")
+    funcH.analyze_silhouette_values(results_dict["silhouette_values_before"], results_dict["pred_before_manifold"], y, centroid_info_pdf=results_dict["kluster_centroids_before"], label_names=label_names, conf_plot_save_to=conf_plot_save_to)
+    conf_plot_save_to = args.experiment_names_and_folders["file_name_plot_fig_full"].replace("<plot_id>", "conf_after")
+    funcH.analyze_silhouette_values(results_dict["silhouette_values_after"], results_dict["pred_after_manifold"], y, centroid_info_pdf=results_dict["kluster_centroids_after"], label_names=label_names, conf_plot_save_to=conf_plot_save_to)
 
     append_to_results(args, results_dict)
 

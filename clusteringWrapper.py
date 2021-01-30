@@ -11,10 +11,10 @@ from os import error as os_error
 
 class Clusterer():
     #  TODO HDBSCAN should be added
-    def __init__(self, cluster_model, n_clusters, spectral_affinity='nearest_neighbors'):
+    def __init__(self, cluster_model, n_clusters, spectral_affinity='nearest_neighbors', max_try_cnt=5):
         self.cluster_model = cluster_model
         self.n_clusters = n_clusters
-        self.max_try_cnt = 5
+        self.max_try_cnt = max_try_cnt
         self.trained_model = None
         if self.cluster_model in ['KMeans', 'KMEANS', 'km', 'kmeans', 'KM']:
             self.cluster_model = "KMeans"

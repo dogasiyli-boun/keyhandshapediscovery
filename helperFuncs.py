@@ -6,18 +6,16 @@ from math import isnan as isNaN
 import tensorflow as tf
 from sklearn import metrics
 from sklearn.metrics import confusion_matrix, normalized_mutual_info_score as nmi
-from sklearn.cluster import KMeans, SpectralClustering #, OPTICS as ClusterOPT, cluster_optics_dbscan
-from sklearn.mixture import GaussianMixture
 from sklearn.decomposition import PCA
 
 from scipy.spatial.distance import cdist
+
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 from pandas import DataFrame as pd_df
 import pandas as pd
 import scipy.io
-import time
-import datetime
+
 
 from collections import Counter
 
@@ -27,23 +25,142 @@ from types import SimpleNamespace
 from sklearn.metrics import silhouette_samples, silhouette_score
 import matplotlib.cm as cm
 
-def analyze_silhouette_values(sample_silhouette_values, cluster_labels, real_labels, bin_count = 20):
-    _confMat, kluster2Classes, kr_pdf, _, _ = countPredictionsForConfusionMat(real_labels, cluster_labels)
+import pickle
+from time import time
+
+class Timer():
+    def __init__(self):
+        self.start()
+
+    def start(self):
+        self.begin = time()
+        self.over = None
+
+    def end(self):
+        self.over = time()
+
+    def get_elapsed_time(self):
+        if self.over is None:
+            return str(getElapsedTimeFormatted(time() - self.begin))
+        return str(getElapsedTimeFormatted(self.over - self.begin))
+
+    def print_elapsed_time(self, pre_string="", post_string=""):
+        print(pre_string + self.get_elapsed_time() + post_string)
+
+class Bunch(object):
+  def __init__(self, adict):
+    self.__dict__.update(adict)
+
+class NestedNamespace(SimpleNamespace):
+    def __init__(self, **kwargs):
+        super(NestedNamespace, self).__init__(**kwargs)
+        for k, v in kwargs.items():
+            if type(v) == dict:
+                setattr(self, k, NestedNamespace(**v))
+            elif type(v) == list:
+                setattr(self, k, list(map(self.map_entry, v)))
+
+    @staticmethod
+    def map_entry(e):
+        if isinstance(e, dict):
+            return NestedNamespace(**e)
+        return e
+
+#_CONF_PARAMS_ = CustomConfigParser(config_file="conf.yaml")
+class CustomConfigParser():
+    def __init__(self, config_file):
+        self.config_path = os.path.normpath(os.path.join(os.path.dirname(__file__), 'configs', config_file))
+        _, config_ext = os.path.splitext(config_file)
+        if config_ext != '.yaml':
+            os.error("couldnt retrieve info from yaml file")
+        config_dict = self._load_config_from_yaml()
+        self.parameters = NestedNamespace(**config_dict)
+
+    def _load_config_from_yaml(self):
+        config_dict = {}
+        with open(self.config_path, 'r') as f:
+            try:
+                config_dict = yaml.safe_load(f)
+            except yaml.YAMLError as exc:
+                os.error("couldnt retrieve info from yaml file")
+        return config_dict
+
+    def __getattr__(self, item):
+        return self.parameters.__getattribute__(item)
+
+def dump_dict_to_file(file_name_cluster_obj, cluster_obj, file_ident_str=""):
+    print("dumping " + file_ident_str + " to file " + file_name_cluster_obj)
+    with open(file_name_cluster_obj, 'wb') as file_name_cluster_obj:
+        pickle.dump(cluster_obj, file_name_cluster_obj)
+    print("dumped..")
+
+def load_dict_fr_file(file_name_cluster_obj, file_ident_str=""):
+    # cluster_obj = load_dict_fr_file(file_name_cluster_obj)
+    print("loading " + file_ident_str + " from file " + file_name_cluster_obj)
+    with open(file_name_cluster_obj, 'rb') as config_dictionary_file:
+        cluster_obj = pickle.load(config_dictionary_file)
+    print("loeaded..")
+    return cluster_obj
+
+def analyze_silhouette_values(sample_silhouette_values, cluster_labels, real_labels, bin_count = 20, centroid_info_pdf=None, label_names=None, conf_plot_save_to=''):
+    _confMat, kluster2Classes, kr_pdf, _, _ = countPredictionsForConfusionMat(real_labels, cluster_labels, centroid_info_pdf=centroid_info_pdf)
     sampleCount = np.sum(np.sum(_confMat))
     acc_doga_base = 100 * np.sum(np.diag(_confMat)) / sampleCount
     print("accuracy for {:d} clusters = {:4.3f}".format(len(np.unique(cluster_labels)), acc_doga_base))
 
-    hist, bins = np.histogram(sample_silhouette_values, bins=bin_count)
-    print("bin_count = ", bin_count)
-    print("silhouette bins = ", hist, bins)
+    mapped_class_vec = np.array(kluster2Classes)[:, 1].squeeze()
+    predictions_mapped, mappedKlustersSampleCnt = getMappedKlusters(cluster_labels, mapped_class_vec)
+    np.sum(predictions_mapped == real_labels) / len(predictions_mapped)
 
-    for t in bins[1:-1]:
-        inds_ok_samples = np.array([i for i, e in enumerate(sample_silhouette_values) if e >= t])
-        print("--there are {:d} bad assignments given treshold({})".format(sampleCount-len(inds_ok_samples), t))
-        _confMat, kluster2Classes, kr_pdf, _, _ = countPredictionsForConfusionMat(real_labels[inds_ok_samples], cluster_labels[inds_ok_samples])
-        _sc = np.sum(np.sum(_confMat))
-        acc_doga_base = 100 * np.sum(np.diag(_confMat)) / _sc
-        print("--accuracy for {:d} clusters = {:4.3f} given treshold({})".format(len(np.unique(cluster_labels)), acc_doga_base, t))
+    plot_title_str = 'before silhouette - '
+    plot_confusion_matrix(_confMat.T, class_names=label_names, saveConfFigFileName=conf_plot_save_to, plot_title_str=plot_title_str)
+
+    sample_silhouette_values_sorted, idx = sortVec(sample_silhouette_values)
+    labels_sorted = real_labels[idx]
+    cluster_labels_sorted = cluster_labels[idx]
+    preds_sorted = predictions_mapped[idx]
+    all_ones = np.ones(preds_sorted.shape)
+    pred_cumsum = np.cumsum(preds_sorted == labels_sorted) / np.cumsum(all_ones)
+    save_acc_silhouette_fig_file_name = conf_plot_save_to.replace("_conf_", "_acc_silhouette_")
+    data_perc_vec = np.arange(0, len(pred_cumsum)) / len(pred_cumsum)
+
+    first_neg_sample_id = np.argmax(sample_silhouette_values_sorted < 0.00)-1
+    accuracy_at_last_pos = pred_cumsum[first_neg_sample_id]
+    centroid_info_pdf_new = centroid_info_pdf.copy()
+    for r in range(len(centroid_info_pdf_new)):
+        old_index = centroid_info_pdf_new["sampleID"].values[r]
+        print("old centroid index(", old_index, ") changed to new index(", end=',')
+        centroid_info_pdf_new["sampleID"].values[r] = np.argmax(idx == old_index)
+        print(centroid_info_pdf_new["sampleID"].values[r], ")")
+
+    confMat_new, _, _, _, _ = countPredictionsForConfusionMat(labels_sorted[:first_neg_sample_id], cluster_labels_sorted[:first_neg_sample_id],
+                                                                              centroid_info_pdf=centroid_info_pdf_new)
+    title_str = "first_neg_at " + str(first_neg_sample_id) + "(" + "{:4.2f}".format(100*first_neg_sample_id/sampleCount) + ")\n"
+    title_str += str(sampleCount - first_neg_sample_id) + " samples to remove\n"
+    title_str += 'old_accuracy<{:4.2f}>_new'.format(acc_doga_base)
+    plot_confusion_matrix(confMat_new.T, class_names=label_names, saveConfFigFileName=conf_plot_save_to.replace("_conf_", "_conf_post_silhouette_"), plot_title_str=title_str)
+
+    plt.close('all')
+    fig, ax = plt.subplots(1, figsize=(30, 10), dpi=80)
+    ax.plot(data_perc_vec, pred_cumsum, lw=2, label='accuracy', color='blue', ls='-', zorder=0)
+    ax.plot(data_perc_vec, sample_silhouette_values_sorted, lw=2, label='silhouette_prec', color='green', ls='-',
+            zorder=0)
+    ax.plot(np.asarray([0, 1]), np.asarray([accuracy_at_last_pos,accuracy_at_last_pos]), lw=3, label='first_neg_sample', color='red', ls='-',
+            zorder=0)
+    # Data for plotting
+
+    title_str += '_accuracy<{:4.2f}>'.format(100*accuracy_at_last_pos)
+    ax.set(xlabel='data percentage', ylabel='accuracy', title=title_str)
+    ax.grid()
+    plt.legend(loc='lower left')
+    fig.savefig(save_acc_silhouette_fig_file_name)
+
+    result_dict = {
+        "_confMat": _confMat,
+        "confMat_new": confMat_new,
+        "mapped_class_vec": mapped_class_vec,
+    }
+    return result_dict
 
 def visualize_silhouette(X, n_clusters, sample_silhouette_values, silhouette_avg, cluster_labels, cluster_centers=None):
     # Create a subplot with 1 row and 2 columns
@@ -118,56 +235,21 @@ def calc_silhouette_params(X, cluster_labels):
     # The silhouette_score gives the average value for all the samples.
     # This gives a perspective into the density and separation of the formed
     # clusters
-    silhouette_avg = silhouette_score(X, cluster_labels)
+
     n_clusters = str(len(np.unique(cluster_labels)))
+    t = Timer()
+    print("Calculating silhouette score for " + str(X.shape) + " for n_clusters =", n_clusters)
+    silhouette_avg = silhouette_score(X, cluster_labels)
     print("For n_clusters =", n_clusters,
-          "The average silhouette_score is :", silhouette_avg)
+          "The average silhouette_score is :", silhouette_avg, ". ElapsedTime(" + t.get_elapsed_time() + ")")
 
     # Compute the silhouette scores for each sample
+    print("Computing sample_silhouette_values")
+    t.start()
     sample_silhouette_values = silhouette_samples(X, cluster_labels)
+    print("Computed.. ElapsedTime(" + t.get_elapsed_time() + ")")
 
     return silhouette_avg, sample_silhouette_values
-
-class Bunch(object):
-  def __init__(self, adict):
-    self.__dict__.update(adict)
-
-class NestedNamespace(SimpleNamespace):
-    def __init__(self, **kwargs):
-        super(NestedNamespace, self).__init__(**kwargs)
-        for k, v in kwargs.items():
-            if type(v) == dict:
-                setattr(self, k, NestedNamespace(**v))
-            elif type(v) == list:
-                setattr(self, k, list(map(self.map_entry, v)))
-
-    @staticmethod
-    def map_entry(e):
-        if isinstance(e, dict):
-            return NestedNamespace(**e)
-        return e
-
-#_CONF_PARAMS_ = CustomConfigParser(config_file="conf.yaml")
-class CustomConfigParser():
-    def __init__(self, config_file):
-        self.config_path = os.path.normpath(os.path.join(os.path.dirname(__file__), 'configs', config_file))
-        _, config_ext = os.path.splitext(config_file)
-        if config_ext != '.yaml':
-            os.error("couldnt retrieve info from yaml file")
-        config_dict = self._load_config_from_yaml()
-        self.parameters = NestedNamespace(**config_dict)
-
-    def _load_config_from_yaml(self):
-        config_dict = {}
-        with open(self.config_path, 'r') as f:
-            try:
-                config_dict = yaml.safe_load(f)
-            except yaml.YAMLError as exc:
-                os.error("couldnt retrieve info from yaml file")
-        return config_dict
-
-    def __getattr__(self, item):
-        return self.parameters.__getattribute__(item)
 
 def type_cast(var, dtype):
     return dtype(var)
@@ -910,7 +992,8 @@ def plot_confusion_matrix(conf_mat,
                           figMulCnt=None,
                           confusionTreshold=0.3,
                           show_only_confused=False,
-                          rotVal=30):
+                          rotVal=30,
+                          plot_title_str=None):
     """Plot a confusion matrix via matplotlib.
     Parameters
     -----------
@@ -976,6 +1059,10 @@ def plot_confusion_matrix(conf_mat,
     if class_names is not None:
         class_names_x_preds = class_names.copy()
         class_names_y_true = class_names.copy()
+    else:
+        class_names = list(map(str, np.arange(0, len(conf_mat))))
+        class_names_x_preds = list(map(str, x_preds_ids))
+        class_names_y_true = list(map(str, y_true_ids))
 
     if show_only_confused:
         ncm = normed_conf_mat.copy()
@@ -1069,9 +1156,12 @@ def plot_confusion_matrix(conf_mat,
         plt.xlabel('Predicted - ' + ' ' + add2XLabel)
     plt.xlabel('True - ' + ' ' + add2YLabel)
 
-    plot_title_str = saveConfFigFileName.split(os.path.sep)[-1]
-    plot_title_str = plot_title_str.split('.')[0]
-    plot_title_str += '_accuracy<{:4.2f}>_'.format(100*acc)
+    if plot_title_str is None:
+        plot_title_str = saveConfFigFileName.split(os.path.sep)[-1]
+        plot_title_str = plot_title_str.split('.')[0]
+        plot_title_str += '_accuracy<{:4.2f}>_'.format(100*acc)
+    else:
+        plot_title_str += '_accuracy<{:4.2f}>_'.format(100*acc)
     plt.title(plot_title_str[0:-1])
 
     if saveConfFigFileName == '':
