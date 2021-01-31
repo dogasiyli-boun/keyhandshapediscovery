@@ -144,7 +144,7 @@ def analyze_silhouette_values(sample_silhouette_values, cluster_labels, real_lab
 
     valid_sample_cnt = 0
     if len(samples_to_remove) > 0:
-        samples_to_remove = np.concatenate(np.asarray(samples_to_remove).squeeze()).squeeze()
+        samples_to_remove = np.concatenate(np.asarray(samples_to_remove)).squeeze()
         valid_sample_cnt = np.sum(samples_to_remove<first_neg_sample_id)
         labels_sorted = np.delete(labels_sorted, samples_to_remove)
         cluster_labels_sorted = np.delete(cluster_labels_sorted, samples_to_remove)
