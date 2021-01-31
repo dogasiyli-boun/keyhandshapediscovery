@@ -16,7 +16,7 @@ from pandas import DataFrame as pd_df
 import pandas as pd
 import scipy.io
 
-
+from datetime import datetime
 from collections import Counter
 
 import yaml
@@ -142,19 +142,21 @@ def analyze_silhouette_values(sample_silhouette_values, cluster_labels, real_lab
             samples_to_remove_cur = getInds(cluster_labels_sorted,klusterID_to_remove)
             samples_to_remove.append(np.asarray(samples_to_remove_cur).squeeze())
 
-    samples_to_remove = np.asarray(samples_to_remove).squeeze()
-    valid_sample_cnt = np.sum(samples_to_remove<first_neg_sample_id)
-    labels_sorted = np.delete(labels_sorted, samples_to_remove)
-    cluster_labels_sorted = np.delete(cluster_labels_sorted, samples_to_remove)
-    centroid_info_pdf_new = centroid_info_pdf_new.drop(np.asarray(clusters_to_remove))
-    for r in range(len(centroid_info_pdf_new)):
-        new_index = centroid_info_pdf_new["sampleID"].values[r]
-        before_sample_cnt = np.sum(samples_to_remove < new_index)
-        newer_index = new_index-before_sample_cnt
-        if new_index!= newer_index:
-            print("\nnew centroid index(", new_index, ") changed to newer index(", end='')
-            centroid_info_pdf_new["sampleID"].values[r] = newer_index
-            print(centroid_info_pdf_new["sampleID"].values[r], ")", end='')
+    valid_sample_cnt = 0
+    if len(samples_to_remove) > 0:
+        samples_to_remove = np.concatenate(np.asarray(samples_to_remove).squeeze()).squeeze()
+        valid_sample_cnt = np.sum(samples_to_remove<first_neg_sample_id)
+        labels_sorted = np.delete(labels_sorted, samples_to_remove)
+        cluster_labels_sorted = np.delete(cluster_labels_sorted, samples_to_remove)
+        centroid_info_pdf_new = centroid_info_pdf_new.drop(np.asarray(clusters_to_remove))
+        for r in range(len(centroid_info_pdf_new)):
+            new_index = centroid_info_pdf_new["sampleID"].values[r]
+            before_sample_cnt = np.sum(samples_to_remove < new_index)
+            newer_index = new_index-before_sample_cnt
+            if new_index!= newer_index:
+                print("\nnew centroid index(", new_index, ") changed to newer index(", end='')
+                centroid_info_pdf_new["sampleID"].values[r] = newer_index
+                print(centroid_info_pdf_new["sampleID"].values[r], ")", end='')
 
     confMat_new, _, _, _, _ = countPredictionsForConfusionMat(labels_sorted[:first_neg_sample_id-valid_sample_cnt], cluster_labels_sorted[:first_neg_sample_id-valid_sample_cnt],
                                                                               centroid_info_pdf=centroid_info_pdf_new)
@@ -261,13 +263,13 @@ def calc_silhouette_params(X, cluster_labels):
 
     n_clusters = str(len(np.unique(cluster_labels)))
     t = Timer()
-    print("Calculating silhouette score for " + str(X.shape) + " for n_clusters =", n_clusters)
+    print("Calculating silhouette score for " + str(X.shape) + " for n_clusters =", n_clusters, " - ", str(datetime.now()))
     silhouette_avg = silhouette_score(X, cluster_labels)
     print("For n_clusters =", n_clusters,
           "The average silhouette_score is :", silhouette_avg, ". ElapsedTime(" + t.get_elapsed_time() + ")")
 
     # Compute the silhouette scores for each sample
-    print("Computing sample_silhouette_values")
+    print("Computing sample_silhouette_values - ", str(datetime.now()))
     t.start()
     sample_silhouette_values = silhouette_samples(X, cluster_labels)
     print("Computed.. ElapsedTime(" + t.get_elapsed_time() + ")")
@@ -1267,7 +1269,7 @@ def getMappedKlusters(predictions, Kluster2ClassesK):
     uniqClasses = np.unique(Kluster2ClassesK)
 
     mappedKlusters = np.copy(predictions)
-    mappedKlustersSampleCnt = np.zeros([len(Kluster2ClassesK), len(uniqClasses)], dtype=int)
+    mappedKlustersSampleCnt = np.zeros([len(Kluster2ClassesK), np.max(uniqClasses)], dtype=int)
 
     for k in range(len(Kluster2ClassesK)):
         # cluster(k) will be mapped to Kluster2ClassesK[k]

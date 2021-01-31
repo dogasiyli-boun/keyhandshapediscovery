@@ -113,6 +113,8 @@ class Clusterer():
 
     def predict(self, X, post_analyze_distribution, verbose=1):
         df = pd_df(X)
+        print("started prediction for ", self.cluster_model, " X(", X.shape, ")")
+
         if self.cluster_model == 'KMeans':
             # default vals for kmeans --> max_iter=300, 1e-4
             self.trained_model.predict(df)
@@ -134,4 +136,5 @@ class Clusterer():
             numOf_1_sample_bins, histSortedInv = analyzeClusterDistribution(self.predictedKlusters, self.n_clusters,
                                                                             verbose=1)
             unique_clust_cnt = len(np_unique(self.predictedKlusters))
+            print("prediction completed for ", self.cluster_model, " - unique_clust_cnt(", str(unique_clust_cnt), "), numOf_1_sample_bins(", str(numOf_1_sample_bins), ")")
         return np_asarray(self.predictedKlusters, dtype=int), self.kluster_centroids

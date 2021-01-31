@@ -1,7 +1,7 @@
 import argparse
 import os
 import random as rn
-import datetime
+from datetime import datetime
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -63,7 +63,7 @@ def n_learn_manifold(hidden_representation, embedding_dim, manifold_learner="UMA
 
 def n_run_cluster(hle, n_clusters, cluster_func_name='GMM', experiment_names_and_folders=None, file_name_add=""):
     global debug_string_out
-    debug_string_out = funcH.print_and_add("Clustering(" + cluster_func_name + ")" + str(datetime.datetime.now()), debug_string_out)
+    debug_string_out = funcH.print_and_add("Clustering(" + cluster_func_name + ")" + str(datetime.now()), debug_string_out)
     t = funcH.Timer()
     if experiment_names_and_folders is not None:
         file_name_cluster_obj = experiment_names_and_folders["file_name_cluster_obj"].replace("<bef_aft>", file_name_add)
@@ -266,6 +266,7 @@ def n_run_autoencode(x, args):
     hidden = ae.get_layer(name='encoder_%d' % (len(shape) - 2)).output
     encoder = Model(inputs=ae.input, outputs=hidden)
 
+    print("checking if ", args.experiment_names_and_folders["file_name_ae_weights_full"], " exist.")
     weights_file = args.experiment_names_and_folders["file_name_ae_weights_full"]
     load_file_skip_learning = os.path.isfile(weights_file)
     t = funcH.Timer()
@@ -347,15 +348,15 @@ def get_args(argv):
     debug_string_out = funcH.print_and_add('-' * 80)
 
     experiment_names_and_folders = {
-        "exp_date_str": str(datetime.datetime.now().strftime("%Y%m%d_")).replace('-', ''),  # %M%S,
-        "exp_base_str": "_".join([args.dataset, "c" + str(args.n_clusters), "e" + str(args.pretrain_epochs)]),
+        "exp_date_str": str(datetime.now().strftime("%Y%m%d_")).replace('-', ''),  # %M%S,
+        "exp_base_str": "_".join([args.dataset, "c" + str(args.cluster)+ str(args.n_clusters), "e" + str(args.pretrain_epochs)]),
         "folder_umap_data": os.path.join(args.experiments_folder_base, "exported_manifolds"),
         "folder_ae_weights": os.path.join(args.experiments_folder_base, "weights"),
     }
     experiment_names_and_folders["exp_extended"] = experiment_names_and_folders["exp_base_str"] + "_" + "_".join([args.manifold_learner + "ud" + str(args.umap_dim), "un" + str(args.umap_neighbors)])
     experiment_names_and_folders["folder_experiment"] = os.path.join(args.experiments_folder_base, args.dataset,
                                            experiment_names_and_folders["exp_date_str"] + experiment_names_and_folders["exp_extended"])
-    experiment_names_and_folders["file_name_ae_weights_base"] = "aew_" + experiment_names_and_folders["exp_base_str"]
+    experiment_names_and_folders["file_name_ae_weights_base"] = "aew_" + "_".join([args.dataset, "c" + str(args.n_clusters), "e" + str(args.pretrain_epochs)])
     experiment_names_and_folders["file_name_ae_weights_full"] = os.path.join(experiment_names_and_folders["folder_ae_weights"], experiment_names_and_folders["file_name_ae_weights_base"] + '.npy')
     experiment_names_and_folders["file_name_umap_data_base"] = "ulp" + experiment_names_and_folders["exp_extended"]
     experiment_names_and_folders["file_name_umap_data_full"] = os.path.join(experiment_names_and_folders["folder_umap_data"], experiment_names_and_folders["file_name_umap_data_base"] + '.npy')
@@ -403,7 +404,7 @@ def script():
                               "--manifold_learner", ml, "--umap_min_dist", "0.00"])
                     except Exception as e:
                         debug_string_out = funcH.print_and_add(ds + '_' + ml + " - problem \n" + str(e), debug_string_out)
-                        exp_date_str = str(datetime.datetime.now().strftime("%Y%m%d_%H%M")).replace('-', '')  # %S
+                        exp_date_str = str(datetime.now().strftime("%Y%m%d_%H%M")).replace('-', '')  # %S
                         with open(os.path.join(funcH.getVariableByComputerName("n2d_experiments"), ds + '_' + ml + '_error_' + exp_date_str + '.txt'), 'w') as f:
                             f.write("\n".join(debug_string_out))
 
@@ -412,7 +413,7 @@ def script_hgsk():
     pretrain_epochs = [10, 50]
     ml = "UMAP"
     ds = "hgsk_256_41"
-    for cluster in ['GMM', 'KM']:
+    for cluster in ['KM', 'GMM']:
         for ae_epoc in pretrain_epochs:
             for clust_cnt in [128, 256, 512, 1024]: #  umap_dim = 20, n_clusters_ae = 20, umap_neighbors = 40
                 try:
@@ -422,9 +423,10 @@ def script_hgsk():
                           "--n_clusters", str(clust_cnt), "--cluster", cluster,
                           "--umap_dim", str(clust_cnt), "--umap_neighbors", str(20),
                           "--manifold_learner", ml, "--umap_min_dist", "0.00"])
-                except:
+                except Exception as e:
                     debug_string_out = funcH.print_and_add(ds + '_' + ml + " - problem", debug_string_out)
-                    exp_date_str = str(datetime.datetime.now().strftime("%Y%m%d_%H%M")).replace('-', '')  # %S
+                    debug_string_out = funcH.print_and_add(str(e), debug_string_out)
+                    exp_date_str = str(datetime.now().strftime("%Y%m%d_%H%M")).replace('-', '')  # %S
                     with open(os.path.join(funcH.getVariableByComputerName("n2d_experiments"), ds + '_' + ml + '_error_' + exp_date_str + '.txt'), 'w') as f:
                         f.write("\n".join(debug_string_out))
 
