@@ -1,6 +1,6 @@
 import torch
 
-from data_classes import khs_dataset_v2, fashion_mnist, cifar10
+from data_classes import khs_dataset_v2, fashion_mnist, cifar10, mnist
 import vae_torch_model as vtm
 
 import numpy as np
@@ -60,14 +60,42 @@ def get_data(CONF_PARAMS_):
                                                                          default_type=int, default_val=34)
         load_train_as_test = funcH.get_attribute_from_nested_namespace(CONF_PARAMS_.DATA, 'LOAD_TR_AS_TEST',
                                                                        default_type=bool, default_val=False)
+        flatten = funcH.get_attribute_from_nested_namespace(CONF_PARAMS_.DATA, 'FLATTEN', default_type=bool,
+                                                            default_val=False)
         input_size = funcH.get_attribute_from_nested_namespace(CONF_PARAMS_.MODEL, 'INPUT_SIZE', default_type=int,
                                                                default_val=28)
-        X_tr_tr = fashion_mnist(fashionMNISTds_fold=data_main_fold, is_train=True, input_size=input_size,
+        X_tr_tr = fashion_mnist(fashionMNISTds_fold=data_main_fold, is_train=True, flatten=flatten,
+                                input_size=input_size,
                                 load_train_as_test=load_train_as_test, input_initial_resize=input_initial_resize,
                                 datasetname="fashion_mnist_tr_tr")
-        X_tr_te = fashion_mnist(fashionMNISTds_fold=data_main_fold, is_train=True, input_size=input_size,
+        X_tr_te = fashion_mnist(fashionMNISTds_fold=data_main_fold, is_train=True, flatten=flatten,
+                                input_size=input_size,
                                 input_initial_resize=None, load_train_as_test=True, datasetname="fashion_mnist_tr_te")
-        X_te = fashion_mnist(fashionMNISTds_fold=data_main_fold, is_train=False, input_size=input_size,
+        X_te = fashion_mnist(fashionMNISTds_fold=data_main_fold, is_train=False, flatten=flatten, input_size=input_size,
+                             input_initial_resize=None, datasetname="fashion_mnist_te")
+        data_log_keys = ['tr_tr', 'tr_te', 'te']
+        X_dict = {
+            'tr_tr': X_tr_tr,
+            'tr_te': X_tr_te,
+            'te': X_te,
+        }
+    elif CONF_PARAMS_.DATA.IDENTIFIER == 'MNIST':
+        input_initial_resize = funcH.get_attribute_from_nested_namespace(CONF_PARAMS_.DATA, 'INPUT_INITIAL_RESIZE',
+                                                                         default_type=int, default_val=34)
+        load_train_as_test = funcH.get_attribute_from_nested_namespace(CONF_PARAMS_.DATA, 'LOAD_TR_AS_TEST',
+                                                                       default_type=bool, default_val=False)
+        flatten = funcH.get_attribute_from_nested_namespace(CONF_PARAMS_.DATA, 'FLATTEN', default_type=bool,
+                                                            default_val=False)
+        input_size = funcH.get_attribute_from_nested_namespace(CONF_PARAMS_.MODEL, 'INPUT_SIZE', default_type=int,
+                                                               default_val=28)
+        X_tr_tr = mnist(MNISTds_fold=data_main_fold, is_train=True, flatten=flatten,
+                                input_size=input_size,
+                                load_train_as_test=load_train_as_test, input_initial_resize=input_initial_resize,
+                                datasetname="fashion_mnist_tr_tr")
+        X_tr_te = mnist(MNISTds_fold=data_main_fold, is_train=True, flatten=flatten,
+                                input_size=input_size,
+                                input_initial_resize=None, load_train_as_test=True, datasetname="fashion_mnist_tr_te")
+        X_te = mnist(MNISTds_fold=data_main_fold, is_train=False, flatten=flatten, input_size=input_size,
                              input_initial_resize=None, datasetname="fashion_mnist_te")
         data_log_keys = ['tr_tr', 'tr_te', 'te']
         X_dict = {
@@ -80,14 +108,16 @@ def get_data(CONF_PARAMS_):
                                                                          default_type=int, default_val=34)
         load_train_as_test = funcH.get_attribute_from_nested_namespace(CONF_PARAMS_.DATA, 'LOAD_TR_AS_TEST',
                                                                        default_type=bool, default_val=False)
+        flatten = funcH.get_attribute_from_nested_namespace(CONF_PARAMS_.DATA, 'FLATTEN', default_type=bool,
+                                                               default_val=False)
         input_size = funcH.get_attribute_from_nested_namespace(CONF_PARAMS_.MODEL, 'INPUT_SIZE', default_type=int,
                                                                default_val=28)
-        X_tr_tr = cifar10(cifar10ds_fold=data_main_fold, is_train=True, input_size=input_size,
+        X_tr_tr = cifar10(cifar10ds_fold=data_main_fold, is_train=True, flatten=flatten, input_size=input_size,
                           load_train_as_test=load_train_as_test, input_initial_resize=input_initial_resize,
                           datasetname="cifar10_tr_tr")
-        X_tr_te = cifar10(cifar10ds_fold=data_main_fold, is_train=True, input_size=input_size,
+        X_tr_te = cifar10(cifar10ds_fold=data_main_fold, is_train=True, flatten=flatten, input_size=input_size,
                           input_initial_resize=None, load_train_as_test=True, datasetname="cifar10_tr_te")
-        X_te = cifar10(cifar10ds_fold=data_main_fold, is_train=False, input_size=input_size,
+        X_te = cifar10(cifar10ds_fold=data_main_fold, is_train=False, flatten=flatten, input_size=input_size,
                        input_initial_resize=None, datasetname="cifar10_te")
         data_log_keys = ['tr_tr', 'tr_te', 'te']
         X_dict = {

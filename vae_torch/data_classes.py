@@ -8,6 +8,7 @@ import pandas as pd
 from helperFuncs import get_mapped_0_k_indices, createDirIfNotExist, getFileList, getFolderList
 
 #fashion mnist
+from torchvision.datasets import MNIST as MNISTds
 from torchvision.datasets import FashionMNIST as fashionMNISTds
 from torchvision.datasets import CIFAR10 as CIFAR10ds
 from torchvision.utils import save_image
@@ -172,26 +173,31 @@ class khs_dataset_v2(Dataset):
     def _len_(self):
         return len(self.labels)
 
+def data_transform(input_size, input_initial_resize, is_train, load_train_as_test, flatten, transpose_final):
+    if flatten:
+        return transforms.Compose(transpose_final)
+    #  self.transform = transforms.Compose([transforms.ToTensor()])
+    _transform = transforms.Compose([transforms.Resize(input_size), transpose_final])
+    if input_initial_resize is not None and is_train:
+        _transform = transforms.Compose([
+            transforms.Resize(input_initial_resize),
+            transforms.RandomResizedCrop(input_size),
+            transforms.RandomHorizontalFlip(),
+            transpose_final
+        ])
+    elif input_initial_resize is None and is_train and not load_train_as_test:
+        _transform = transforms.Compose([
+            transforms.Resize(input_size),
+            transforms.RandomHorizontalFlip(),
+            transpose_final
+        ])
+    return _transform
 class fashion_mnist(Dataset):
-    def __init__(self, fashionMNISTds_fold, is_train, input_size, input_initial_resize=None, load_train_as_test=False, datasetname="fashion_mnist"):
+    def __init__(self, fashionMNISTds_fold, is_train, input_size, flatten=False, input_initial_resize=None, load_train_as_test=False, datasetname="fashion_mnist"):
         self.root_dir = fashionMNISTds_fold
-
-        self.transform = transforms.Compose([transforms.Resize(input_size), transforms.ToTensor()])
-        #  self.transform = transforms.Compose([transforms.ToTensor()])
-        if input_initial_resize is not None and is_train:
-            self.transform = transforms.Compose([
-                    transforms.Resize(input_initial_resize),
-                    transforms.RandomResizedCrop(input_size),
-                    transforms.RandomHorizontalFlip(),
-                    transforms.ToTensor()
-                ])
-        elif input_initial_resize is None and is_train and not load_train_as_test:
-            self.transform = transforms.Compose([
-                    transforms.Resize(input_size),
-                    transforms.RandomHorizontalFlip(),
-                    transforms.ToTensor()
-                ])
-
+        self.flatten = flatten
+        transpose_final = [transforms.ToTensor()]
+        self.transform = data_transform(input_size, input_initial_resize, is_train, load_train_as_test, flatten, transpose_final)
         self.datasetname = datasetname
         dataset = fashionMNISTds(
             root=os.path.join(fashionMNISTds_fold),
@@ -218,42 +224,25 @@ class fashion_mnist(Dataset):
         sample = {'image': image, 'label': label, 'ids': ids}
         if self.transform:
             sample['image'] = self.transform(sample['image'])
+        if self.flatten:
+            sample['image'] = sample['image'].view(sample['image'].size(0), -1)
         return sample
 
     def _len_(self):
         return len(self.labels)
 
     @staticmethod
-    def save_decoded_image(img, name):
-        img = img.view(img.size(0), 1, 28, 28)
+    def save_decoded_image(img, name, input_size=28):
+        img = img.view(img.size(0), 1, input_size, input_size)
         save_image(img, name)
 
 class cifar10(Dataset):
-    def __init__(self, cifar10ds_fold, is_train, input_size, input_initial_resize=None, load_train_as_test=False, datasetname="cifar10"):
+    def __init__(self, cifar10ds_fold, is_train, input_size, flatten=False, input_initial_resize=None, load_train_as_test=False, datasetname="cifar10"):
         self.root_dir = cifar10ds_fold
         self.input_size = input_size
-
-        self.transform = transforms.Compose(
-            [transforms.Resize(input_size),
-             transforms.ToTensor(),
-             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-
-        if input_initial_resize is not None and is_train:
-            self.transform = transforms.Compose([
-                    transforms.Resize(input_initial_resize),
-                    transforms.RandomResizedCrop(input_size),
-                    transforms.RandomHorizontalFlip(),
-                    transforms.ToTensor(),
-                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                ])
-        elif input_initial_resize is None and is_train and not load_train_as_test:
-            self.transform = transforms.Compose([
-                    transforms.Resize(input_size),
-                    transforms.RandomHorizontalFlip(),
-                    transforms.ToTensor(),
-                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                ])
-
+        self.flatten = flatten
+        transpose_final = [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+        self.transform = data_transform(input_size, input_initial_resize, is_train, load_train_as_test, flatten, transpose_final)
         self.datasetname = datasetname
         dataset = CIFAR10ds(
             root=os.path.join(cifar10ds_fold),
@@ -287,6 +276,50 @@ class cifar10(Dataset):
 
     @staticmethod
     def save_decoded_image(img, name, input_size=32):
+        img = img.view(img.size(0), 1, input_size, input_size)
+        save_image(img, name)
+
+class mnist(Dataset):
+    def __init__(self, MNISTds_fold, is_train, input_size, flatten=False, input_initial_resize=None, load_train_as_test=False, datasetname="mnist"):
+        self.root_dir = MNISTds_fold
+        self.flatten = flatten
+        transpose_final = [transforms.ToTensor()]
+        self.transform = data_transform(input_size, input_initial_resize, is_train, load_train_as_test, flatten, transpose_final)
+        self.datasetname = datasetname
+        dataset = MNISTds(
+            root=os.path.join(MNISTds_fold),
+            train=is_train,
+            download=True
+        )
+        img_all = []
+        lab_all = []
+        for i in range(0, len(dataset)):
+            img, lb = dataset[i]
+            img_all.append(img)
+            lab_all.append(lb)
+
+        self.images = img_all
+        self.labels = lab_all
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        image = self.images[idx]
+        label = self.labels[idx]
+        ids = idx
+        sample = {'image': image, 'label': label, 'ids': ids}
+        if self.transform:
+            sample['image'] = self.transform(sample['image'])
+        if self.flatten:
+            sample['image'] = sample['image'].view(sample['image'].size(0), -1)
+        return sample
+
+    def _len_(self):
+        return len(self.labels)
+
+    @staticmethod
+    def save_decoded_image(img, name, input_size=28):
         img = img.view(img.size(0), 1, input_size, input_size)
         save_image(img, name)
 

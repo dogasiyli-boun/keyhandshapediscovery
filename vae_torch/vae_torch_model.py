@@ -1299,7 +1299,7 @@ class Conv_AE_NestedNamespace(nn.Module):
                     }
                 else:
                     df = pd_df(bottleneck_vec)
-                    pred_vec = self.kmeans_params["_trained_model_"].predict(df)
+                    pred_vec, _ = self.kmeans_params["_trained_model_"].predict(df)
                 centroid_info_pdf = self.kmeans_params["_trained_model_"].kluster_centroids
             if k == 'bottleneck_act':
                 print('bottleneck_act')
@@ -1426,7 +1426,7 @@ class Conv_AE_NestedNamespace(nn.Module):
                 print("sparsity calculation were skipped until epoch: ", self.SPARSE_PARAMS["apply_after_epoch"])
 
         for b in dloader:
-            data = b[self.data_key]
+            data = b[self.data_key].squeeze()
             data = data.to(self.device)
             if self.cluster_any:
                 labels = b['label']
@@ -1465,7 +1465,7 @@ class Conv_AE_NestedNamespace(nn.Module):
         self.reset_loss_vals()
         with torch.no_grad():
             for b in dloader:
-                data = b[self.data_key]
+                data = b[self.data_key].squeeze()
                 data = data.to(self.device)
                 if self.cluster_any:
                     labels = b['label']

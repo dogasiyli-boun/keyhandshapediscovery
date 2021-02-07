@@ -111,14 +111,13 @@ class Clusterer():
         self.fit(X, post_analyze_distribution=post_analyze_distribution, verbose=verbose)
         return np_asarray(self.predictedKlusters, dtype=int), self.kluster_centroids
 
-    def predict(self, X, post_analyze_distribution, verbose=1):
+    def predict(self, X, post_analyze_distribution=False, verbose=1):
         df = pd_df(X)
         print("started prediction for ", self.cluster_model, " X(", X.shape, ")")
 
         if self.cluster_model == 'KMeans':
             # default vals for kmeans --> max_iter=300, 1e-4
-            self.trained_model.predict(df)
-            self.predictedKlusters = self.trained_model.labels_.astype(float)
+            self.predictedKlusters = self.trained_model.predict(df).astype(float)
             self.kluster_centers = self.trained_model.cluster_centers_.astype(float)
         elif self.cluster_model == 'GMM_full':
             # default vals for gmm --> max_iter=100, 1e-3

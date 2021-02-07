@@ -753,7 +753,7 @@ def get_cluster_centroids(ft, predClusters, kluster_centers=None, verbose=0):
     for i in range(0, cntUniqPred):  #
         klust_cur = uniq_preds[i]
         inds = getInds(predClusters, klust_cur)
-        ft_cur = ft[inds, :]
+        ft_cur = np.asarray(ft)[inds, :]
         if cntUniqPred == 1:
             center_cur = kluster_centers
         else:
