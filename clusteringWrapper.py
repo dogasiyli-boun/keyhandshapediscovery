@@ -58,11 +58,11 @@ class Clusterer():
                 self.kluster_centers = self.trained_model.cluster_centers_.astype(float)
             elif self.cluster_model == 'GMM_full':
                 # default vals for gmm --> max_iter=100, 1e-3
-                self.trained_model = GaussianMixture(n_components=self.n_clusters, covariance_type='full', tol=curTol, random_state=random_state, max_iter=max_iter).fit(df)
+                self.trained_model = GaussianMixture(n_components=self.n_clusters, covariance_type='full', tol=curTol, random_state=random_state, max_iter=max_iter, reg_covar=1e-4).fit(df)
                 _, log_resp = self.trained_model._e_step(X)
                 self.predictedKlusters = log_resp.argmax(axis=1)
             elif self.cluster_model == 'GMM_diag':
-                self.trained_model = GaussianMixture(n_components=self.n_clusters, covariance_type='diag', tol=curTol, random_state=random_state, max_iter=max_iter).fit(df)
+                self.trained_model = GaussianMixture(n_components=self.n_clusters, covariance_type='diag', tol=curTol, random_state=random_state, max_iter=max_iter, reg_covar=1e-4).fit(df)
                 _, log_resp = self.trained_model._e_step(X)
                 self.predictedKlusters = log_resp.argmax(axis=1)
             elif self.cluster_model == 'Spectral':

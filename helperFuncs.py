@@ -88,6 +88,37 @@ class CustomConfigParser():
     def __getattr__(self, item):
         return self.parameters.__getattribute__(item)
 
+# https://ozzmaker.com/add-colour-to-text-in-python/
+def color_to_intstr(col):
+    if col == "Black":
+        return 0
+    if col == "Red":
+        return 1
+    if col == "Green":
+        return 2
+    if col == "Yellow":
+        return 3
+    if col == "Blue":
+        return 4
+    if col == "Purple":
+        return 5
+    if col == "Cyan":
+        return 6
+    if col == "White":
+        return 7
+    return 0
+def print_fancy(str_2_print, style="None", textColor="Black", backColor="White", end=''):
+    #  print("\033[0;30;43m Bright Green  \n")
+    str_to_pass = "\033["
+    if "Bold" in style:
+        str_to_pass += "1;"
+    if "Underline" in style:
+        str_to_pass += "4;"
+    str_to_pass += str(color_to_intstr(textColor)+30) + ";"
+    str_to_pass += str(color_to_intstr(backColor)+40) + "m "
+    str_to_pass += str_2_print + "\033[0;0m"
+    print(str_to_pass,end=end)
+
 def dump_dict_to_file(file_name_cluster_obj, cluster_obj, file_ident_str=""):
     print("dumping " + file_ident_str + " to file " + file_name_cluster_obj)
     with open(file_name_cluster_obj, 'wb') as file_name_cluster_obj:

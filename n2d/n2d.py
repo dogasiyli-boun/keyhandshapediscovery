@@ -71,7 +71,13 @@ def n_run_cluster(hle, n_clusters, cluster_func_name='GMM', experiment_names_and
             cluster_obj = funcH.load_dict_fr_file(file_name_cluster_obj)
         else:
             cluster_obj = Clusterer(cluster_model=cluster_func_name, n_clusters=n_clusters, max_try_cnt=1).fit(hle, post_analyze_distribution=True, verbose=1)
-            funcH.dump_dict_to_file(file_name_cluster_obj, cluster_obj)
+            try:
+                funcH.print_fancy("Trying to dump " + file_name_cluster_obj, style="Bold", textColor="Black", backColor='White', end='\n')
+                funcH.dump_dict_to_file(file_name_cluster_obj, cluster_obj)
+            except Exception as e:
+                print(str(e))
+                funcH.print_fancy("Couldn't dump " + file_name_cluster_obj, style="Bold", textColor="Red", end='\n')
+
     y_pred, kluster_centroids = cluster_obj.predict(hle, post_analyze_distribution=True, verbose=1)
     debug_string_out = funcH.print_and_add("Time to cluster: " + t.get_elapsed_time(), debug_string_out)
     return y_pred, kluster_centroids
@@ -119,7 +125,6 @@ def cluster_manifold_in_embedding(hl, y, cluster_func_name, clusters_count, data
     funcH.add_attribute(optional_params, "umap_min_dist", funcH.get_attribute(optional_params, "umap_min_dist", default_type=float, default_val=0.0))
     funcH.add_attribute(optional_params, "umap_metric", funcH.get_attribute(optional_params, "umap_metric", default_type=str, default_val='euclidean'))
     funcH.add_attribute(optional_params, "umap_neighbors", funcH.get_attribute(optional_params, "umap_neighbors", default_type=int, default_val=10))
-
     y_pred_hl, kluster_centroids_before = n_run_cluster(hl, n_clusters=clusters_count, cluster_func_name=cluster_func_name, experiment_names_and_folders=experiment_names_and_folders, file_name_add="-nm")
     y_pred_hl, acc_hl, nmi_hl, ari_hl, acc_hl_dg = n_eval_result(hl, y, y_pred_hl, label_names,
                                                                  cluster_func_name, clusters_count,
@@ -127,7 +132,12 @@ def cluster_manifold_in_embedding(hl, y, cluster_func_name, clusters_count, data
                                                                  pngnameadd='-nm',
                                                                  experiment_names_and_folders=experiment_names_and_folders,
                                                                  optional_params=None, visualize=False)
-    np.savez(experiment_names_and_folders["file_name_data_before_manifold"], featVec=hl, labels=y, preds=y_pred_hl, label_names=label_names, acc=acc_hl_dg)
+    try:
+        funcH.print_fancy("Trying to save " + experiment_names_and_folders["file_name_data_before_manifold"], style="Bold", textColor="Black", backColor='White', end='\n')
+        np.savez(experiment_names_and_folders["file_name_data_before_manifold"], featVec=hl, labels=y, preds=y_pred_hl, label_names=label_names, acc=acc_hl_dg)
+    except Exception as e:
+        print(str(e))
+        funcH.print_fancy("Couldn't save " + experiment_names_and_folders["file_name_data_before_manifold"], style="Bold", textColor="Red", end='\n')
     debug_string_out = funcH.print_and_add('-' * 40, debug_string_out)
 
     file_name_silhouette_results = experiment_names_and_folders["file_name_silhouette_results"].replace("<bef_aft>", "before")
@@ -137,8 +147,12 @@ def cluster_manifold_in_embedding(hl, y, cluster_func_name, clusters_count, data
     else:
         _, silhouette_values_hl = funcH.calc_silhouette_params(hl, y_pred_hl)
         print("saving silhouette_values to ", file_name_silhouette_results)
-        np.save(file_name_silhouette_results, silhouette_values_hl, allow_pickle=True)
-
+        try:
+            funcH.print_fancy("Trying to save " + file_name_silhouette_results, style="Bold", textColor="Black", backColor='White', end='\n')
+            np.save(file_name_silhouette_results, silhouette_values_hl, allow_pickle=True)
+        except Exception as e:
+            print(str(e))
+            funcH.print_fancy("Couldn't save " + file_name_silhouette_results, style="Bold", textColor="Red", end='\n')
 
     # find manifold on autoencoded embedding
     hle = n_learn_manifold(hl, embedding_dim=umap_dim, manifold_learner=manifold_learner,
@@ -152,7 +166,14 @@ def cluster_manifold_in_embedding(hl, y, cluster_func_name, clusters_count, data
                       pngnameadd='-hle', experiment_names_and_folders=experiment_names_and_folders,
                       optional_params=None, visualize=False)
     saveToFileName = experiment_names_and_folders["file_name_data_after_manifold"]
-    np.savez(saveToFileName, featVec=hle, labels=y, preds=y_pred_hle, label_names=label_names, acc=acc_dg)
+    try:
+        funcH.print_fancy("Trying to save " + saveToFileName, style="Bold", textColor="Black",
+                          backColor='White', end='\n')
+        np.savez(saveToFileName, featVec=hle, labels=y, preds=y_pred_hle, label_names=label_names, acc=acc_dg)
+    except Exception as e:
+        print(str(e))
+        funcH.print_fancy("Couldn't save " + saveToFileName, style="Bold", textColor="Red", end='\n')
+
     debug_string_out = funcH.print_and_add('=' * 80, debug_string_out)
 
     file_name_silhouette_results = experiment_names_and_folders["file_name_silhouette_results"].replace("<bef_aft>", "after")
@@ -162,7 +183,15 @@ def cluster_manifold_in_embedding(hl, y, cluster_func_name, clusters_count, data
     else:
         _, silhouette_values_hle = funcH.calc_silhouette_params(hle, y_pred_hle)
         print("saving silhouette_values to ", file_name_silhouette_results)
-        np.save(file_name_silhouette_results, silhouette_values_hle, allow_pickle=True)
+        try:
+            funcH.print_fancy("Trying to save " + file_name_silhouette_results, style="Bold", textColor="Black",
+                              backColor='White', end='\n')
+            np.save(file_name_silhouette_results, silhouette_values_hle, allow_pickle=True)
+        except Exception as e:
+            print(str(e))
+            funcH.print_fancy("Couldn't save " + file_name_silhouette_results, style="Bold", textColor="Red", end='\n')
+
+
 
     results_dict = {
         "acc_before_manifold": acc_hl,
@@ -220,33 +249,6 @@ def _autoencoder(dims, act='relu'):
     h = Dense(dims[0], name='decoder_0')(h)
 
     return Model(inputs=x, outputs=h)
-
-# args.experiment_names_and_folders - no need to adopt
-def n_load_data(dataset_name):
-    from .datasets import load_cifar10, load_mnist, load_mnist_test, load_usps, load_pendigits, load_fashion, load_har
-    label_names = None
-    if dataset_name == 'cifar10':
-        x, y, label_names = load_cifar10()
-    elif dataset_name == 'mnist':
-        x, y = load_mnist()
-    elif dataset_name == 'mnist-test':
-        x, y = load_mnist_test()
-    elif dataset_name == 'usps':
-        x, y = load_usps()
-    elif dataset_name == 'pendigits':
-        x, y = load_pendigits()
-    elif dataset_name == 'fashion':
-        x, y, label_names = load_fashion()
-    elif dataset_name == 'har':
-        x, y, label_names = load_har()
-    elif "_" in dataset_name:
-        dataIdent, pca_dim, nos = str(dataset_name).split('_')
-        x, labels_all, labels_sui, labels_map = prHF.combine_pca_hospisign_data(dataIdent=dataIdent, pca_dim=int(pca_dim),
-                                                                                       nos=int(nos), verbose=2)
-        y = np.asarray(labels_all, dtype=int).squeeze()
-        label_names = np.asarray(labels_map["khsName"])
-    return x, y, label_names
-
 # args.experiment_names_and_folders - adopted
 def n_run_autoencode(x, args):
     global debug_string_out
@@ -288,6 +290,32 @@ def n_run_autoencode(x, args):
 
     hl = encoder.predict(x)
     return hl
+
+# args.experiment_names_and_folders - no need to adopt
+def n_load_data(dataset_name):
+    from .datasets import load_cifar10, load_mnist, load_mnist_test, load_usps, load_pendigits, load_fashion, load_har
+    label_names = None
+    if dataset_name == 'cifar10':
+        x, y, label_names = load_cifar10()
+    elif dataset_name == 'mnist':
+        x, y = load_mnist()
+    elif dataset_name == 'mnist-test':
+        x, y = load_mnist_test()
+    elif dataset_name == 'usps':
+        x, y = load_usps()
+    elif dataset_name == 'pendigits':
+        x, y = load_pendigits()
+    elif dataset_name == 'fashion':
+        x, y, label_names = load_fashion()
+    elif dataset_name == 'har':
+        x, y, label_names = load_har()
+    elif "_" in dataset_name:
+        dataIdent, pca_dim, nos = str(dataset_name).split('_')
+        x, labels_all, labels_sui, labels_map = prHF.combine_pca_hospisign_data(dataIdent=dataIdent, pca_dim=int(pca_dim),
+                                                                                       nos=int(nos), verbose=2)
+        y = np.asarray(labels_all, dtype=int).squeeze()
+        label_names = np.asarray(labels_map["khsName"])
+    return x, y, label_names
 
 # args.experiment_names_and_folders - no need to adopt
 def init():
