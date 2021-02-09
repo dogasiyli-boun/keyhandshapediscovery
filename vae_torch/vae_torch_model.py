@@ -44,11 +44,11 @@ class Flatten(nn.Module):
 
     def forward(self, input):
         if self.in_size is None:
-            self.in_size = [input.size(1), input.size(2), input.size(3)]
+            self.in_size = list(np.shape(input)[1:]) #[input.size(1), input.size(2), input.size(3)]
         return input.view(input.size(0), -1)
 
     def backward(self, input):
-        return input.view(input.size(0), self.in_size[0], self.in_size[1], self.in_size[2])
+        return input.view(tuple([input.size(0)]) + tuple(self.in_size)) # input.view(input.size(0), self.in_size[0], self.in_size[1], self.in_size[2])
 
     def flatten(self, input):
         return self.forward(input)
@@ -617,6 +617,22 @@ def get_decoder_from_ns(x, verbose=0):
         layer_list[k] = {'layer_type': layer_dict['type'], 'layer_module': layer_2_Add}
     return layer_list
 
+def get_correspondance_params_from_nested_Namespace(model_NestedNamespace):
+    if "CORRESPONDANCE_PARAMS" in vars(model_NestedNamespace):
+        CORRESPONDANCE_PARAMS = {
+            "type": funcH.get_attribute_from_nested_namespace(model_NestedNamespace.CORRESPONDANCE_PARAMS, 'TYPE', default_type=str,
+                                                              default_val=None),
+            "at_every": funcH.get_attribute_from_nested_namespace(model_NestedNamespace.CORRESPONDANCE_PARAMS, 'AT_EVERY',
+                                                                default_type=int, default_val=1),
+            "apply_after_epoch": funcH.get_attribute_from_nested_namespace(model_NestedNamespace.CORRESPONDANCE_PARAMS, 'APPLY_AFTER_EPOCH',
+                                                                default_type=int, default_val=0),
+        }
+        if CORRESPONDANCE_PARAMS["type"] is None or CORRESPONDANCE_PARAMS["type"]=='None':
+            return None
+    else:
+        return None
+    return CORRESPONDANCE_PARAMS
+
 def get_sparsity_params_from_nested_Namespace(model_NestedNamespace):
     if "SPARSE_PARAMS" in vars(model_NestedNamespace):
         SPARSE_PARAMS = {
@@ -1125,6 +1141,10 @@ class Conv_AE_NestedNamespace(nn.Module):
 
         self.SPARSE_PARAMS = get_sparsity_params_from_nested_Namespace(model_NestedNamespace)
 
+        self.CORRESPONDANCE_PARAMS = get_correspondance_params_from_nested_Namespace(model_NestedNamespace)
+        self.calc_correspondance = self.CORRESPONDANCE_PARAMS is not None
+        self.correspondance_tuple = None
+
         # experiment reproducibility
         self.random_seed = funcH.get_attribute_from_nested_namespace(model_NestedNamespace, 'RANDOM_SEED', default_type=int, default_val=7)
         try:
@@ -1281,7 +1301,7 @@ class Conv_AE_NestedNamespace(nn.Module):
             self.cluster_any = self.cluster_any or self.clustering_dict[k]['apply']
 
         return label_exist
-    def cluster_bottleneck(self, lab_vec, bottleneck_vec, sub_data_identifier):
+    def cluster_bottleneck(self, lab_vec, bottleneck_vec, sub_data_identifier, calculate_correspondance=False):
         if not self.cluster_any:
             return
         for k in self.clustering_dict:
@@ -1292,6 +1312,8 @@ class Conv_AE_NestedNamespace(nn.Module):
                 if str(sub_data_identifier).__contains__("tr"):
                     _trained_model_ = Clusterer(cluster_model='KMeans', n_clusters=bottleneck_vec.shape[1]).fit(X=bottleneck_vec, post_analyze_distribution=True, verbose=1)
                     pred_vec = _trained_model_.predictedKlusters
+                    if calculate_correspondance:
+                        self.correspondance_tuple = funcH.get_cluster_correspondance_ids(X=bottleneck_vec, cluster_ids=pred_vec, correspondance_type=self.CORRESPONDANCE_PARAMS["type"],verbose=0)
                     kc_tr = _trained_model_.kluster_centers
                     self.kmeans_params = {
                         "kc_tr": kc_tr,
@@ -1317,7 +1339,7 @@ class Conv_AE_NestedNamespace(nn.Module):
             pc = int(np.minimum(unique_pred_classes.size, 5))
             print('--unique last ' + str(pc) + ' classes-->', unique_pred_classes[-pc:])
             self.clustering_dict[k]['val'] = acc
-    def apply_acc(self, loss_dict, lab_vec, bottleneck_vec, sub_data_identifier):
+    def apply_acc(self, loss_dict, lab_vec, bottleneck_vec, sub_data_identifier, calculate_correspondance=False):
         if not self.cluster_any:
             return loss_dict
         lab_vec = np.asarray(torch.cat(lab_vec).to(torch.device('cpu')))
@@ -1371,7 +1393,7 @@ class Conv_AE_NestedNamespace(nn.Module):
 
             plt.close('all')
 
-        self.cluster_bottleneck(lab_vec, bottleneck_vec, sub_data_identifier)
+        self.cluster_bottleneck(lab_vec, bottleneck_vec, sub_data_identifier, calculate_correspondance=calculate_correspondance)
         for k in self.clustering_dict:
             if not self.clustering_dict[k]['apply']:
                 continue
@@ -1393,6 +1415,19 @@ class Conv_AE_NestedNamespace(nn.Module):
             self.BOTTLENECK_PARAMS["print_figures"]['save_fold_name'] = out_folder
             self.BOTTLENECK_PARAMS["print_figures"]['save_fig_name'] = str(self.BOTTLENECK_PARAMS["print_figures"]['save_fig_name_base']).replace("XXX", str(epoch).zfill(3))
             self.BOTTLENECK_PARAMS["print_figures"]['save_fig_name'] = str(self.BOTTLENECK_PARAMS["print_figures"]['save_fig_name']).replace(".png", "_" + sub_data_identifier + ".png")
+    def correspondance_epoch_decide(self, epoch=None, verbose=0):
+        if self.CORRESPONDANCE_PARAMS is None or epoch is None:
+            return False
+        _started = (epoch >= self.CORRESPONDANCE_PARAMS["apply_after_epoch"])
+        _mode_zero = ((epoch % self.CORRESPONDANCE_PARAMS["at_every"]) == 0)
+        if verbose>0:
+            if not _started:
+                print("correspondance will be skipped until epoch: ", self.CORRESPONDANCE_PARAMS["apply_after_epoch"])
+            elif not _mode_zero:
+                print("correspondance is skipped because mode({:},{:})!=0: ".format(epoch, self.CORRESPONDANCE_PARAMS["at_every"]))
+            else:
+                print("correspondance is being applied: ", self.CORRESPONDANCE_PARAMS["apply_after_epoch"])
+        return _started and _mode_zero
 
     def final_loss(self, data, reconstruction, bottleneck, epoch=None):
         loss_reconstruction = self.loss['reconstruction']['func'](reconstruction, data)
@@ -1407,11 +1442,24 @@ class Conv_AE_NestedNamespace(nn.Module):
 
         return loss_reconstruction + loss_sparsity
 
+    def train_batch(self, data_in, data_out, labels, bottleneck_vec, lab_vec, epoch):
+        self.optimizer.zero_grad()
+        reconstruction, bottleneck, mu = self.forward(data_in)
+        loss = self.final_loss(data_out, reconstruction, bottleneck, epoch)
+        running_loss = loss.item()
+        loss.backward()
+        self.optimizer.step()
+        if labels is not None:
+            lab_vec.append(labels)
+        if self.cluster_any:
+            bottleneck_vec.append(bottleneck)
+        return running_loss
     def fit(self, X_data, batch_size, out_folder=None, epoch=None):
         self.train()
         self.apply_random_seed()
         running_loss = 0.0
-        dloader = DataLoader(X_data, batch_size=batch_size, shuffle=True)
+        n = len(X_data)
+
         self.reset_loss_vals()
 
         self.clustering_decide(X_data)
@@ -1425,31 +1473,37 @@ class Conv_AE_NestedNamespace(nn.Module):
             else:
                 print("sparsity calculation were skipped until epoch: ", self.SPARSE_PARAMS["apply_after_epoch"])
 
-        for b in dloader:
-            data = b[self.data_key].squeeze()
-            data = data.to(self.device)
-            if self.cluster_any:
-                labels = b['label']
-                lab_vec.append(labels)
+        labels = None
+        if self.correspondance_tuple is not None and self.correspondance_tuple[2] == epoch:
+            fr = 0
+            while fr < n:
+                to = np.minimum(fr + batch_size, n)
+                data_in = torch.stack([X_data[i][self.data_key] for i in self.correspondance_tuple[0][fr:to]]).squeeze().to(self.device)
+                if self.cluster_any:
+                    labels = torch.Tensor([X_data[i]['label'] for i in self.correspondance_tuple[0][fr:to]]).squeeze().to(self.device)
+                data_out = torch.stack([X_data[i][self.data_key] for i in self.correspondance_tuple[1][fr:to]]).squeeze().to(self.device)
+                fr = to
+                running_loss += self.train_batch(data_in, data_out, labels, bottleneck_vec, lab_vec, epoch)
+        else:
+            dloader = DataLoader(X_data, batch_size=batch_size, shuffle=True)
+            for b in dloader:
+                data_in = b[self.data_key].squeeze().to(self.device)
+                data_out = b[self.data_key].squeeze().to(self.device)
+                if self.cluster_any:
+                    labels = b['label']
+                running_loss += self.train_batch(data_in, data_out, labels, bottleneck_vec, lab_vec, epoch)
 
-            self.optimizer.zero_grad()
-            reconstruction, bottleneck, mu = self.forward(data)
-            loss = self.final_loss(data, reconstruction, bottleneck, epoch)
-            running_loss += loss.item()
-            loss.backward()
-            self.optimizer.step()
 
-            if self.cluster_any:
-                bottleneck_vec.append(bottleneck)
-
-        n = len(X_data)
         loss_dict = {"running loss": running_loss/n}
         for i in self.loss:
             loss_dict[i] = self.loss[i]['val']
 
         self.setup_bottleneck_heatmap(out_folder, epoch, sub_data_identifier='fit')
 
-        loss_dict = self.apply_acc(loss_dict, lab_vec, bottleneck_vec, "tr")
+        calculate_correspondance = epoch is not None and self.correspondance_epoch_decide(epoch=epoch+1, verbose=0)
+        loss_dict = self.apply_acc(loss_dict, lab_vec, bottleneck_vec, "tr", calculate_correspondance=calculate_correspondance)
+        if calculate_correspondance:
+            self.correspondance_tuple = self.correspondance_tuple + tuple([epoch+1])
 
         return loss_dict
 

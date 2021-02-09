@@ -175,7 +175,7 @@ class khs_dataset_v2(Dataset):
 
 def data_transform(input_size, input_initial_resize, is_train, load_train_as_test, flatten, transpose_final):
     if flatten:
-        return transforms.Compose(transpose_final)
+        return transpose_final
     #  self.transform = transforms.Compose([transforms.ToTensor()])
     _transform = transforms.Compose([transforms.Resize(input_size), transpose_final])
     if input_initial_resize is not None and is_train:
@@ -196,7 +196,7 @@ class fashion_mnist(Dataset):
     def __init__(self, fashionMNISTds_fold, is_train, input_size, flatten=False, input_initial_resize=None, load_train_as_test=False, datasetname="fashion_mnist"):
         self.root_dir = fashionMNISTds_fold
         self.flatten = flatten
-        transpose_final = [transforms.ToTensor()]
+        transpose_final = transforms.Compose([transforms.ToTensor()])
         self.transform = data_transform(input_size, input_initial_resize, is_train, load_train_as_test, flatten, transpose_final)
         self.datasetname = datasetname
         dataset = fashionMNISTds(

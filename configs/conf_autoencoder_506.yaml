@@ -1,0 +1,67 @@
+# YAML
+DIR:
+  DATA: '/home/doga/DataFolder/DataPath' # '/mnt/SSD_Data/DataPath'
+  EXPERIMENT: '/home/doga/DataFolder/vaesae_experiments_cor'
+DATA:
+  IDENTIFIER: 'FASHION_MNIST'
+  INPUT_INITIAL_RESIZE: None
+  LOAD_TR_AS_TEST: False
+  FLATTEN: True
+EXPERIMENT:
+  ID: 506 # just to see also in the file
+  EXPLANATION: 'first try of correspondance. 505 diff-CORRESPONDANCE_PARAMS'
+  SAVE_MODEL_AT: 5
+  BATCH_SIZE: 64
+MODEL:
+  MODEL_CLASS: linear_vae
+  MODEL_NAME: linear_vae_FMNIST
+  DATA_KEY: image
+  INPUT_SIZE: 28
+  INPUT_CHANNEL_SIZE: 1
+  WEIGHT_DECAY: 0.0
+  LEARNING_RATE: 0.001
+  RECONSTRUCTION_ERROR_FUNCTION: 'BCE'
+  RECONSTRUCTION_ERROR_REDUCTION: 'mean'
+  CORRESPONDANCE_PARAMS:
+    TYPE: 'shuffle' # 'centered' - self.CORRESPONDANCE_PARAMS["type"]
+    AT_EVERY: 2 #some integer - self.CORRESPONDANCE_PARAMS["at_every"]
+    APPLY_AFTER_EPOCH: 2 #some_integer - self.CORRESPONDANCE_PARAMS["apply_after_epoch"]
+  SPARSE_PARAMS:
+    ERROR_FUNC: 'kl_divergence' # SPARSITY
+    WEIGHT: 0.001
+    REDUCTION: 'sum'
+    APPLY_AFTER_EPOCH: 1
+    KL_DIV_PARAMS:
+      RHO_VALUE: 0.0001
+      RHO_ONE_MODE: False
+      RHO_ONE_MODE_PERC: None
+      APPLY_SIGMOID: True
+      APPLY_LOGSOFTMAX: True
+      APPLY_MEAN: False
+  BOTTLENECK:
+    CHECK_ACTIVATION: True
+    RUN_KMEANS: True
+    FIG_NAME_BASE: 'btl_XXX.png'
+  OUTPUTS:
+    plot_variance: False
+    plot_histogram: False
+  LAYERS:
+    encoder:
+      l01_lin: 'type: Linear,in_features:784, out_features:512'
+      l01_act: 'type: ReLu'
+      l02_lin: 'type: Linear,in_features:512, out_features:512'
+      l02_act: 'type: ReLu'
+      l03_lin: 'type: Linear,in_features:512, out_features:1024'
+      l03_act: 'type: ReLu'
+      l04_lin: 'type: Linear,in_features:1024, out_features:64'
+      l04_act: 'type: ReLu'
+    vae:
+    decoder:
+      l04_lin_b: 'type: Linear,in_features:32, out_features:1024'
+      l04_act_b: 'type: ReLu'
+      l03_lin_b: 'type: Linear,in_features:1024, out_features:512'
+      l03_act_b: 'type: ReLu'
+      l02_lin_b: 'type: Linear,in_features:512, out_features:512'
+      l02_act_b: 'type: ReLu'
+      l01_lin_b: 'type: Linear,in_features:512, out_features:784'
+      l01_act_b: 'type: Sigmoid'
