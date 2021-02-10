@@ -1820,6 +1820,7 @@ def download_file(link_adr, save2path=os.getcwd(), savefilename=''):
     os.system(command_str)
     #funcH.download_file(link_adr, save2path=save2path, savefilename=savefilename)
 
+
 def get_cluster_correspondance_ids(X, cluster_ids, correspondance_type="shuffle", verbose=0):
     # uses X to find the center sample
     # returns inds_in, inds_out where:
@@ -1833,10 +1834,11 @@ def get_cluster_correspondance_ids(X, cluster_ids, correspondance_type="shuffle"
     uq_pr = np.unique(cluster_ids)
     inds_in = []
     inds_out = []
+    num_of_samples = []
     for i in range(len(uq_pr)):
         cluster_id = uq_pr[i]
         cluster_inds = getInds(cluster_ids, i)
-
+        num_of_samples.append(len(cluster_inds))
         if correspondance_type == 'shuffle':
             iin_cur = cluster_inds.copy()
             np.random.shuffle(iin_cur)
@@ -1844,7 +1846,7 @@ def get_cluster_correspondance_ids(X, cluster_ids, correspondance_type="shuffle"
             np.random.shuffle(out_cur)
         else:
             center_sample_inds = centroid_df['sampleID'].iloc[i]
-            if verbose<0:
+            if verbose > 0:
                 print("cluster_id({:-3d}), sampleCount({:-4d}), centerSampleId({:-5d})".format(int(cluster_id),
                                                                                            len(cluster_inds),
                                                                                            center_sample_inds))
@@ -1852,7 +1854,8 @@ def get_cluster_correspondance_ids(X, cluster_ids, correspondance_type="shuffle"
             # inds_out<--cluster sample id with length of inds_in
             iin_cur = np.asarray(cluster_inds[np.where(center_sample_inds != cluster_inds)], dtype=int).squeeze()
             out_cur = np.asarray(np.ones(iin_cur.shape) * center_sample_inds, dtype=int)
-        if verbose < 0:
+
+        if verbose > 0:
             print("iin_cur.shape{:}, out_cur.shape{:}".format(iin_cur.shape, out_cur.shape))
             if i == 0:
                 print("iin=", iin_cur)
@@ -1861,6 +1864,7 @@ def get_cluster_correspondance_ids(X, cluster_ids, correspondance_type="shuffle"
         inds_out.append(out_cur)
     inds_in = np.asarray(np.concatenate(inds_in), dtype=int)
     inds_out = np.asarray(np.concatenate(inds_out), dtype=int)
-    if verbose < 0:
+    if verbose > 0:
         print("inds_in.shape{:}, inds_out.shape{:}".format(inds_in.shape, inds_out.shape))
-    return inds_in, inds_out
+    centroid_df['num_of_samples'] = num_of_samples
+    return (inds_in, inds_out), centroid_df

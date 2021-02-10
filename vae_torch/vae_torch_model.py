@@ -1313,7 +1313,11 @@ class Conv_AE_NestedNamespace(nn.Module):
                     _trained_model_ = Clusterer(cluster_model='KMeans', n_clusters=bottleneck_vec.shape[1]).fit(X=bottleneck_vec, post_analyze_distribution=True, verbose=1)
                     pred_vec = _trained_model_.predictedKlusters
                     if calculate_correspondance:
-                        self.correspondance_tuple = funcH.get_cluster_correspondance_ids(X=bottleneck_vec, cluster_ids=pred_vec, correspondance_type=self.CORRESPONDANCE_PARAMS["type"],verbose=0)
+                        self.correspondance_tuple, centroid_df = funcH.get_cluster_correspondance_ids(X=bottleneck_vec, cluster_ids=pred_vec, correspondance_type=self.CORRESPONDANCE_PARAMS["type"], verbose=0)
+                        df = pd_df({'labels': lab_vec[np.asarray(centroid_df['sampleID'], dtype=int)],
+                                    'klusterID': np.asarray(centroid_df['klusterID'], dtype=int),
+                                    'sampleCounts': np.asarray(centroid_df['num_of_samples'], dtype=int)})
+                        print(df.groupby(['labels'])[['labels', 'sampleCounts']].sum())
                     kc_tr = _trained_model_.kluster_centers
                     self.kmeans_params = {
                         "kc_tr": kc_tr,
@@ -1476,14 +1480,17 @@ class Conv_AE_NestedNamespace(nn.Module):
         labels = None
         if self.correspondance_tuple is not None and self.correspondance_tuple[2] == epoch:
             fr = 0
+            n = len(self.correspondance_tuple[0])
             while fr < n:
                 to = np.minimum(fr + batch_size, n)
                 data_in = torch.stack([X_data[i][self.data_key] for i in self.correspondance_tuple[0][fr:to]]).squeeze().to(self.device)
                 if self.cluster_any:
-                    labels = torch.Tensor([X_data[i]['label'] for i in self.correspondance_tuple[0][fr:to]]).squeeze().to(self.device)
+                    labels_in = torch.Tensor([X_data[i]['label'] for i in self.correspondance_tuple[0][fr:to]]).squeeze().to(self.device)
+                    labels_out= torch.Tensor([X_data[i]['label'] for i in self.correspondance_tuple[1][fr:to]]).squeeze().to(self.device)
                 data_out = torch.stack([X_data[i][self.data_key] for i in self.correspondance_tuple[1][fr:to]]).squeeze().to(self.device)
                 fr = to
-                running_loss += self.train_batch(data_in, data_out, labels, bottleneck_vec, lab_vec, epoch)
+                running_loss += self.train_batch(data_in, data_out, labels_in, bottleneck_vec, lab_vec, epoch)
+                running_loss += self.train_batch(data_out, data_in, labels_out, bottleneck_vec, lab_vec, epoch)
         else:
             dloader = DataLoader(X_data, batch_size=batch_size, shuffle=True)
             for b in dloader:
