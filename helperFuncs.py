@@ -9,12 +9,14 @@ from sklearn.metrics import confusion_matrix, normalized_mutual_info_score as nm
 from sklearn.decomposition import PCA
 
 from scipy.spatial.distance import cdist
+from scipy.spatial.distance import pdist
+from scipy.spatial.distance import squareform
+import scipy.io
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 from pandas import DataFrame as pd_df
 import pandas as pd
-import scipy.io
 
 from datetime import datetime
 from collections import Counter
@@ -1820,6 +1822,41 @@ def download_file(link_adr, save2path=os.getcwd(), savefilename=''):
     os.system(command_str)
     #funcH.download_file(link_adr, save2path=save2path, savefilename=savefilename)
 
+def create_dist_mat(x, metric="euclidean", verbose=0):
+    dist_mat = pdist(x, metric="euclidean")
+    D = squareform(dist_mat)
+    if verbose > 0:
+        print(np.shape(dist_mat))
+        print(np.shape(D))
+    # mask the diagonal
+    np.fill_diagonal(D, np.nan)
+    sort_inds = np.argsort(D, axis=1)
+    return D, sort_inds
+
+def get_dist_inds(x, k=3, metric="euclidean", verbose=0):
+    D, sort_inds = create_dist_mat(x, metric=metric, verbose=verbose)
+    if verbose > 2:
+        print(pd_df(D))
+        print(pd_df(sort_inds))
+    N, d = np.shape(x)
+    k = np.minimum(N,k)
+    if verbose > 0:
+        print("get_dist_inds : N({:}),d({:}),k({:})".format(N, d, k))
+    d_vals = np.zeros((N, k), dtype=float)
+    d_inds = np.zeros((N, k), dtype=int)
+    if verbose > 3:
+        print("d_vals:\n", d_vals)
+        print("d_inds:\n", d_inds)
+    for i in range(N):
+        idx = sort_inds[i, :]
+        d_vals[i, :] = D[i, idx[0:k]]
+        d_inds[i, :] = idx[0:k]
+        if verbose > 1:
+            print("sampleid({:}), dv({:}), dist_inds({:})".format(i, d_vals[i, :], d_inds[i, :]))
+    if verbose > 1:
+        print("d_vals:\n", d_vals)
+        print("d_inds:\n", d_inds)
+    return d_inds, d_vals
 
 def get_cluster_correspondance_ids(X, cluster_ids, correspondance_type="shuffle", verbose=0):
     # uses X to find the center sample
@@ -1844,12 +1881,37 @@ def get_cluster_correspondance_ids(X, cluster_ids, correspondance_type="shuffle"
             np.random.shuffle(iin_cur)
             out_cur = cluster_inds.copy()
             np.random.shuffle(out_cur)
+        elif 'knear' in correspondance_type:
+            if verbose > 0:
+                print("\n***\nknear-row{:}\n".format(i), cluster_inds)
+            k = int(correspondance_type.replace('knear', ''))
+            # look at the closest k samples for each sample
+            X_sub = X[cluster_inds, :]
+            k = np.minimum(len(cluster_inds), k)
+            d_inds, d_vals = get_dist_inds(X_sub, k=k, metric="euclidean", verbose=0)
+            # d_inds are from 0 to len(cluster_inds)
+            # we want to switcth them with real cluster_inds
+            if verbose > 2:
+                print("cluster_inds:\n", cluster_inds)
+                print("d_inds in:", d_inds)
+            # d_inds.shape = [len(cluster_inds), k]
+            # each row represents a sample and all columns represent its nearest neighbours
+            # so i need to have each corr and k neighbours as correspondant frames
+            sidx = np.array([cluster_inds, ] * k).T.flatten()
+            if verbose > 1:
+                print("i = ", i)
+                print("sidx = \n", sidx)
+            d_inds = cluster_inds[d_inds.flatten()]
+            if verbose > 1:
+                print("d_inds = \n", d_inds)
+            iin_cur = sidx.copy()
+            out_cur = d_inds.copy()
         else:
             center_sample_inds = centroid_df['sampleID'].iloc[i]
             if verbose > 0:
                 print("cluster_id({:-3d}), sampleCount({:-4d}), centerSampleId({:-5d})".format(int(cluster_id),
-                                                                                           len(cluster_inds),
-                                                                                           center_sample_inds))
+                                                                                               len(cluster_inds),
+                                                                                               center_sample_inds))
             # inds_in <--all sampleids except cluster center
             # inds_out<--cluster sample id with length of inds_in
             iin_cur = np.asarray(cluster_inds[np.where(center_sample_inds != cluster_inds)], dtype=int).squeeze()
@@ -1857,14 +1919,31 @@ def get_cluster_correspondance_ids(X, cluster_ids, correspondance_type="shuffle"
 
         if verbose > 0:
             print("iin_cur.shape{:}, out_cur.shape{:}".format(iin_cur.shape, out_cur.shape))
-            if i == 0:
-                print("iin=", iin_cur)
-                print("out=", out_cur)
+            #if i == 0:
+            print("iin=", iin_cur)
+            print("out=", out_cur)
         inds_in.append(iin_cur)
         inds_out.append(out_cur)
+
+    # first concatanate the lists into ndarray
     inds_in = np.asarray(np.concatenate(inds_in), dtype=int)
     inds_out = np.asarray(np.concatenate(inds_out), dtype=int)
+
+    if 'knear' not in correspondance_type:
+        # now a-b and b-a
+        ii_ret = np.asarray(np.concatenate([inds_in, inds_out]), dtype=int)
+        io_ret = np.asarray(np.concatenate([inds_out, inds_in]), dtype=int)
+    else:
+        ii_ret = inds_in.copy()
+        io_ret = inds_out.copy()
+
+    # now shuffle so that clusters not sorted in learning
+    print("shuffle all")
+    p = np.random.permutation(len(ii_ret))
+    ii_ret = ii_ret[p]
+    io_ret = io_ret[p]
+
     if verbose > 0:
         print("inds_in.shape{:}, inds_out.shape{:}".format(inds_in.shape, inds_out.shape))
     centroid_df['num_of_samples'] = num_of_samples
-    return (inds_in, inds_out), centroid_df
+    return (ii_ret, io_ret), centroid_df

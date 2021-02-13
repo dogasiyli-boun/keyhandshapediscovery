@@ -9,7 +9,7 @@ from numpy import unique as np_unique
 from torch.utils.data import DataLoader
 import numpy as np
 from sys import exit as sys_exit
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import confusion_matrix, accuracy_score
 import matplotlib.pyplot as plt
 from pandas import DataFrame as pd_df
 import os
@@ -1215,6 +1215,7 @@ class Conv_AE_NestedNamespace(nn.Module):
             'bottleneck_kmeans': {'apply': self.BOTTLENECK_PARAMS["run_kmeans"], 'val': None},
             'bottleneck_act': {'apply': self.BOTTLENECK_PARAMS["check_activation"], 'val': None},
         }
+        self.kmeans_params = None
 
     def update_old_models(self):
         """
@@ -1285,6 +1286,26 @@ class Conv_AE_NestedNamespace(nn.Module):
         reconstruction = self.dec(bottleneck)
         return reconstruction, bottleneck, mu
 
+    @staticmethod
+    def analyze_corresondance_results(correspondance_tuple, centroid_df, pred_vec, lab_vec):
+        df = pd_df({'labels': lab_vec[np.asarray(centroid_df['sampleID'], dtype=int)],
+                    'klusterID': np.asarray(centroid_df['klusterID'], dtype=int),
+                    'sampleCounts': np.asarray(centroid_df['num_of_samples'], dtype=int)})
+        print('correspondance results:')
+        print(df.groupby(['labels'])[['labels', 'sampleCounts']].sum())
+        corr_in_clust = pred_vec[correspondance_tuple[0]]
+        corr_ou_clust = pred_vec[correspondance_tuple[1]]
+        _confMat_corr_preds = confusion_matrix(corr_in_clust, corr_ou_clust)
+        acc_corr_preds = 100 * np.sum(np.diag(_confMat_corr_preds)) / np.sum(
+            np.sum(_confMat_corr_preds))
+        print("_confMat_corr_preds - acc({:6.4f})".format(acc_corr_preds))
+
+        corr_in_labels = lab_vec[correspondance_tuple[0]]
+        corr_ou_labels = lab_vec[correspondance_tuple[1]]
+        _confMat_corr = confusion_matrix(corr_in_labels, corr_ou_labels)
+        acc_corr = 100 * np.sum(np.diag(_confMat_corr)) / np.sum(np.sum(_confMat_corr))
+        print("confMat - acc({:6.4f}), correspondance match:\n".format(acc_corr), pd_df(_confMat_corr))
+
     def reset_loss_vals(self):
         for i in self.loss:
             self.loss[i]['val'] = 0.0
@@ -1308,16 +1329,16 @@ class Conv_AE_NestedNamespace(nn.Module):
             if not self.clustering_dict[k]['apply']:
                 continue
             if k == 'bottleneck_kmeans':
-                print('bottleneck_kmeans')
-                if str(sub_data_identifier).__contains__("tr"):
+                #train kmeans only if it is (tr_te-tr_va) or tr and not calc corres
+                train_km = str(sub_data_identifier).__contains__("tr")  # this is a must
+                if str(sub_data_identifier) == "tr" and self.kmeans_params is None:
+                    train_km = True
+                if str(sub_data_identifier) == "tr" and self.kmeans_params is not None:
+                    train_km = False
+                print('bottleneck_kmeans dt({:}), train_k_means({:})'.format(sub_data_identifier, train_km))
+                if train_km:
                     _trained_model_ = Clusterer(cluster_model='KMeans', n_clusters=bottleneck_vec.shape[1]).fit(X=bottleneck_vec, post_analyze_distribution=True, verbose=1)
                     pred_vec = _trained_model_.predictedKlusters
-                    if calculate_correspondance:
-                        self.correspondance_tuple, centroid_df = funcH.get_cluster_correspondance_ids(X=bottleneck_vec, cluster_ids=pred_vec, correspondance_type=self.CORRESPONDANCE_PARAMS["type"], verbose=0)
-                        df = pd_df({'labels': lab_vec[np.asarray(centroid_df['sampleID'], dtype=int)],
-                                    'klusterID': np.asarray(centroid_df['klusterID'], dtype=int),
-                                    'sampleCounts': np.asarray(centroid_df['num_of_samples'], dtype=int)})
-                        print(df.groupby(['labels'])[['labels', 'sampleCounts']].sum())
                     kc_tr = _trained_model_.kluster_centers
                     self.kmeans_params = {
                         "kc_tr": kc_tr,
@@ -1326,6 +1347,15 @@ class Conv_AE_NestedNamespace(nn.Module):
                 else:
                     df = pd_df(bottleneck_vec)
                     pred_vec, _ = self.kmeans_params["_trained_model_"].predict(df)
+                #find correspondance only if it is tr_tr
+                if calculate_correspondance:
+                    print('calclating correspondance indices of x({:})'.format(bottleneck_vec.shape))
+                    self.correspondance_tuple, centroid_df = \
+                        funcH.get_cluster_correspondance_ids(X=bottleneck_vec, cluster_ids=pred_vec,
+                                                             correspondance_type=self.CORRESPONDANCE_PARAMS["type"],
+                                                             verbose=0)
+                    self.analyze_corresondance_results(self.correspondance_tuple, centroid_df, pred_vec, lab_vec)
+
                 centroid_info_pdf = self.kmeans_params["_trained_model_"].kluster_centroids
             if k == 'bottleneck_act':
                 print('bottleneck_act')
@@ -1342,6 +1372,7 @@ class Conv_AE_NestedNamespace(nn.Module):
             print('--unique last ' + str(pc) + ' clusters-->', uniq_clus[-pc:])
             pc = int(np.minimum(unique_pred_classes.size, 5))
             print('--unique last ' + str(pc) + ' classes-->', unique_pred_classes[-pc:])
+            print("confMat:\n", pd_df(_confMat_preds))
             self.clustering_dict[k]['val'] = acc
     def apply_acc(self, loss_dict, lab_vec, bottleneck_vec, sub_data_identifier, calculate_correspondance=False):
         if not self.cluster_any:
@@ -1481,16 +1512,17 @@ class Conv_AE_NestedNamespace(nn.Module):
         if self.correspondance_tuple is not None and self.correspondance_tuple[2] == epoch:
             fr = 0
             n = len(self.correspondance_tuple[0])
+            print("correspondance training with correspondance_type({:}), n({:}), epoch({:})".format(self.CORRESPONDANCE_PARAMS["type"], n, epoch))
             while fr < n:
                 to = np.minimum(fr + batch_size, n)
                 data_in = torch.stack([X_data[i][self.data_key] for i in self.correspondance_tuple[0][fr:to]]).squeeze().to(self.device)
                 if self.cluster_any:
                     labels_in = torch.Tensor([X_data[i]['label'] for i in self.correspondance_tuple[0][fr:to]]).squeeze().to(self.device)
-                    labels_out= torch.Tensor([X_data[i]['label'] for i in self.correspondance_tuple[1][fr:to]]).squeeze().to(self.device)
+                    #labels_out= torch.Tensor([X_data[i]['label'] for i in self.correspondance_tuple[1][fr:to]]).squeeze().to(self.device)
                 data_out = torch.stack([X_data[i][self.data_key] for i in self.correspondance_tuple[1][fr:to]]).squeeze().to(self.device)
                 fr = to
                 running_loss += self.train_batch(data_in, data_out, labels_in, bottleneck_vec, lab_vec, epoch)
-                running_loss += self.train_batch(data_out, data_in, labels_out, bottleneck_vec, lab_vec, epoch)
+                #running_loss += self.train_batch(data_out, data_in, labels_out, bottleneck_vec, lab_vec, epoch)
         else:
             dloader = DataLoader(X_data, batch_size=batch_size, shuffle=True)
             for b in dloader:
