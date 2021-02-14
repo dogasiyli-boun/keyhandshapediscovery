@@ -1929,7 +1929,7 @@ def get_cluster_correspondance_ids(X, cluster_ids, correspondance_type="shuffle"
     inds_in = np.asarray(np.concatenate(inds_in), dtype=int)
     inds_out = np.asarray(np.concatenate(inds_out), dtype=int)
 
-    if 'knear' not in correspondance_type:
+    if True:  # 'knear' not in correspondance_type:
         # now a-b and b-a
         ii_ret = np.asarray(np.concatenate([inds_in, inds_out]), dtype=int)
         io_ret = np.asarray(np.concatenate([inds_out, inds_in]), dtype=int)

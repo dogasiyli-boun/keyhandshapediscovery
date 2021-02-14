@@ -1,0 +1,59 @@
+# YAML
+DIR:
+  DATA: '/home/doga/DataFolder/DataPath' # '/mnt/SSD_Data/DataPath'
+  EXPERIMENT: '/home/doga/DataFolder/vaesae_experiments_cor'
+DATA:
+  IDENTIFIER: 'FASHION_MNIST'
+  INPUT_INITIAL_RESIZE: None
+  LOAD_TR_AS_TEST: False
+  FLATTEN: False
+EXPERIMENT:
+  ID: 517 # just to see also in the file
+  EXPLANATION: 'same as 516. model conv'
+  SAVE_MODEL_AT: 10
+  BATCH_SIZE: 64
+MODEL:
+  MODEL_CLASS: linear_vae
+  MODEL_NAME: linear_vae_FMNIST
+  DATA_KEY: image
+  INPUT_SIZE: 28
+  INPUT_CHANNEL_SIZE: 1
+  WEIGHT_DECAY: 0.0
+  LEARNING_RATE: 0.001
+  RECONSTRUCTION_ERROR_FUNCTION: 'BCE'
+  RECONSTRUCTION_ERROR_REDUCTION: 'mean'
+  CORRESPONDANCE_PARAMS:
+    TYPE: 'knear1' # 'shuffle' # 'centered' - self.CORRESPONDANCE_PARAMS["type"]
+    AT_EVERY: 10 #some integer - self.CORRESPONDANCE_PARAMS["at_every"]
+    APPLY_AFTER_EPOCH: 9 #some_integer - self.CORRESPONDANCE_PARAMS["apply_after_epoch"]
+  BOTTLENECK:
+    CHECK_ACTIVATION: False
+    RUN_KMEANS: True
+    FIG_NAME_BASE: 'btl_XXX.png'
+  OUTPUTS:
+    plot_variance: False
+    plot_histogram: False
+  LAYERS:
+    encoder:
+      l01_conv: 'type: Conv2d,in_channels : 1, out_channels : 32, kernel_size : 3'
+      l01_act:  'type: ReLu'
+      l02_conv: 'type: Conv2d,in_channels :32, out_channels : 32, kernel_size : 3'
+      l02_act:  'type: ReLu'
+      l03_maxp: 'type: MaxPool2d,kernel_size:2'
+      flat:     'type: Flatten'
+      l04_lin:  'type: Linear,in_features:4608, out_features:1024'
+      l04_act:  'type: ReLu'
+      l05_lin:  'type: Linear,in_features:1024, out_features:64'
+      l05_act:  'type: ReLu'
+    vae:
+    decoder:
+      l05_linear_b: 'type: Linear,in_features:32, out_features:1024'
+      l05_act_b:    'type: ReLu'
+      l04_linear_b: 'type: Linear,in_features:1024, out_features:4608'
+      l04_act_b:    'type: ReLu'
+      flat_b:       'type: Unflatten'
+      l03_upsm:     'type: Upsample,scale_factor:2'
+      l02_deconv:   'type: ConvTranspose2d,in_channels :32, out_channels : 32, kernel_size : 3'
+      l02_act_b:    'type: ReLu'
+      l01_deconv:   'type: ConvTranspose2d,in_channels :32, out_channels : 1, kernel_size : 3'
+      l01_act_b:    'type: Sigmoid'

@@ -1515,19 +1515,19 @@ class Conv_AE_NestedNamespace(nn.Module):
             print("correspondance training with correspondance_type({:}), n({:}), epoch({:})".format(self.CORRESPONDANCE_PARAMS["type"], n, epoch))
             while fr < n:
                 to = np.minimum(fr + batch_size, n)
-                data_in = torch.stack([X_data[i][self.data_key] for i in self.correspondance_tuple[0][fr:to]]).squeeze().to(self.device)
+                data_in = torch.stack([X_data[i][self.data_key] for i in self.correspondance_tuple[0][fr:to]]).to(self.device)
                 if self.cluster_any:
                     labels_in = torch.Tensor([X_data[i]['label'] for i in self.correspondance_tuple[0][fr:to]]).squeeze().to(self.device)
                     #labels_out= torch.Tensor([X_data[i]['label'] for i in self.correspondance_tuple[1][fr:to]]).squeeze().to(self.device)
-                data_out = torch.stack([X_data[i][self.data_key] for i in self.correspondance_tuple[1][fr:to]]).squeeze().to(self.device)
+                data_out = torch.stack([X_data[i][self.data_key] for i in self.correspondance_tuple[1][fr:to]]).to(self.device)
                 fr = to
                 running_loss += self.train_batch(data_in, data_out, labels_in, bottleneck_vec, lab_vec, epoch)
                 #running_loss += self.train_batch(data_out, data_in, labels_out, bottleneck_vec, lab_vec, epoch)
         else:
             dloader = DataLoader(X_data, batch_size=batch_size, shuffle=True)
             for b in dloader:
-                data_in = b[self.data_key].squeeze().to(self.device)
-                data_out = b[self.data_key].squeeze().to(self.device)
+                data_in = b[self.data_key].to(self.device)
+                data_out = b[self.data_key].to(self.device)
                 if self.cluster_any:
                     labels = b['label']
                 running_loss += self.train_batch(data_in, data_out, labels, bottleneck_vec, lab_vec, epoch)
@@ -1558,7 +1558,7 @@ class Conv_AE_NestedNamespace(nn.Module):
         self.reset_loss_vals()
         with torch.no_grad():
             for b in dloader:
-                data = b[self.data_key].squeeze()
+                data = b[self.data_key]
                 data = data.to(self.device)
                 if self.cluster_any:
                     labels = b['label']

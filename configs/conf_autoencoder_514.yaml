@@ -8,8 +8,8 @@ DATA:
   LOAD_TR_AS_TEST: False
   FLATTEN: True
 EXPERIMENT:
-  ID: 513 # just to see also in the file
-  EXPLANATION: 'same as 512 knear5 - knear2, AT_EVERY_4_not_3'
+  ID: 514 # just to see also in the file
+  EXPLANATION: 'same as 513 knear2 - knear1'
   SAVE_MODEL_AT: 10
   BATCH_SIZE: 64
 MODEL:
@@ -23,7 +23,7 @@ MODEL:
   RECONSTRUCTION_ERROR_FUNCTION: 'BCE'
   RECONSTRUCTION_ERROR_REDUCTION: 'mean'
   CORRESPONDANCE_PARAMS:
-    TYPE: 'knear2' # 'shuffle' # 'centered' - self.CORRESPONDANCE_PARAMS["type"]
+    TYPE: 'knear1' # 'shuffle' # 'centered' - self.CORRESPONDANCE_PARAMS["type"]
     AT_EVERY: 4 #some integer - self.CORRESPONDANCE_PARAMS["at_every"]
     APPLY_AFTER_EPOCH: 3 #some_integer - self.CORRESPONDANCE_PARAMS["apply_after_epoch"]
   BOTTLENECK:
