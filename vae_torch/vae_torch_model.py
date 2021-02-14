@@ -1349,7 +1349,7 @@ class Conv_AE_NestedNamespace(nn.Module):
                     pred_vec, _ = self.kmeans_params["_trained_model_"].predict(df)
                 #find correspondance only if it is tr_tr
                 if calculate_correspondance:
-                    print('calclating correspondance indices of x({:})'.format(bottleneck_vec.shape))
+                    print('calculating correspondance indices of x({:})'.format(bottleneck_vec.shape))
                     self.correspondance_tuple, centroid_df = \
                         funcH.get_cluster_correspondance_ids(X=bottleneck_vec, cluster_ids=pred_vec,
                                                              correspondance_type=self.CORRESPONDANCE_PARAMS["type"],
