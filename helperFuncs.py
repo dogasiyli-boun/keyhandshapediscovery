@@ -1,6 +1,7 @@
 import socket
 import os
 import sys
+import warnings
 import numpy as np
 from math import isnan as isNaN
 import tensorflow as tf
@@ -1822,8 +1823,60 @@ def download_file(link_adr, save2path=os.getcwd(), savefilename=''):
     os.system(command_str)
     #funcH.download_file(link_adr, save2path=save2path, savefilename=savefilename)
 
+def get_linearized_distance_matrix(_D_, verbose=0, sort_dist=None):
+    # first make sure it is ndarray of N by N
+    N, M = np.shape(_D_)
+    n = np.minimum(N, M)
+    if N != M:
+        if N > M:
+            _D_ = _D_[:M, :M]
+        else:
+            _D_ = _D_[:M, :M]
+        warnings.warn('distance matrix of size {:d}x{:d} is first shrinked to square{:}'.format(N, M, n))
+
+    # np.asarray(([np.arange(n), ] * n), dtype=np.int32)  # [0 1 2 3 4]
+    # _Y_id_x[np.triu_indices(n, k=1)]
+    if verbose > 0:
+        print("calculating idx_x")
+    idx_x = np.asarray([i+j+1 for i in range(n) for j in range(n-i-1)], dtype=np.int32)
+    # np.asarray(([np.arange(n), ] * n), dtype=np.int32).T  # [0 0 0 0 0]
+    # _Y_id_y[np.triu_indices(n, k=1)]
+    if verbose > 0:
+        print("calculating idx_y")
+    idx_y = np.asarray([i for i in range(n) for j in range(n-i-1)], dtype=np.int32)
+    #_D_lin = _D_[np.triu_indices(n, k=1)]
+    if verbose > 0:
+        print("mapping _D_")
+    _D_ = _D_[idx_y, idx_x]
+    if verbose > 0:
+        print("mapped _D_")
+
+    if sort_dist == "ascend":
+        sidx = np.argsort(_D_)
+    elif sort_dist == "descend":
+        sidx = np.argsort(_D_)
+        sidx = np.flip(sidx)
+    else:
+        sidx = np.arange(n * (n - 1) / 2, dtype=int)
+    if verbose > 0:
+        print("sidx[:10] = ", sidx[:5], '...')
+
+    if verbose > 0:
+        print("creating dist_dict")
+    dist_dict = {
+        "dist_mat": _D_[sidx],
+        "idx_x": idx_x[sidx],
+        "idx_y": idx_y[sidx],
+    }
+    if verbose > 0:
+        print("D[:5] = ", dist_dict["dist_mat"][:5], '...')
+        print("idx_x[:5] = ", dist_dict["idx_x"][:5], '...')
+        print("idx_y[:5] = ", dist_dict["idx_y"][:5], '...')
+
+    return dist_dict
+
 def create_dist_mat(x, metric="euclidean", verbose=0):
-    dist_mat = pdist(x, metric="euclidean")
+    dist_mat = pdist(x, metric=metric)
     D = squareform(dist_mat)
     if verbose > 0:
         print(np.shape(dist_mat))
