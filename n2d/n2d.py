@@ -81,6 +81,11 @@ def n_run_cluster(hle, n_clusters, cluster_func_name='GMM', experiment_names_and
     y_pred, kluster_centroids = cluster_obj.predict(hle, post_analyze_distribution=True, verbose=1)
     debug_string_out = funcH.print_and_add("Time to cluster: " + t.get_elapsed_time(), debug_string_out)
     return y_pred, kluster_centroids
+def n_get_acc(y, y_pred, centroid_info_pdf=None):
+    _confMat, kluster2Classes, kr_pdf, weightedPurity, cnmxh_perc = funcH.countPredictionsForConfusionMat(y, y_pred, centroid_info_pdf=centroid_info_pdf)
+    sampleCount = np.sum(np.sum(_confMat))
+    _acc = 100 * np.sum(np.diag(_confMat)) / sampleCount
+    return _acc
 def n_eval_result(hle, y, y_pred, label_names, cluster_func_name, clusters_count, dataset_name, definition_string, pngnameadd, experiment_names_and_folders, optional_params=None, visualize=False):
     global debug_string_out
     y_pred = np.asarray(y_pred)
@@ -90,9 +95,9 @@ def n_eval_result(hle, y, y_pred, label_names, cluster_func_name, clusters_count
     manifold_learner = funcH.get_attribute(optional_params, "manifold_learner", default_type=str, default_val='UMAP')
 
     kluster_centroids = funcH.get_cluster_centroids(hle, y_pred, kluster_centers=None, verbose=0)
-    _confMat, kluster2Classes, kr_pdf, weightedPurity, cnmxh_perc = funcH.countPredictionsForConfusionMat(y, y_pred, centroid_info_pdf=kluster_centroids)
-    sampleCount = np.sum(np.sum(_confMat))
-    acc_doga = 100 * np.sum(np.diag(_confMat)) / sampleCount
+    acc_doga = n_get_acc(y, y_pred, centroid_info_pdf=kluster_centroids)
+    acc_doga_wo_kluster_centroids = n_get_acc(y, y_pred, centroid_info_pdf=None)
+    debug_string_out = funcH.print_and_add("acc_doga:" + "{:6.4f}".format(acc_doga) + ", acc_doga_wo_kluster_centroids:" + "{:6.4f}".format(acc_doga_wo_kluster_centroids), debug_string_out)
     acc = np.round(cluster_acc(y, y_pred), 5)
     nmi = np.round(metrics.normalized_mutual_info_score(y, y_pred), 5)
     ari = np.round(metrics.adjusted_rand_score(y, y_pred), 5)

@@ -53,7 +53,7 @@ class Clusterer():
 
             if self.cluster_model == 'KMeans':
                 # default vals for kmeans --> max_iter=300, 1e-4
-                self.trained_model = KMeans(n_clusters=self.n_clusters, n_init=5, tol=curTol, max_iter=max_iter, random_state=random_state).fit(df)
+                self.trained_model = KMeans(init='k-means++', n_clusters=self.n_clusters, n_init=20, tol=curTol, max_iter=max_iter, random_state=random_state).fit(df)
                 self.predictedKlusters = self.trained_model.labels_.astype(float)
                 self.kluster_centers = self.trained_model.cluster_centers_.astype(float)
             elif self.cluster_model == 'GMM_full':
