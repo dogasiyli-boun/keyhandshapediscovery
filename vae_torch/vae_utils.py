@@ -3,6 +3,7 @@ from matplotlib.cm import get_cmap
 import numpy as np
 import os
 from PIL import Image
+from helperFuncs import getFileList
 
 def movingaverage(vec, window_size):
     vec_win = np.ones(int(window_size))/float(window_size)
@@ -52,8 +53,11 @@ def plot_compare(X_dict, title_str, contain_str, ylabel, figsize=(10, 3), dpi=80
 def plot_cf(cf_int, data_log_keys = ['tr_tr', 'tr_va', 'va', 'te'], k_loss_disp_list=None, max_act_ep=None, plot_cnt = 5,
             select_id_type='linspace',
             experiments_folder='/mnt/USB_HDD_1TB/GitHub/keyhandshapediscovery/',
-            exp_base_name='output_sae_k256_is64_cf', ae_f_name_base='ae_ft_sae_k256_is64.npy'):
+            exp_base_name='output_sae_k256_is64_cf',
+            ae_f_name_base=None, plt_min_max_lines=False):
     ae_fold_name = os.path.join(experiments_folder, exp_base_name + str(cf_int).zfill(2))
+    if ae_f_name_base is None:
+        ae_f_name_base = getFileList(dir2Search=ae_fold_name, startString='ae_ft', endString='.npy')[0]
     ae_f_name = os.path.join(ae_fold_name, ae_f_name_base)
     vfz = np.load(ae_f_name, allow_pickle=True)
     loss_log_dict = {}
@@ -72,13 +76,27 @@ def plot_cf(cf_int, data_log_keys = ['tr_tr', 'tr_va', 'va', 'te'], k_loss_disp_
         for k_data in data_log_keys:
             if k_loss in loss_log_dict[k_data][0]:
                 los_vec_cur = [loss_log_dict[k_data][l][k_loss] for l in range(0, len(loss_log_dict[k_data]))]
-                disp_epoch = len(loss_log_dict[k_data])
+                max_in_all_val = 0
+                min_in_all_val = 0
+                try:
+                    sorted_idx = np.argsort(los_vec_cur)
+                    (max_in_all_idx, max_in_all_val) = (sorted_idx[-1], los_vec_cur[sorted_idx[-1]])
+                    (min_in_all_idx, min_in_all_val) = (sorted_idx[0], los_vec_cur[sorted_idx[0]])
+                    print("{:}: min(@epoc{:d}:{:6.4f}), max(@epoc{:d}:{:6.4f}), max_list({:})".format(k_data, min_in_all_idx, min_in_all_val, max_in_all_idx,
+                                                                      max_in_all_val, sorted_idx[-5:]))
+                except:
+                    pass
+                disp_epoch = len(loss_log_dict[k_data]) if max_act_ep is None else np.minimum(max_act_ep, len(loss_log_dict[k_data]))
                 los_vec_cur = [loss_log_dict[k_data][l][k_loss] for l in range(0, disp_epoch)]
                 plot_x = np.asarray(list(range(0, disp_epoch)))
                 fig, ax = plt.subplots(1, figsize=(10, 3), dpi=80)
                 ax.set_title('cf(' + str(cf_int).zfill(2) + '), ' + k_data + '--' + k_loss)
                 ax.plot(plot_x, los_vec_cur[:disp_epoch], lw=2, label=k_loss, color='black')
-    max_act_ep = np.minimum(max_act_ep,n-1) if max_act_ep is not None else n-1
+                if plt_min_max_lines:
+                    ax.plot([0, disp_epoch], [max_in_all_val, max_in_all_val], lw=3, label=k_loss+"Max", color='blue')
+                    ax.plot([0, disp_epoch], [min_in_all_val, min_in_all_val], lw=3, label=k_loss+"Min", color='red')
+
+    max_act_ep = np.minimum(max_act_ep, n-1) if max_act_ep is not None else n-1
     if select_id_type=='last':
         subplot_ids = np.asarray(range(max_act_ep-plot_cnt-1,max_act_ep-1)).astype(int)
         subplot_ids = subplot_ids[subplot_ids>0]
