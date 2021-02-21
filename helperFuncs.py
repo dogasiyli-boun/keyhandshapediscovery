@@ -16,6 +16,7 @@ import scipy.io
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
+from matplotlib.ticker import FormatStrFormatter
 from pandas import DataFrame as pd_df
 import pandas as pd
 
@@ -133,10 +134,12 @@ def load_dict_fr_file(file_name_cluster_obj, file_ident_str=""):
     print("loading " + file_ident_str + " from file " + file_name_cluster_obj)
     with open(file_name_cluster_obj, 'rb') as config_dictionary_file:
         cluster_obj = pickle.load(config_dictionary_file)
-    print("loeaded..")
+    print("loaded..")
     return cluster_obj
 
-def analyze_silhouette_values(sample_silhouette_values, cluster_labels, real_labels, centroid_info_pdf=None, label_names=None, conf_plot_save_to='', verbose=0):
+def analyze_silhouette_values(sample_silhouette_values, cluster_labels, real_labels,
+                              centroid_info_pdf=None, label_names=None, conf_plot_save_to='', verbose=0,
+                              figsize=(24, 12), lw=[5, 4, 3], show_title=True, str_deg=45, str_size='x-large'):
     _confMat, kluster2Classes, kr_pdf, _, _ = countPredictionsForConfusionMat(real_labels, cluster_labels, centroid_info_pdf=centroid_info_pdf)
     sampleCount = np.sum(np.sum(_confMat))
     acc_doga_base = 100 * np.sum(np.diag(_confMat)) / sampleCount
@@ -196,7 +199,7 @@ def analyze_silhouette_values(sample_silhouette_values, cluster_labels, real_lab
             new_index = centroid_info_pdf_new["sampleID"].values[r]
             before_sample_cnt = np.sum(samples_to_remove < new_index)
             newer_index = new_index-before_sample_cnt
-            if new_index!= newer_index:
+            if new_index != newer_index:
                 if verbose > 2:
                     print("\nnew centroid index(", new_index, ") changed to newer index(", end='')
                 centroid_info_pdf_new["sampleID"].values[r] = newer_index
@@ -215,42 +218,62 @@ def analyze_silhouette_values(sample_silhouette_values, cluster_labels, real_lab
         pass
 
     plt.close('all')
-    fig, ax = plt.subplots(1, figsize=(30, 10), dpi=80)
-    ax.plot(data_perc_vec, pred_cumsum, lw=2, label='accuracy', color='blue', ls='-', zorder=0)
-    ax.plot(data_perc_vec, sample_silhouette_values_sorted, lw=2, label='silhouette_prec', color='green', ls='-',
-            zorder=0)
-    ax.plot(np.asarray([0, 1]), np.asarray([accuracy_at_last_pos,accuracy_at_last_pos]), lw=3, label='first_neg_sample', color='red', ls='-',
-            zorder=0)
+    fig, ax = plt.subplots(1, figsize=figsize, dpi=180)
+    ax.plot(data_perc_vec, pred_cumsum, lw=lw[0], label='accuracy', color='blue', ls='-', zorder=0)
+    ax.plot(data_perc_vec, sample_silhouette_values_sorted, lw=lw[1], label='silhouette_prec', color='green', ls='-', zorder=0)
+    ax.plot(np.asarray([0, 1]), np.asarray([accuracy_at_last_pos, accuracy_at_last_pos]), lw=lw[2], label='first_neg_sample', color='red', ls='-', zorder=0)
     # Data for plotting
 
     title_str += '_accuracy<{:4.2f}>'.format(100*accuracy_at_last_pos)
+    title_str = title_str if show_title else ''
     ax.set(xlabel='data percentage', ylabel='accuracy', title=title_str)
+
+    ax.set_xlim([0, 1.0])
+    ax.set_xticks(np.arange(0, 1.00, 0.1), minor=False)
+    ax.xaxis.set_major_formatter(FormatStrFormatter('%0.1f'))
+
+    ax.set_ylim([-0.2, 1.0])
+    ax.set_yticks(np.arange(-0.2, 1.00, 0.1), minor=False)
+    ax.yaxis.set_major_formatter(FormatStrFormatter('%0.1f'))
+
+    ax.title.set_position([.5, 1.05])
     ax.grid()
     plt.legend(loc='lower left')
 
     print("*-*-*")
+    data_p_last = 0.0
     for i in range(9):
-        sil_v = 0.90 - i * 0.1 # silhouette value
+        sil_v = 0.90 - i * 0.1  # silhouette value
         data_id_at_i = np.argmax(sample_silhouette_values_sorted < sil_v) - 1
+        data_p = data_id_at_i/len(pred_cumsum)
+        if data_p-data_p_last < 0.01:
+            continue
+        data_p_last = data_p
         ac_at = pred_cumsum[data_id_at_i]
-        print("sil_v({:.1f}),at({:d}),acc({:6.4f})".format(sil_v, data_id_at_i, 100*ac_at))
+        acc_ident = "4.2f"
+        if ac_at == 1.00:
+            acc_ident = "3.0f"
+        if verbose > 0:
+            print(str("sil_v({:.1f}),at({:d}),acc({:"+acc_ident+"})").format(sil_v, data_id_at_i, 100*ac_at))
         _x = data_id_at_i/len(pred_cumsum)
         ax.text(x=_x, y=sample_silhouette_values_sorted[data_id_at_i],
-                s="s({:2.1f})-{:6.4f}*".format(sil_v, 100*ac_at),
+                s=str("s({:2.1f})dp({:2.1f})acc({:"+acc_ident+"})*").format(sil_v, data_p, 100*ac_at),
                 va='top', ha='right',
-                color="green", fontsize='x-large', rotation=45)
+                color="green", fontsize=str_size, rotation=str_deg)
         ax.plot(np.asarray([_x, _x]), np.asarray([sample_silhouette_values_sorted[data_id_at_i], ac_at]), lw=3,
                 color='green', ls='-', zorder=0)
     print("*-*-*")
     for i in range(1, 9):
         _dp = i * 0.1
         data_id_at_i = int(len(pred_cumsum) * _dp)
+        sil_v = sample_silhouette_values_sorted[data_id_at_i]
         ac_at = pred_cumsum[data_id_at_i]
-        print("data_perc({:.1f}),at({:d}),acc({:6.4f})".format(_dp, data_id_at_i, 100*ac_at))
+        if verbose > 0:
+            print("data_perc({:.1f}),at({:d}),acc({:6.4f})".format(_dp, data_id_at_i, 100*ac_at))
         ax.text(x=data_id_at_i/len(pred_cumsum), y=ac_at,
-                s="dp({:2.1f}){:6.4f}".format(_dp, 100*ac_at),
+                s="dp({:2.1f})sv({:2.1f})acc({:6.4f})".format(_dp, sil_v, 100*ac_at),
                 va='bottom', ha='left',
-                color="blue", fontsize='x-large', rotation=45)
+                color="blue", fontsize=str_size, rotation=str_deg)
 
     fig.savefig(save_acc_silhouette_fig_file_name)
 
@@ -1174,6 +1197,14 @@ def plot_confusion_matrix(conf_mat,
         ok_rows = del_rows_cols(all_rows, confused_rows)
         ok_cols = del_rows_cols(all_cols, confused_cols)
 
+        row_cnt = len(all_rows) - len(ok_rows)
+        col_cnt = len(all_cols) - len(ok_cols)
+        if row_cnt == 1 and col_cnt == 1:
+            ok_rows = del_rows_cols(ok_rows, np.argmax(ok_rows == confused_cols.squeeze()))
+            ok_cols = del_rows_cols(ok_cols, np.argmax(ok_cols == confused_rows.squeeze()))
+            confused_rows = np.sort(np.asarray([confused_cols.squeeze(), confused_rows.squeeze()], dtype=int).squeeze())
+            confused_cols = confused_rows.copy()
+
         conf_mat = del_rows_cols(conf_mat, ok_rows, ok_cols)
         normed_conf_mat = del_rows_cols(normed_conf_mat, ok_rows, ok_cols)
 
@@ -1182,12 +1213,22 @@ def plot_confusion_matrix(conf_mat,
 
         total_samples = del_rows_cols(total_samples, ok_rows)
         total_preds = del_rows_cols(total_preds, ok_cols)
-        figsize = (conf_mat.shape[0] * figMulCnt, conf_mat.shape[1] * figMulCnt * 2)
+
+        row_col_max = int(np.max(conf_mat.shape))
+        fig_x = np.maximum(row_col_max+conf_mat.shape[0] * figMulCnt, 8)
+        fig_y = np.maximum(row_col_max+conf_mat.shape[1] * figMulCnt * 2, 8)
+        figsize = (fig_x, fig_y)
         if verbose > 0:
             print("figsize=", figsize)
         if class_names is not None:
-            class_names_x_preds = class_names_x_preds[confused_cols]
-            class_names_y_true = class_names_y_true[confused_rows]
+            try :
+                class_names_x_preds = class_names_x_preds[confused_cols]
+            except:
+                class_names_x_preds = [class_names_x_preds[i] for i in confused_cols]
+            try:
+                class_names_y_true = class_names_y_true[confused_rows]
+            except:
+                class_names_y_true = [class_names_y_true[i] for i in confused_rows]
 
     fig, ax = plt.subplots(figsize=figsize)
     ax.grid(False)

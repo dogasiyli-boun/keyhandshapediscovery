@@ -379,6 +379,7 @@ def get_args(argv):
     parser.add_argument('--cluster', default='GMM', type=str)
     parser.add_argument('--manifold_learner', default='UMAP', type=str)
     parser.add_argument('--visualize', default=False, type=bool)
+    parser.add_argument('--rerun_last_plots', default=False, type=bool)
     args = funcH._parse_args(parser, argv, print_args=True)
     debug_string_out = funcH.print_and_add('-' * 80)
 
@@ -485,16 +486,21 @@ def main(argv):
     global debug_string_out
     debug_string_out.clear()
     args = get_args(argv)
+
     debug_string_out_file = args.experiment_names_and_folders["file_name_debug_string_out_full"]
-    if os.path.isfile(debug_string_out_file):
+    rerun_last_plots = args.rerun_last_plots
+    experiment_completed = os.path.isfile(debug_string_out_file)
+    result_dict_exists = os.path.isfile(args.experiment_names_and_folders["file_name_results"])
+
+    if experiment_completed and not rerun_last_plots:
         print("skipping experiment already done (" + debug_string_out_file + ")")
         return
-    x, y, label_names = n_load_data(args.dataset)
-    hl = n_run_autoencode(x, args)
 
-    if os.path.isfile(args.experiment_names_and_folders["file_name_results"]):
+    x, y, label_names = n_load_data(args.dataset)
+    if result_dict_exists:
         results_dict = funcH.load_dict_fr_file(args.experiment_names_and_folders["file_name_results"], "Results")
     else:
+        hl = n_run_autoencode(x, args)
         results_dict = cluster_manifold_in_embedding(hl, y, cluster_func_name=args.cluster,
                                                      clusters_count=args.n_clusters,
                                                      dataset_name=args.dataset,
@@ -502,13 +508,30 @@ def main(argv):
                                                      label_names=label_names, optional_params=args)
         funcH.dump_dict_to_file(args.experiment_names_and_folders["file_name_results"], results_dict, "Results")
 
-    np.savetxt(args.experiment_names_and_folders["file_name_clusters_after_manifold_full"], results_dict["pred_after_manifold"], fmt='%i', delimiter=',')
-    np.savetxt(args.experiment_names_and_folders["file_name_clusters_before_manifold_full"], results_dict["pred_before_manifold"], fmt='%i', delimiter=',')
+        np.savetxt(args.experiment_names_and_folders["file_name_clusters_after_manifold_full"], results_dict["pred_after_manifold"], fmt='%i', delimiter=',')
+        np.savetxt(args.experiment_names_and_folders["file_name_clusters_before_manifold_full"], results_dict["pred_before_manifold"], fmt='%i', delimiter=',')
+
 
     conf_plot_save_to = args.experiment_names_and_folders["file_name_plot_fig_full"].replace("<plot_id>", "conf_before")
-    funcH.analyze_silhouette_values(results_dict["silhouette_values_before"], results_dict["pred_before_manifold"], y, centroid_info_pdf=results_dict["kluster_centroids_before"], label_names=label_names, conf_plot_save_to=conf_plot_save_to)
+    plot_data_before = conf_plot_save_to.replace("plot_", "data_").replace(".png", ".npz")
+    np.savez(plot_data_before, silhouette_values=results_dict["silhouette_values_before"], preds=results_dict["pred_before_manifold"],
+             labels=y, centroid_info_pdf=results_dict["kluster_centroids_before"], label_names=label_names,
+             conf_plot_save_to=conf_plot_save_to, allow_pickle=True)
+    funcH.analyze_silhouette_values(results_dict["silhouette_values_before"], results_dict["pred_before_manifold"], y,
+                                    centroid_info_pdf=results_dict["kluster_centroids_before"], label_names=label_names,
+                                    conf_plot_save_to=conf_plot_save_to,
+                                    figsize=(12, 5), lw=[3, 2, 2], show_title=False, str_deg=15, str_size=12)
     conf_plot_save_to = args.experiment_names_and_folders["file_name_plot_fig_full"].replace("<plot_id>", "conf_after")
-    funcH.analyze_silhouette_values(results_dict["silhouette_values_after"], results_dict["pred_after_manifold"], y, centroid_info_pdf=results_dict["kluster_centroids_after"], label_names=label_names, conf_plot_save_to=conf_plot_save_to)
+    plot_data_after = conf_plot_save_to.replace("plot_", "data_").replace(".png", ".npz")
+    np.savez(plot_data_after, silhouette_values=results_dict["silhouette_values_after"], preds=results_dict["pred_after_manifold"],
+             labels=y, centroid_info_pdf=results_dict["kluster_centroids_after"], label_names=label_names,
+             conf_plot_save_to=conf_plot_save_to, allow_pickle=True)
+    funcH.analyze_silhouette_values(results_dict["silhouette_values_after"], results_dict["pred_after_manifold"], y,
+                                    centroid_info_pdf=results_dict["kluster_centroids_after"], label_names=label_names,
+                                    conf_plot_save_to=conf_plot_save_to,
+                                    figsize=(12, 5), lw=[3, 2, 2], show_title=False, str_deg=15, str_size=12)
+    #a = np.load(plot_data_after, allow_pickle=True)
+    #funcH.analyze_silhouette_values(a["silhouette_values"], a["preds"], a["labels"], centroid_info_pdf=pd_df(a["centroid_info_pdf"], columns=['klusterID','sampleID','distanceEuc']), label_names=a["label_names"], conf_plot_save_to=str(a["conf_plot_save_to"]), figsize=(12, 5), lw=[4, 3, 2], show_title=False, str_deg=15, str_size=8)
 
     append_to_results(args, results_dict)
 
