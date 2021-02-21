@@ -53,7 +53,7 @@ def n2d_plot(x, y, clusters_count, plot_id, file_name_plot_fig_full=None, file_n
 def n_learn_manifold(hidden_representation, embedding_dim, manifold_learner="UMAP", manifold_out_file_name=None, optional_params=None):
     min_dist = funcH.get_attribute(optional_params, "umap_min_dist", default_type=float, default_val=0.0)
     distance_metric = funcH.get_attribute(optional_params, "umap_metric", default_type=str, default_val='euclidean')
-    num_of_neighbours = funcH.get_attribute(optional_params, "umap_neighbors", default_type=int, default_val=10)
+    num_of_neighbours = funcH.get_attribute(optional_params, "umap_neighbors", default_type=int, default_val=20)
     mfl = ManifoldLearner(manifold_dimension=embedding_dim, manifold_learner=manifold_learner,
                           min_dist=min_dist, distance_metric=distance_metric, num_of_neighbours=num_of_neighbours)
     manifold_feats, dbg_str = mfl.learn_manifold(X=hidden_representation, manifold_out_file_name=manifold_out_file_name)
@@ -77,6 +77,8 @@ def n_run_cluster(hle, n_clusters, cluster_func_name='GMM', experiment_names_and
             except Exception as e:
                 print(str(e))
                 funcH.print_fancy("Couldn't dump " + file_name_cluster_obj, style="Bold", textColor="Red", end='\n')
+    else:
+        cluster_obj = Clusterer(cluster_model=cluster_func_name, n_clusters=n_clusters, max_try_cnt=1).fit(hle, post_analyze_distribution=True, verbose=1)
 
     y_pred, kluster_centroids = cluster_obj.predict(hle, post_analyze_distribution=True, verbose=1)
     debug_string_out = funcH.print_and_add("Time to cluster: " + t.get_elapsed_time(), debug_string_out)
@@ -129,7 +131,7 @@ def cluster_manifold_in_embedding(hl, y, cluster_func_name, clusters_count, data
 
     funcH.add_attribute(optional_params, "umap_min_dist", funcH.get_attribute(optional_params, "umap_min_dist", default_type=float, default_val=0.0))
     funcH.add_attribute(optional_params, "umap_metric", funcH.get_attribute(optional_params, "umap_metric", default_type=str, default_val='euclidean'))
-    funcH.add_attribute(optional_params, "umap_neighbors", funcH.get_attribute(optional_params, "umap_neighbors", default_type=int, default_val=10))
+    funcH.add_attribute(optional_params, "umap_neighbors", funcH.get_attribute(optional_params, "umap_neighbors", default_type=int, default_val=20))
     y_pred_hl, kluster_centroids_before = n_run_cluster(hl, n_clusters=clusters_count, cluster_func_name=cluster_func_name, experiment_names_and_folders=experiment_names_and_folders, file_name_add="-nm")
     y_pred_hl, acc_hl, nmi_hl, ari_hl, acc_hl_dg = n_eval_result(hl, y, y_pred_hl, label_names,
                                                                  cluster_func_name, clusters_count,
@@ -443,25 +445,26 @@ def script():
 
 def script_hgsk():
     global debug_string_out
-    pretrain_epochs = [10, 50]
+    pretrain_epochs = [10]
     ml = "UMAP"
     ds = "hgsk_256_41"
     for cluster in ['KM', 'GMM']:
         for ae_epoc in pretrain_epochs:
-            for clust_cnt in [128, 256, 512, 1024]: #  umap_dim = 20, n_clusters_ae = 20, umap_neighbors = 40
-                try:
-                    debug_string_out.clear()
-                    main(["--dataset", ds, "--gpu", "0",
-                          "--pretrain_epochs", str(ae_epoc),
-                          "--n_clusters", str(clust_cnt), "--cluster", cluster,
-                          "--umap_dim", str(clust_cnt), "--umap_neighbors", str(20),
-                          "--manifold_learner", ml, "--umap_min_dist", "0.00"])
-                except Exception as e:
-                    debug_string_out = funcH.print_and_add(ds + '_' + ml + " - problem", debug_string_out)
-                    debug_string_out = funcH.print_and_add(str(e), debug_string_out)
-                    exp_date_str = str(datetime.now().strftime("%Y%m%d_%H%M")).replace('-', '')  # %S
-                    with open(os.path.join(funcH.getVariableByComputerName("n2d_experiments"), ds + '_' + ml + '_error_' + exp_date_str + '.txt'), 'w') as f:
-                        f.write("\n".join(debug_string_out))
+            for clust_cnt in [512, 1024]: #  umap_dim = 20, n_clusters_ae = 20, umap_neighbors = 40
+                for umap_neighbors in [20, 30, 40]:
+                    try:
+                        debug_string_out.clear()
+                        main(["--dataset", ds, "--gpu", "0",
+                              "--pretrain_epochs", str(ae_epoc),
+                              "--n_clusters", str(clust_cnt), "--cluster", cluster,
+                              "--umap_dim", str(clust_cnt), "--umap_neighbors", str(umap_neighbors),
+                              "--manifold_learner", ml, "--umap_min_dist", "0.00"])
+                    except Exception as e:
+                        debug_string_out = funcH.print_and_add(ds + '_' + ml + " - problem", debug_string_out)
+                        debug_string_out = funcH.print_and_add(str(e), debug_string_out)
+                        exp_date_str = str(datetime.now().strftime("%Y%m%d_%H%M")).replace('-', '')  # %S
+                        with open(os.path.join(funcH.getVariableByComputerName("n2d_experiments"), ds + '_' + ml + '_error_' + exp_date_str + '.txt'), 'w') as f:
+                            f.write("\n".join(debug_string_out))
 
 # args.experiment_names_and_folders - adopted
 def append_to_results(args, results_dict):
@@ -496,7 +499,7 @@ def main(argv):
                                                      clusters_count=args.n_clusters,
                                                      dataset_name=args.dataset,
                                                      experiment_names_and_folders=args.experiment_names_and_folders,
-                                                     label_names=label_names, optional_params=None)
+                                                     label_names=label_names, optional_params=args)
         funcH.dump_dict_to_file(args.experiment_names_and_folders["file_name_results"], results_dict, "Results")
 
     np.savetxt(args.experiment_names_and_folders["file_name_clusters_after_manifold_full"], results_dict["pred_after_manifold"], fmt='%i', delimiter=',')
