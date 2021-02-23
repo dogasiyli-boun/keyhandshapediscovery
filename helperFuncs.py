@@ -281,6 +281,9 @@ def analyze_silhouette_values(sample_silhouette_values, cluster_labels, real_lab
         "_confMat": _confMat,
         "confMat_new": confMat_new,
         "mapped_class_vec": mapped_class_vec,
+        "preds_sorted": preds_sorted,
+        "labels_sorted": labels_sorted,
+        "data_perc_vec": data_perc_vec,
     }
     return result_dict
 

@@ -5,7 +5,9 @@ import modelFuncs as moF
 import importlib as impL
 import numpy as np
 import os
-import pandas as pd
+from pandas import read_pickle as pd_read_pickle
+from pandas import DataFrame as pd_df
+from pandas import concat as pd_concat
 import hmmWrapper as funcHMM
 from zipfile import ZipFile
 from glob import glob
@@ -26,7 +28,7 @@ def study02(ep = 3):
 
     fileNameFull = os.path.join(dcResultsFolder, npyFileName)
     x = np.loadtxt(fileNameFull, dtype=float, comments='#', delimiter='*', converters=None, skiprows=1, unpack=True)
-    x_pd = pd.DataFrame(x.T, columns=['ep', 'tr_acc_epoch', 'nmi_lab', 'nmi_lab_nz', 'acc_lab', 'acc_lab_nz', 'nmi_pred', 'nmi_pred_nz', 'acc_pred', 'acc_pred_nz'])
+    x_pd = pd_df(x.T, columns=['ep', 'tr_acc_epoch', 'nmi_lab', 'nmi_lab_nz', 'acc_lab', 'acc_lab_nz', 'nmi_pred', 'nmi_pred_nz', 'acc_pred', 'acc_pred_nz'])
     print(x_pd)
     if export_as_csv:
         fileNameFull_csv = fileNameFull.replace('.npy','.csv')
@@ -698,7 +700,7 @@ def mlp_study_score_fuse_apply(model_export_dict, defStr, data_va_te_str, data_i
     ft_comb_max = None
     ft_comb_sof = None
 
-    df_final = pd.DataFrame({"khsName": model_export_dict["hog"]["df_slctd_table"]["khsName"].sort_index()})
+    df_final = pd_df({"khsName": model_export_dict["hog"]["df_slctd_table"]["khsName"].sort_index()})
     acc_vec_all = {}
     for data_ident in data_ident_vec:
         #print("****\n", defStr, "\n", data_ident)
@@ -708,7 +710,7 @@ def mlp_study_score_fuse_apply(model_export_dict, defStr, data_va_te_str, data_i
 
         print(data_ident+data_va_te_str+"_acc = ", "{:5.3f}".format(accuracy_score(labels_xx, preds_te)))
 
-        df_final = pd.concat([df_final, model_export_dict[data_ident]["df_slctd_table"]["F1_Score"].sort_index()], axis = 1).rename(columns={"F1_Score": data_ident})
+        df_final = pd_concat([df_final, model_export_dict[data_ident]["df_slctd_table"]["F1_Score"].sort_index()], axis = 1).rename(columns={"F1_Score": data_ident})
         ft_comb_ave = ft_max if ft_comb_ave is None else ft_max+ft_comb_ave
         ft_comb_max = ft_none if ft_comb_max is None else np.maximum(ft_none, ft_comb_max)
         ft_comb_sof = ft_sof if ft_comb_sof is None else ft_sof+ft_comb_sof
@@ -751,9 +753,9 @@ def mlp_study_score_fuse_apply(model_export_dict, defStr, data_va_te_str, data_i
     cmStats_ave, df_ave = funcH.calcConfusionStatistics(conf_mat_ave, categoryNames=classNames, selectedCategories=None, verbose=0)
     cmStats_max, df_max = funcH.calcConfusionStatistics(conf_mat_max, categoryNames=classNames, selectedCategories=None, verbose=0)
     cmStats_sofx, df_sof = funcH.calcConfusionStatistics(conf_mat_sof, categoryNames=classNames, selectedCategories=None, verbose=0)
-    df_final = pd.concat([df_final, df_ave["F1_Score"].sort_index()], axis=1).rename(columns={"F1_Score": "df_ave"})
-    df_final = pd.concat([df_final, df_max["F1_Score"].sort_index()], axis=1).rename(columns={"F1_Score": "df_max"})
-    df_final = pd.concat([df_final, df_sof["F1_Score"].sort_index()], axis=1).rename(columns={"F1_Score": "df_sof"})
+    df_final = pd_concat([df_final, df_ave["F1_Score"].sort_index()], axis=1).rename(columns={"F1_Score": "df_ave"})
+    df_final = pd_concat([df_final, df_max["F1_Score"].sort_index()], axis=1).rename(columns={"F1_Score": "df_max"})
+    df_final = pd_concat([df_final, df_sof["F1_Score"].sort_index()], axis=1).rename(columns={"F1_Score": "df_sof"})
 
     df_final.to_csv(os.path.join(funcH.getVariableByComputerName('desktop_dir'), "comb", "comb_" + defStr + data_va_te_str + "_all.csv"))
 
@@ -796,15 +798,15 @@ def append_to_all_results(results_dict, index_name, dropout_value, rs, hidStateI
 
     if os.path.exists(all_results_filename):
         print("loading...", all_results_filename)
-        all_results = pd.read_pickle(all_results_filename)
+        all_results = pd_read_pickle(all_results_filename)
         print(all_results_filename, " loaded : \n", all_results)
     else:
-        all_results = pd.DataFrame(index=None, columns=columns)
+        all_results = pd_df(index=None, columns=columns)
         all_results.to_pickle(all_results_filename)
         print(all_results_filename, " saved as empty list")
 
     if index_name not in all_results.index:
-        a = pd.DataFrame(np.nan, index=[index_name], columns=columns)
+        a = pd_df(np.nan, index=[index_name], columns=columns)
         all_results = all_results.append(a)
         all_results.to_pickle(all_results_filename)
         print(all_results_filename, " saved adding index_name = ", index_name)
@@ -896,3 +898,19 @@ def combine_clusters_Aug2020(nos = 11, dataToUseVec = ["hog", "sn", "sk"], clust
                                    consensus_clustering_max_k=consensus_clustering_max_k, useNZ=False, nos=nos,
                                    resultsToCombineDescriptorStr=resultsToCombineDescriptorStr,
                                    labelNames=labelNames, verbose=True)
+
+def study_silhouette_analysis(fold_to_run='hgsk_256_11/20210221_hgsk_256_11_cKM256_e10_UMAPud256_un20',
+                              bef_aft="before"):
+    impL.reload(funcH)
+    # exp_fold = '/home/doga/DataFolder/n2d_experiments'
+    exp_fold = os.path.join(funcH.getVariableByComputerName('n2d_experiments'), fold_to_run)
+    # fname = data_hgsk_256_11_cKM256_e10_UMAPud256_un20_20210221__conf_before.npz
+    fname = funcH.getFileList(exp_fold, startString='data_', endString='__conf_'+bef_aft+'.npz')
+    plot_data_before = os.path.join(exp_fold, fname[0])
+    a = np.load(plot_data_before, allow_pickle=True)
+    result_dict = funcH.analyze_silhouette_values(a["silhouette_values"], a["preds"], a["labels"],
+                                    centroid_info_pdf=pd_df(a["centroid_info_pdf"],
+                                                            columns=['klusterID', 'sampleID', 'distanceEuc']),
+                                    label_names=a["label_names"], conf_plot_save_to=str(a["conf_plot_save_to"]),
+                                    figsize=(12, 5), lw=[4, 3, 2], show_title=False, str_deg=15, str_size=12)
+    return a, result_dict
