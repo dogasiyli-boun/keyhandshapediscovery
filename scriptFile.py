@@ -16,6 +16,7 @@ import shutil
 from torch import manual_seed
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import accuracy_score
+from ntpath import split as path_split
 
 def study02(ep = 3):
     funcH.setPandasDisplayOpts()
@@ -908,9 +909,11 @@ def study_silhouette_analysis(fold_to_run='hgsk_256_11/20210221_hgsk_256_11_cKM2
     fname = funcH.getFileList(exp_fold, startString='data_', endString='__conf_'+bef_aft+'.npz')
     plot_data_before = os.path.join(exp_fold, fname[0])
     a = np.load(plot_data_before, allow_pickle=True)
+    conf_plot_save_to_old = str(a["conf_plot_save_to"])
+    conf_plot_save_to_new = os.path.join(exp_fold, path_split(conf_plot_save_to_old)[1])
     result_dict = funcH.analyze_silhouette_values(a["silhouette_values"], a["preds"], a["labels"],
                                     centroid_info_pdf=pd_df(a["centroid_info_pdf"],
-                                                            columns=['klusterID', 'sampleID', 'distanceEuc']),
-                                    label_names=a["label_names"], conf_plot_save_to=str(a["conf_plot_save_to"]),
+                                    columns=['klusterID', 'sampleID', 'distanceEuc']),
+                                    label_names=a["label_names"], conf_plot_save_to=conf_plot_save_to_new,
                                     figsize=(12, 5), lw=[4, 3, 2], show_title=False, str_deg=15, str_size=12)
     return a, result_dict
