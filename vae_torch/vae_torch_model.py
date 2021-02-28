@@ -1502,6 +1502,9 @@ class Conv_AE_NestedNamespace(nn.Module):
         if weights is None:
             weights = torch.from_numpy(np.asarray(np.ones(reconstruction.shape) * 1.0, dtype=float))
 
+        # if error here "forward() got an unexpected keyword argument 'weight'" - goto  nn.BCELoss(_WeightedLoss):
+        # , weight=None):
+        #         weight = self.weight if weight is None else weight
         loss_reconstruction = self.loss['reconstruction']['func'](reconstruction, data, weight=weights)
         self.loss['reconstruction']['val'] += loss_reconstruction.item()
         loss_rec_vec = []

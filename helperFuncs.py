@@ -2089,6 +2089,7 @@ def get_cluster_correspondance_ids(X, cluster_ids, correspondance_type="shuffle"
 
 def elementwise_cdist_2d(a, b):
     d = a - b
+    d = d.reshape((d.shape[0], np.prod(d.shape[1:])))
     es = np.einsum('ij,ij->ij', d, d)
     return np.sqrt(es)
 
