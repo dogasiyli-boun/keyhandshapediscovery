@@ -1562,7 +1562,7 @@ class Conv_AE_NestedNamespace(nn.Module):
             while fr < n:
                 to = np.minimum(fr + batch_size, n)
                 data_in = torch.stack([X_data[i][self.data_key] for i in self.correspondance_tuple[0][fr:to]]).to(self.device)
-                weights = torch.from_numpy(np.array([self.correspondance_weights[fr:to], ]*data_in.shape[-1]).T)
+                weights = torch.reshape(torch.from_numpy(np.array([self.correspondance_weights[fr:to], ]*np.prod(data_in.shape[1:])).T), data_in.shape).squeeze()
                 if self.cluster_any:
                     labels_in = torch.Tensor([X_data[i]['label'] for i in self.correspondance_tuple[0][fr:to]]).squeeze().to(self.device)
                     #labels_out= torch.Tensor([X_data[i]['label'] for i in self.correspondance_tuple[1][fr:to]]).squeeze().to(self.device)
