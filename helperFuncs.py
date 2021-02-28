@@ -2086,3 +2086,13 @@ def get_cluster_correspondance_ids(X, cluster_ids, correspondance_type="shuffle"
         print("inds_in.shape{:}, inds_out.shape{:}".format(inds_in.shape, inds_out.shape))
     centroid_df['num_of_samples'] = num_of_samples
     return (ii_ret, io_ret), centroid_df
+
+def elementwise_cdist_2d(a, b):
+    d = a - b
+    es = np.einsum('ij,ij->ij', d, d)
+    return np.sqrt(es)
+
+def map_0_1(v):
+    v = v - np.min(v)
+    v = v / np.max(v)
+    return v

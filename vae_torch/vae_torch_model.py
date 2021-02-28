@@ -1322,7 +1322,8 @@ class Conv_AE_NestedNamespace(nn.Module):
             self.cluster_any = self.cluster_any or self.clustering_dict[k]['apply']
 
         return label_exist
-    def cluster_bottleneck(self, lab_vec, bottleneck_vec, sub_data_identifier, calculate_correspondance=False):
+    def cluster_bottleneck(self, lab_vec, bottleneck_vec, sub_data_identifier,
+                           calculate_correspondance=False):
         if not self.cluster_any:
             return
         for k in self.clustering_dict:
@@ -1342,7 +1343,8 @@ class Conv_AE_NestedNamespace(nn.Module):
                     kc_tr = _trained_model_.kluster_centers
                     self.kmeans_params = {
                         "kc_tr": kc_tr,
-                        "_trained_model_": _trained_model_
+                        "_trained_model_": _trained_model_,
+                        "pred_vec": pred_vec
                     }
                 else:
                     df = pd_df(bottleneck_vec)
@@ -1355,12 +1357,36 @@ class Conv_AE_NestedNamespace(nn.Module):
                                                              correspondance_type=self.CORRESPONDANCE_PARAMS["type"],
                                                              verbose=0)
                     self.analyze_corresondance_results(self.correspondance_tuple, centroid_df, pred_vec, lab_vec)
+                    self.silhouette_avg, self.silhouette_values = funcH.calc_silhouette_params(bottleneck_vec, pred_vec)
+                    self.silhouette_pred_vec = pred_vec
+                    self.correspondance_tuple = self.correspondance_tuple + tuple([self.epoch + 1])
+                    rec_los_0_1 = 1-funcH.map_0_1(self.rec_loss)
+                    n = len(self.correspondance_tuple[0])
+                    self.correspondance_weights = np.asarray([rec_los_0_1[self.correspondance_tuple[0][i]] + rec_los_0_1[self.correspondance_tuple[1][i]] for i in range(n)])
+                    silhouette_reconstruction_sort_study = {
+                        "silhouette_values": self.silhouette_values,
+                        "silhouette_avg": self.silhouette_avg,
+                        "reconstruction_loss": self.rec_loss,
+                        "correspondance_weights": self.correspondance_weights ,
+                        "predictions": self.silhouette_pred_vec,
+                        "labels": self.lab_vec,
+                        "correspondance_tuple": self.correspondance_tuple,
+                        "kluster_centroids": self.kmeans_params["_trained_model_"].kluster_centroids
+                    }
+                    if os.path.isfile(self.silhouette_reconstruction_sort_file):
+                        sil_var = torch.load(self.silhouette_reconstruction_sort_file, map_location=torch.device('cpu'))
+                        sil_var["epoch{:04d}".format(self.epoch)] = silhouette_reconstruction_sort_study
+                    else:
+                        sil_var = {"epoch{:04d}".format(self.epoch): silhouette_reconstruction_sort_study}
+                    torch.save(sil_var, self.silhouette_reconstruction_sort_file)
+
 
                 centroid_info_pdf = self.kmeans_params["_trained_model_"].kluster_centroids
             if k == 'bottleneck_act':
                 print('bottleneck_act')
                 pred_vec = np.argmax(bottleneck_vec.T, axis=0).T.squeeze()
                 centroid_info_pdf = funcH.get_cluster_centroids(bottleneck_vec, pred_vec, kluster_centers=None, verbose=0)
+
             _confMat_preds, _, kr_pdf, weightedPurity, cnmxh_perc = funcH.countPredictionsForConfusionMat(lab_vec, pred_vec, centroid_info_pdf=centroid_info_pdf, labelNames=None)
             sampleCount = np.sum(np.sum(_confMat_preds))
             acc = 100 * np.sum(np.diag(_confMat_preds)) / sampleCount
@@ -1374,10 +1400,11 @@ class Conv_AE_NestedNamespace(nn.Module):
             print('--unique last ' + str(pc) + ' classes-->', unique_pred_classes[-pc:])
             print("confMat:\n", pd_df(_confMat_preds))
             self.clustering_dict[k]['val'] = acc
-    def apply_acc(self, loss_dict, lab_vec, bottleneck_vec, sub_data_identifier, calculate_correspondance=False):
+
+    def apply_acc(self, loss_dict, lab_vec, bottleneck_vec, sub_data_identifier,
+                  calculate_correspondance=False):
         if not self.cluster_any:
             return loss_dict
-        lab_vec = np.asarray(torch.cat(lab_vec).to(torch.device('cpu')))
         bottleneck_vec = np.asarray(torch.cat(bottleneck_vec).to(torch.device('cpu')).detach().numpy())
         num_samples, cluster_count = bottleneck_vec.shape
         rand_sample_ids = np.sort(np.random.permutation(np.arange(num_samples))[:int(cluster_count*1.5)])
@@ -1428,7 +1455,8 @@ class Conv_AE_NestedNamespace(nn.Module):
 
             plt.close('all')
 
-        self.cluster_bottleneck(lab_vec, bottleneck_vec, sub_data_identifier, calculate_correspondance=calculate_correspondance)
+        self.cluster_bottleneck(lab_vec, bottleneck_vec, sub_data_identifier,
+                                calculate_correspondance=calculate_correspondance)
         for k in self.clustering_dict:
             if not self.clustering_dict[k]['apply']:
                 continue
@@ -1455,7 +1483,7 @@ class Conv_AE_NestedNamespace(nn.Module):
             return False
         _started = (epoch >= self.CORRESPONDANCE_PARAMS["apply_after_epoch"])
         _mode_zero = ((epoch % self.CORRESPONDANCE_PARAMS["at_every"]) == 0)
-        if verbose>0:
+        if verbose > 0:
             if not _started:
                 print("correspondance will be skipped until epoch: ", self.CORRESPONDANCE_PARAMS["apply_after_epoch"])
             elif not _mode_zero:
@@ -1464,9 +1492,23 @@ class Conv_AE_NestedNamespace(nn.Module):
                 print("correspondance is being applied: ", self.CORRESPONDANCE_PARAMS["apply_after_epoch"])
         return _started and _mode_zero
 
-    def final_loss(self, data, reconstruction, bottleneck, epoch=None):
-        loss_reconstruction = self.loss['reconstruction']['func'](reconstruction, data)
+    def final_loss(self, data, reconstruction, bottleneck,
+                   epoch=None, calc_loss_rec_vec=False, weights=None):
+
+        # arrange shapes and remove 1's
+        data = data.squeeze() if 1 in data.shape else data
+        reconstruction = reconstruction.squeeze() if 1 in reconstruction.shape else reconstruction
+        # arrange weights as 1 array if not given
+        if weights is None:
+            weights = torch.from_numpy(np.asarray(np.ones(reconstruction.shape) * 1.0, dtype=float))
+
+        loss_reconstruction = self.loss['reconstruction']['func'](reconstruction, data, weight=weights)
         self.loss['reconstruction']['val'] += loss_reconstruction.item()
+        loss_rec_vec = []
+        if calc_loss_rec_vec:
+            x1 = reconstruction.to(torch.device('cpu')).detach().numpy().squeeze()
+            x2 = data.to(torch.device('cpu')).detach().numpy().squeeze()
+            loss_rec_vec = np.sum(funcH.elementwise_cdist_2d(x1, x2), axis=1)
 
         loss_sparsity = 0.0
         apply_sparsity = (self.SPARSE_PARAMS is not None) and ((epoch is None) or (epoch is not None and epoch >= self.SPARSE_PARAMS["apply_after_epoch"]))
@@ -1475,12 +1517,12 @@ class Conv_AE_NestedNamespace(nn.Module):
                 loss_sparsity = self.SPARSE_PARAMS["weight"]*self.loss['sparsity']['func'](bottleneck)
                 self.loss['sparsity']['val'] += loss_sparsity.item()/self.SPARSE_PARAMS["weight"]
 
-        return loss_reconstruction + loss_sparsity
+        return loss_reconstruction + loss_sparsity, loss_rec_vec
 
-    def train_batch(self, data_in, data_out, labels, bottleneck_vec, lab_vec, epoch):
+    def train_batch(self, data_in, data_out, labels, bottleneck_vec, lab_vec, epoch, weights=None):
         self.optimizer.zero_grad()
         reconstruction, bottleneck, mu = self.forward(data_in)
-        loss = self.final_loss(data_out, reconstruction, bottleneck, epoch)
+        loss, _ = self.final_loss(data_out, reconstruction, bottleneck, epoch, calc_loss_rec_vec=False, weights=weights)
         running_loss = loss.item()
         loss.backward()
         self.optimizer.step()
@@ -1496,6 +1538,7 @@ class Conv_AE_NestedNamespace(nn.Module):
         n = len(X_data)
 
         self.reset_loss_vals()
+        self.epoch = epoch
 
         self.clustering_decide(X_data)
         if self.cluster_any:
@@ -1516,12 +1559,13 @@ class Conv_AE_NestedNamespace(nn.Module):
             while fr < n:
                 to = np.minimum(fr + batch_size, n)
                 data_in = torch.stack([X_data[i][self.data_key] for i in self.correspondance_tuple[0][fr:to]]).to(self.device)
+                weights = torch.from_numpy(np.array([self.correspondance_weights[fr:to], ]*data_in.shape[-1]).T)
                 if self.cluster_any:
                     labels_in = torch.Tensor([X_data[i]['label'] for i in self.correspondance_tuple[0][fr:to]]).squeeze().to(self.device)
                     #labels_out= torch.Tensor([X_data[i]['label'] for i in self.correspondance_tuple[1][fr:to]]).squeeze().to(self.device)
                 data_out = torch.stack([X_data[i][self.data_key] for i in self.correspondance_tuple[1][fr:to]]).to(self.device)
                 fr = to
-                running_loss += self.train_batch(data_in, data_out, labels_in, bottleneck_vec, lab_vec, epoch)
+                running_loss += self.train_batch(data_in, data_out, labels_in, bottleneck_vec, lab_vec, epoch, weights=weights)
                 #running_loss += self.train_batch(data_out, data_in, labels_out, bottleneck_vec, lab_vec, epoch)
         else:
             dloader = DataLoader(X_data, batch_size=batch_size, shuffle=True)
@@ -1538,20 +1582,19 @@ class Conv_AE_NestedNamespace(nn.Module):
             loss_dict[i] = self.loss[i]['val']
 
         self.setup_bottleneck_heatmap(out_folder, epoch, sub_data_identifier='fit')
-
-        calculate_correspondance = epoch is not None and self.correspondance_epoch_decide(epoch=epoch+1, verbose=0)
-        loss_dict = self.apply_acc(loss_dict, lab_vec, bottleneck_vec, "tr", calculate_correspondance=calculate_correspondance)
-        if calculate_correspondance:
-            self.correspondance_tuple = self.correspondance_tuple + tuple([epoch+1])
+        lab_vec = np.asarray(torch.cat(lab_vec).to(torch.device('cpu')))
+        loss_dict = self.apply_acc(loss_dict, lab_vec, bottleneck_vec, "tr", calculate_correspondance=False)
 
         return loss_dict
 
     def validate(self, X_vate, epoch, batch_size, out_folder, sub_data_identifier):
         self.eval()
         self.apply_random_seed()
+        self.epoch = epoch
 
         lab_vec = []
         bottleneck_vec = []
+        rec_loss = []
 
         running_loss = 0.0
         dloader = DataLoader(X_vate, batch_size=batch_size, shuffle=False)
@@ -1564,10 +1607,11 @@ class Conv_AE_NestedNamespace(nn.Module):
                     labels = b['label']
                     lab_vec.append(labels)
                 reconstruction, bottleneck, _ = self.forward(data)
-                loss = self.final_loss(data, reconstruction, bottleneck, epoch)
+                loss, rec_loss_b = self.final_loss(data, reconstruction, bottleneck, epoch, calc_loss_rec_vec=True)
                 running_loss += loss.item()
                 if self.cluster_any:
                     bottleneck_vec.append(bottleneck)
+                rec_loss.append(rec_loss_b)
 
         if sub_data_identifier not in self.export_image_ids_dict:
             self.fill_export_image_ids_dict(X_vate, sub_data_identifier)
@@ -1588,9 +1632,19 @@ class Conv_AE_NestedNamespace(nn.Module):
         for i in self.loss:
             loss_dict[i] = self.loss[i]['val']
 
+        lab_vec = np.asarray(torch.cat(lab_vec).to(torch.device('cpu')))
+        self.lab_vec = lab_vec.copy()
+        self.rec_loss = np.asarray(np.concatenate(rec_loss))
+        self.silhouette_reconstruction_sort_file = os.path.join(out_folder, "silhouette_reconstruction.torch")
         self.setup_bottleneck_heatmap(out_folder, epoch, sub_data_identifier=sub_data_identifier)
 
-        loss_dict = self.apply_acc(loss_dict, lab_vec, bottleneck_vec, sub_data_identifier)
+        calc_silhouette_values = "tr_" in sub_data_identifier
+        calculate_correspondance = epoch is not None and self.correspondance_epoch_decide(epoch=epoch + 1, verbose=0) and calc_silhouette_values
+        loss_dict = self.apply_acc(loss_dict, lab_vec, bottleneck_vec, sub_data_identifier,
+                                   calculate_correspondance=calculate_correspondance)
+
+        self.rec_loss = None
+        self.lab_vec = None
 
         return loss_dict
 
