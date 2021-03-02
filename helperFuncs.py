@@ -646,6 +646,18 @@ def getVariableByComputerName(variableName):
         retVal = experiments_dir
     return retVal
 
+def directory_find(atom, root='.', go_up_level=2):
+    g = go_up_level
+    while go_up_level > 0:
+        try:
+            for path, dirs, files in os.walk(root):
+                if atom in path:
+                    return os.path.join(path)
+            root = os.path.dirname(root)
+            print('search went up by {:d}<{}>'.format(g-go_up_level, root))
+        except:
+            return []
+
 def createDirIfNotExist(dir2create):
     if not os.path.isdir(dir2create):
         os.makedirs(dir2create)

@@ -3,7 +3,9 @@ from matplotlib.cm import get_cmap
 import numpy as np
 import os
 from PIL import Image
-from helperFuncs import getFileList
+from helperFuncs import getFileList as funcH_getFileList
+from helperFuncs import getVariableByComputerName as funcH_getVariableByComputerName
+from helperFuncs import directory_find as funcH_directory_find
 
 def movingaverage(vec, window_size):
     vec_win = np.ones(int(window_size))/float(window_size)
@@ -52,13 +54,18 @@ def plot_compare(X_dict, title_str, contain_str, ylabel, figsize=(10, 3), dpi=80
 
 def plot_cf(cf_int, data_log_keys = ['tr_tr', 'tr_va', 'va', 'te'], k_loss_disp_list=None, max_act_ep=None, plot_cnt = 5,
             select_id_type='linspace',
-            experiments_folder='/mnt/USB_HDD_1TB/GitHub/keyhandshapediscovery/',
-            exp_base_name='output_sae_k256_is64_cf',
+            experiments_folder=None,  # '/mnt/USB_HDD_1TB/GitHub/keyhandshapediscovery/',
+            exp_base_name=None,  # 'output_sae_k256_is64_cf',
             ae_f_name_base=None, plt_min_max_lines=False):
-    ae_fold_name = os.path.join(experiments_folder, exp_base_name + str(cf_int).zfill(2))
+
+    if experiments_folder is None:
+        experiments_folder = funcH_directory_find('cf{:d}'.format(cf_int), root=funcH_getVariableByComputerName('data_dir'))
+    if exp_base_name is not None and (exp_base_name + str(cf_int).zfill(2) not in exp_base_name):
+        experiments_folder = os.path.join(experiments_folder, exp_base_name + str(cf_int).zfill(2))
     if ae_f_name_base is None:
-        ae_f_name_base = getFileList(dir2Search=ae_fold_name, startString='ae_ft', endString='.npy')[0]
-    ae_f_name = os.path.join(ae_fold_name, ae_f_name_base)
+        ae_f_name_base = funcH_getFileList(dir2Search=experiments_folder, startString='ae_ft', endString='.npy')[0]
+
+    ae_f_name = os.path.join(experiments_folder, ae_f_name_base)
     vfz = np.load(ae_f_name, allow_pickle=True)
     loss_log_dict = {}
     n = 0
@@ -109,12 +116,12 @@ def plot_cf(cf_int, data_log_keys = ['tr_tr', 'tr_va', 'va', 'te'], k_loss_disp_
             s = subplot_ids[i]
             try:
                 f_name = "btl_" + str(s).zfill(3) +"_tr_va"
-                ful_file_name = os.path.join(ae_fold_name, f_name + "_.png")
+                ful_file_name = os.path.join(experiments_folder, f_name + "_.png")
                 print(str(i)+"*"+ful_file_name+"*")
                 img = Image.open(ful_file_name)
             except:
                 f_name = "btl_" + str(s).zfill(3) +"_tr_te"
-                ful_file_name = os.path.join(ae_fold_name, f_name + "_.png")
+                ful_file_name = os.path.join(experiments_folder, f_name + "_.png")
                 print(str(i)+"*"+ful_file_name+"*")
                 img = Image.open(ful_file_name)
 
