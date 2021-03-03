@@ -7,6 +7,7 @@ import os
 from numpy.random import seed
 import tensorflow as tf
 import pandas as pd
+from pandas import DataFrame as pd_df
 import matplotlib as plt
 import time
 import datetime
@@ -1590,3 +1591,130 @@ def get_result_table_out(result_file_name_full, class_names):
     print("dataIdent_=", dataIdent_, "\ntestUser_=", testUser_, "\nvalidUser_=", validUser_, "\nhid_state_cnt_vec_=", hid_state_cnt_vec_)
     print(("bestVaID({:" + formatStr + "}),trAcc({:" + formatStr + "}),vaAcc({:" + formatStr + "}),teAcc({:" + formatStr + "})").format(bestVaID,accvectr[bestVaID],accvecva[bestVaID],accvecte[bestVaID]))
     return df_slctd_table
+
+# study_sihouette_better
+def update_centroid_df(centroid_df, cluster_ids):
+    uq_pr = np.unique(cluster_ids)
+    num_of_samples = []
+    for i in range(len(uq_pr)):
+        cluster_id = uq_pr[i]
+        cluster_inds = funcH.getInds(cluster_ids, i)
+        num_of_samples.append(len(cluster_inds))
+    centroid_df['num_of_samples'] = num_of_samples
+    return centroid_df
+
+def analyze_correspondance_results(correspondance_tuple, centroid_df, pred_vec, lab_vec):
+    df = pd_df({'labels': lab_vec[np.asarray(centroid_df['sampleID'], dtype=int)],
+                'klusterID': np.asarray(centroid_df['klusterID'], dtype=int),
+                'sampleCounts': np.asarray(centroid_df['num_of_samples'], dtype=int)})
+    print('correspondance results:')
+    print(df.groupby(['labels'])[['labels', 'sampleCounts']].sum())
+    corr_in_clust = pred_vec[correspondance_tuple[0]]
+    corr_ou_clust = pred_vec[correspondance_tuple[1]]
+    _confMat_corr_preds = confusion_matrix(corr_in_clust, corr_ou_clust)
+    acc_corr_preds = 100 * np.sum(np.diag(_confMat_corr_preds)) / np.sum(
+        np.sum(_confMat_corr_preds))
+    print("_confMat_corr_preds - acc({:6.4f})".format(acc_corr_preds))
+
+    corr_in_labels = lab_vec[correspondance_tuple[0]]
+    corr_ou_labels = lab_vec[correspondance_tuple[1]]
+    _confMat_corr = confusion_matrix(corr_in_labels, corr_ou_labels)
+    acc_corr = 100 * np.sum(np.diag(_confMat_corr)) / np.sum(np.sum(_confMat_corr))
+    print("confMat - acc({:6.4f}), correspondance match:\n".format(acc_corr), pd_df(_confMat_corr))
+
+def map_predictions(real_labels, cluster_labels, centroid_info_pdf=None):
+    _confMat, kluster2Classes, kr_pdf, _, _ = funcH.countPredictionsForConfusionMat(real_labels, cluster_labels,
+                                                                                    centroid_info_pdf=centroid_info_pdf)
+    mapped_class_vec = np.array(kluster2Classes)[:, 1].squeeze()
+    predictions_mapped, mappedKlustersSampleCnt = funcH.getMappedKlusters(cluster_labels, mapped_class_vec)
+    return predictions_mapped
+
+#done
+def cumsum_preds(labs, preds, idx):
+    pred_sorted = preds[idx]
+    labs_sorted = labs[idx]
+    all_ones = np.ones(preds.shape)
+    pred_cumsum = np.cumsum(pred_sorted == labs_sorted) / np.cumsum(all_ones)
+    return pred_cumsum
+
+def calc_tuple_score_vals(tuple_score_sum, lab_vec, cor_tup, sort_ascend=False, _def_str="ds"):
+    sort_mul = 2 * (float(sort_ascend) - 0.5)
+    tuple_idx = np.argsort(sort_mul * tuple_score_sum)
+    tup_sor_a_idx = cor_tup[0][tuple_idx]
+    tup_sor_b_idx = cor_tup[1][tuple_idx]
+    lab_vec_a = lab_vec[tup_sor_a_idx]
+    lab_vec_b = lab_vec[tup_sor_b_idx]
+    _cn_a = []
+    _cn_b = []
+    uniq_class_cnt_perc_a = np.zeros(lab_vec_a.shape, dtype=float)
+    uniq_class_cnt_perc_b = np.zeros(lab_vec_b.shape, dtype=float)
+    n = len(lab_vec)
+    for i in range(n):
+        if lab_vec_a[i] not in _cn_a:
+            _cn_a.append(lab_vec_a[i])
+        if lab_vec_b[i] not in _cn_b:
+            _cn_b.append(lab_vec_b[i])
+        uniq_class_cnt_perc_a[i] = len(_cn_a)
+        uniq_class_cnt_perc_b[i] = len(_cn_b)
+    print("general_acc_for(" + _def_str + "):", np.sum(lab_vec_a == lab_vec_b) / len(lab_vec_a))
+    pred_cumsum = np.cumsum(lab_vec_a == lab_vec_b) / np.cumsum(lab_vec_b == lab_vec_b)
+    max_run_acc_idx = np.argmax(pred_cumsum)
+    max_run_acc = pred_cumsum[max_run_acc_idx]
+    print("max_run_acc({:6.4f}), at {:d}(%{:4.2f})".format(max_run_acc, max_run_acc_idx, max_run_acc_idx / n))
+
+    cnt_lab_uniq = len(np.unique(lab_vec))
+    cpa = uniq_class_cnt_perc_a / cnt_lab_uniq
+    cpb = uniq_class_cnt_perc_b / cnt_lab_uniq
+    print(cpa)
+
+    return pred_cumsum, tuple_score_sum[tuple_idx], cpa, cpb
+def calc_tup_sc_plot_01(sil_sort_pred_cumsum, sil_tup_sum_sorted, cpa_sil, cpb_sil, _s='sil_', figsize=(12, 8), dpi=600):
+    data_perc_vec = np.arange(0, len(sil_sort_pred_cumsum)) / len(sil_sort_pred_cumsum)
+    sil_tup_sum_sorted_n = funcH.map_0_1(sil_tup_sum_sorted)
+    plt.close('all')
+    fig, ax = plt.subplots(1, figsize=figsize, dpi=dpi)
+    ax.plot(data_perc_vec, sil_sort_pred_cumsum, lw=2, label=_s + 'sort', color='blue', ls='-', zorder=0)
+    ax.plot(data_perc_vec, sil_tup_sum_sorted_n, lw=2, label=_s + 'tup_sum_sorted', color='cyan', ls='-', zorder=0)
+    ax.plot(data_perc_vec, cpa_sil, lw=3, label=_s + 'cpa', color='purple', ls='-', zorder=0)
+    ax.plot(data_perc_vec, cpb_sil, lw=1, label=_s + 'cpb', color='orange', ls='-', zorder=0)
+    plt.legend(loc='lower left')
+    plt.show()
+def calc_tup_sc(sil_vals, reconstruction_loss, cor_tup, lab_vec, ep_id=None, figsize=(12, 8), dpi=600, experiments_folder=''):
+    n = len(sil_vals)
+    tuple_sihouette_score_sum = np.asarray([sil_vals[cor_tup[0][i]] + sil_vals[cor_tup[1][i]] for i in range(n)])
+    rec_los_0_1 = 1 - funcH.map_0_1(reconstruction_loss)
+    tuple_rec_score_sum = np.asarray([rec_los_0_1[cor_tup[0][i]] + rec_los_0_1[cor_tup[1][i]] for i in range(n)])
+    tuple_sr_score_sum = tuple_sihouette_score_sum + tuple_rec_score_sum
+
+    sil_sort_pred_cumsum, sil_tup_sum_sorted, cpa_sil, cpb_sil = calc_tuple_score_vals(tuple_sihouette_score_sum,
+                                                                                       lab_vec, cor_tup,
+                                                                                       sort_ascend=False,
+                                                                                       _def_str="sil_sort")
+    rec_sort_pred_cumsum, rec_tup_sum_sorted, cpa_rec, cpb_rec = calc_tuple_score_vals(tuple_rec_score_sum, lab_vec,
+                                                                                       cor_tup, sort_ascend=False,
+                                                                                       _def_str="rec_sort")
+    sr_sort_pred_cumsum, sr_tup_sum_sorted, cpa_sr, cpb_sr = calc_tuple_score_vals(tuple_sr_score_sum, lab_vec, cor_tup,
+                                                                                   sort_ascend=False,
+                                                                                   _def_str="sr_sort")
+
+    calc_tup_sc_plot_01(sil_sort_pred_cumsum, sil_tup_sum_sorted, cpa_sil, cpb_sil, _s='sil_')
+    calc_tup_sc_plot_01(rec_sort_pred_cumsum, rec_tup_sum_sorted, cpa_rec, cpb_rec, _s='rec_')
+    calc_tup_sc_plot_01(sr_sort_pred_cumsum, sr_tup_sum_sorted, cpa_sr, cpb_sr, _s='sr_')
+
+    plt.close('all')
+    fig, ax = plt.subplots(1, figsize=figsize, dpi=dpi)
+    data_perc_vec = np.arange(0, len(sil_sort_pred_cumsum)) / len(sil_sort_pred_cumsum)
+    ax.plot(data_perc_vec, sil_sort_pred_cumsum, lw=1, label='silhouette_sort', color='red', ls='-', zorder=0)
+    ax.plot(data_perc_vec, rec_sort_pred_cumsum, lw=1, label='reconstruction_sort', color='blue', ls='-', zorder=0)
+    ax.plot(data_perc_vec, sr_sort_pred_cumsum, lw=2, label='sil+rec_sort', color='purple', ls='-', zorder=0)
+    ax.set_ylim([0.75, 1.0])
+    ax.set_xlim([0.0, 1.0])
+    title_str = "minacc({:6.4f}),meanacc({:6.4f})".format(np.min(rec_sort_pred_cumsum), np.mean(rec_sort_pred_cumsum))
+    plt.title(title_str)
+    plt.legend(loc='lower left')
+    if ep_id is not None and experiments_folder!='':
+        min_acc = "{:6.4f}".format(np.min(rec_sort_pred_cumsum))
+        exp_fold = experiments_folder
+        saveFileName = os.path.join(exp_fold, "plots", "compare{:03d}_{}.jpeg".format(ep_id, min_acc))
+        plt.savefig(saveFileName)
+    plt.show()
