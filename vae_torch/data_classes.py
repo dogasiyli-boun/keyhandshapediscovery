@@ -6,6 +6,8 @@ from shutil import copyfile, rmtree
 import numpy as np
 import pandas as pd
 from helperFuncs import get_mapped_0_k_indices, createDirIfNotExist, getFileList, getFolderList
+import projRelatedHelperFuncs as prHF
+from torch import from_numpy as torch_from_numpy
 
 #fashion mnist
 from torchvision.datasets import MNIST as MNISTds
@@ -168,6 +170,53 @@ class khs_dataset_v2(Dataset):
         if self.transform:
             sample['image'] = self.transform(sample['image'])
 
+        return sample
+
+    def _len_(self):
+        return len(self.labels)
+
+class khs_dataset_hand_crafted(Dataset):
+    def __init__(self, datasetname):
+        dataIdent, pca_dim, nos = str(datasetname).split('_')
+        x, labels_all, labels_sui, labels_map = prHF.combine_pca_hospisign_data(dataIdent=dataIdent,
+                                                                                pca_dim=int(pca_dim),
+                                                                                nos=int(nos), verbose=2)
+        self.data = x
+        self.labels = np.asarray(labels_all, dtype=int).squeeze()
+        self.ids = np.asarray(np.arange(0, len(self.labels)), dtype=int)
+        self.label_names = np.asarray(labels_map["khsName"])
+        self.datasetname = datasetname
+
+        # self.sign_ids = base_dict["sign_ids"]
+        # self.signer_ids = base_dict["signer_ids"]
+        # self.hand_ids = base_dict["hand_ids"]
+
+        self.available_label_types = ["khs"]  # , "sign", "signer", "hand"
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        vector = torch_from_numpy(self.data[idx, :]).float()
+        label = self.labels[idx]
+        ids = self.ids[idx]
+        # khs_group_str = self.khs_groups[idx]
+        # khs_name_str = self.khs_names[idx]
+        # sign_id = self.sign_ids[idx]
+        # signer_ids = self.signer_ids[idx]
+        # hand_ids = self.hand_ids[idx]
+        #label_extra = {
+        #    "khs": self.labels_extra["khs_ids_map"]["mapped"][idx],
+        #    "sign": self.labels_extra["sign_ids_map"]["mapped"][idx],
+        #    "signer": self.labels_extra["signer_ids_map"]["mapped"][idx],
+        #    "hand": self.labels_extra["hand_ids_map"]["mapped"][idx],
+        #}
+        sample = {
+            'vector': vector, 'label': label,  'id': ids,
+        #    'khs_group_str': khs_group_str, 'khs_name_str': khs_name_str,
+        #    'sign_id': sign_id, "signer_id": signer_ids,  "hand_id": hand_ids,
+        #    "label_extra": label_extra
+        }
         return sample
 
     def _len_(self):

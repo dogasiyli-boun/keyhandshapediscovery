@@ -1625,10 +1625,13 @@ class Conv_AE_NestedNamespace(nn.Module):
             data = torch.stack(data_al, dim=0)
             data = data.to(self.device)
             reconstruction, _, _ = self.forward(data)
-            both = torch.cat((data.view(data_cn, self.input_channel_size, self.input_size, self.input_size)[:data_cn],
-                              reconstruction.view(data_cn, self.input_channel_size, self.input_size, self.input_size)[:data_cn]))
-            f_name = out_folder + "/output_" + sub_data_identifier + "{:03d}.png".format(epoch)
-            save_image(both.cpu(), f_name, nrow=data_cn)
+            try:
+                both = torch.cat((data.view(data_cn, self.input_channel_size, self.input_size, self.input_size)[:data_cn],
+                                  reconstruction.view(data_cn, self.input_channel_size, self.input_size, self.input_size)[:data_cn]))
+                f_name = out_folder + "/output_" + sub_data_identifier + "{:03d}.png".format(epoch)
+                save_image(both.cpu(), f_name, nrow=data_cn)
+            except:
+                pass
 
         n = len(X_vate)
         loss_dict = {"valid loss": running_loss/n}

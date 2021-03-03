@@ -1,12 +1,13 @@
 import torch
 
-from data_classes import khs_dataset_v2, fashion_mnist, cifar10, mnist
+from data_classes import khs_dataset_v2, fashion_mnist, cifar10, mnist, khs_dataset_hand_crafted
 import vae_torch_model as vtm
 
 import numpy as np
 import datetime
 import os
 import helperFuncs as funcH
+
 
 """
 import sys, importlib as impL
@@ -124,6 +125,14 @@ def get_data(CONF_PARAMS_):
             'tr_tr': X_tr_tr,
             'tr_te': X_tr_te,
             'te': X_te,
+        }
+    elif "_" in CONF_PARAMS_.DATA.IDENTIFIER:
+        _, input_size, _ = str(CONF_PARAMS_.DATA.IDENTIFIER).split('_')
+        _X = khs_dataset_hand_crafted(datasetname=CONF_PARAMS_.DATA.IDENTIFIER)
+        data_log_keys = ['tr_tr', 'tr_te']
+        X_dict = {
+            'tr_tr': _X,
+            'tr_te': _X,
         }
     else:
         os.error(22)
