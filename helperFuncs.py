@@ -1360,6 +1360,9 @@ def get_mapped_0_k_indices(x, verbose=0):
     }
     return x_map
 
+def intersection(list_a, list_b):
+    return [e for e in list_a if e in list_b]
+
 def getInds(vec, val):
     return np.array([i for i, e in enumerate(vec) if e == val])
 
