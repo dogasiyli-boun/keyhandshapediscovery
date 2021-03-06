@@ -16,7 +16,6 @@ import scipy.io
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
-from matplotlib.ticker import FormatStrFormatter
 from pandas import DataFrame as pd_df
 import pandas as pd
 
@@ -143,155 +142,19 @@ def load_dict_fr_file(file_name_cluster_obj, file_ident_str=""):
     print("loaded..")
     return cluster_obj
 
-def analyze_silhouette_values(sample_silhouette_values, cluster_labels, real_labels,
-                              centroid_info_pdf=None, label_names=None, conf_plot_save_to='', verbose=0,
-                              figsize=(24, 12), lw=[5, 4, 3], show_title=True, str_deg=45, str_size='x-large'):
-    _confMat, kluster2Classes, kr_pdf, _, _ = countPredictionsForConfusionMat(real_labels, cluster_labels, centroid_info_pdf=centroid_info_pdf)
-    sampleCount = np.sum(np.sum(_confMat))
-    acc_doga_base = 100 * np.sum(np.diag(_confMat)) / sampleCount
-    if verbose > 0:
-        print("accuracy for {:d} clusters = {:4.3f}".format(len(np.unique(cluster_labels)), acc_doga_base))
-
+def map_predictions(real_labels, cluster_labels, centroid_info_pdf=None):
+    _confMat, kluster2Classes, kr_pdf, _, _ = countPredictionsForConfusionMat(real_labels, cluster_labels,
+                                                                                    centroid_info_pdf=centroid_info_pdf)
     mapped_class_vec = np.array(kluster2Classes)[:, 1].squeeze()
     predictions_mapped, mappedKlustersSampleCnt = getMappedKlusters(cluster_labels, mapped_class_vec)
-    np.sum(predictions_mapped == real_labels) / len(predictions_mapped)
+    return predictions_mapped
 
-    plot_title_str = 'before silhouette - '
-    plot_confusion_matrix(_confMat.T, class_names=label_names, saveConfFigFileName=conf_plot_save_to, plot_title_str=plot_title_str, verbose=verbose)
-    try:
-        plot_confusion_matrix(_confMat.T, class_names=label_names, saveConfFigFileName=conf_plot_save_to.replace(".png","_confused.png"), plot_title_str=plot_title_str, show_only_confused=True, verbose=verbose)
-    except:
-        pass
-
-    sample_silhouette_values_sorted, idx = sortVec(sample_silhouette_values)
-    labels_sorted = real_labels[idx]
-    cluster_labels_sorted = cluster_labels[idx]
-    preds_sorted = predictions_mapped[idx]
-    all_ones = np.ones(preds_sorted.shape)
-    pred_cumsum = np.cumsum(preds_sorted == labels_sorted) / np.cumsum(all_ones)
-    save_acc_silhouette_fig_file_name = conf_plot_save_to.replace("_conf_", "_acc_silhouette_")
-    data_perc_vec = np.arange(0, len(pred_cumsum)) / len(pred_cumsum)
-
-    first_neg_sample_id = np.argmax(sample_silhouette_values_sorted < 0.00)-1
-    accuracy_at_last_pos = pred_cumsum[first_neg_sample_id]
-    if verbose > 1:
-        print("first_neg_sample_id(", str(first_neg_sample_id), ") accuracy_at_last_pos(", "{:4.2f}".format(100*accuracy_at_last_pos) ,")", end=',')
-    centroid_info_pdf_new = centroid_info_pdf.copy()
-    clusters_to_remove = []
-    samples_to_remove = []
-    for r in range(len(centroid_info_pdf_new)):
-        old_index = centroid_info_pdf_new["sampleID"].values[r]
-        if verbose > 2:
-            print("\n old centroid index(", old_index, ") changed to new index(", end='')
-        centroid_info_pdf_new["sampleID"].values[r] = np.argmax(idx == old_index)
-        if verbose > 2:
-            print(centroid_info_pdf_new["sampleID"].values[r], "),", end='')
-        if centroid_info_pdf_new["sampleID"].values[r] > first_neg_sample_id:
-            clusters_to_remove.append(r)
-            if verbose > 2:
-                print("this row will be dropped("+str(r)+")", end='')
-            klusterID_to_remove = centroid_info_pdf_new["klusterID"].values[r]
-            samples_to_remove_cur = getInds(cluster_labels_sorted,klusterID_to_remove)
-            samples_to_remove.append(np.asarray(samples_to_remove_cur).squeeze())
-
-    valid_sample_cnt = 0
-    if len(samples_to_remove) > 0:
-        samples_to_remove = np.concatenate(np.asarray(samples_to_remove)).squeeze()
-        valid_sample_cnt = np.sum(samples_to_remove<first_neg_sample_id)
-        labels_sorted = np.delete(labels_sorted, samples_to_remove)
-        cluster_labels_sorted = np.delete(cluster_labels_sorted, samples_to_remove)
-        centroid_info_pdf_new = centroid_info_pdf_new.drop(np.asarray(clusters_to_remove))
-        for r in range(len(centroid_info_pdf_new)):
-            new_index = centroid_info_pdf_new["sampleID"].values[r]
-            before_sample_cnt = np.sum(samples_to_remove < new_index)
-            newer_index = new_index-before_sample_cnt
-            if new_index != newer_index:
-                if verbose > 2:
-                    print("\nnew centroid index(", new_index, ") changed to newer index(", end='')
-                centroid_info_pdf_new["sampleID"].values[r] = newer_index
-                if verbose > 2:
-                    print(centroid_info_pdf_new["sampleID"].values[r], ")", end='')
-
-    confMat_new, _, _, _, _ = countPredictionsForConfusionMat(labels_sorted[:first_neg_sample_id-valid_sample_cnt], cluster_labels_sorted[:first_neg_sample_id-valid_sample_cnt],
-                                                                              centroid_info_pdf=centroid_info_pdf_new)
-    title_str = "first_neg_at " + str(first_neg_sample_id) + "(" + "{:4.2f}".format(100*first_neg_sample_id/sampleCount) + ")\n"
-    title_str += str(sampleCount - first_neg_sample_id) + " samples to remove\n"
-    title_str += 'old_accuracy<{:4.2f}>_new'.format(acc_doga_base)
-    plot_confusion_matrix(confMat_new.T, class_names=label_names, saveConfFigFileName=conf_plot_save_to.replace("_conf_", "_conf_post_silhouette_"), plot_title_str=title_str, verbose=verbose)
-    try:
-        plot_confusion_matrix(confMat_new.T, class_names=label_names, saveConfFigFileName=conf_plot_save_to.replace("_conf_", "_conf_post_silhouette_").replace(".png","_confused.png"), plot_title_str=title_str, show_only_confused=True, verbose=verbose)
-    except:
-        pass
-
-    plt.close('all')
-    fig, ax = plt.subplots(1, figsize=figsize, dpi=180)
-    ax.plot(data_perc_vec, pred_cumsum, lw=lw[0], label='accuracy', color='blue', ls='-', zorder=0)
-    ax.plot(data_perc_vec, sample_silhouette_values_sorted, lw=lw[1], label='silhouette_prec', color='green', ls='-', zorder=0)
-    ax.plot(np.asarray([0, 1]), np.asarray([accuracy_at_last_pos, accuracy_at_last_pos]), lw=lw[2], label='first_neg_sample', color='red', ls='-', zorder=0)
-    # Data for plotting
-
-    title_str += '_accuracy<{:4.2f}>'.format(100*accuracy_at_last_pos)
-    title_str = title_str if show_title else ''
-    ax.set(xlabel='data percentage', ylabel='accuracy', title=title_str)
-
-    ax.set_xlim([0, 1.0])
-    ax.set_xticks(np.arange(0, 1.00, 0.1), minor=False)
-    ax.xaxis.set_major_formatter(FormatStrFormatter('%0.1f'))
-
-    ax.set_ylim([-0.2, 1.0])
-    ax.set_yticks(np.arange(-0.2, 1.00, 0.1), minor=False)
-    ax.yaxis.set_major_formatter(FormatStrFormatter('%0.1f'))
-
-    ax.title.set_position([.5, 1.05])
-    ax.grid()
-    plt.legend(loc='lower left')
-
-    print("*-*-*")
-    data_p_last = 0.0
-    for i in range(9):
-        sil_v = 0.90 - i * 0.1  # silhouette value
-        data_id_at_i = np.argmax(sample_silhouette_values_sorted < sil_v) - 1
-        data_p = data_id_at_i/len(pred_cumsum)
-        if data_p-data_p_last < 0.01:
-            continue
-        data_p_last = data_p
-        ac_at = pred_cumsum[data_id_at_i]
-        acc_ident = "4.2f"
-        if ac_at == 1.00:
-            acc_ident = "3.0f"
-        if verbose > 0:
-            print(str("sil_v({:.1f}),at({:d}),acc({:"+acc_ident+"})").format(sil_v, data_id_at_i, 100*ac_at))
-        _x = data_id_at_i/len(pred_cumsum)
-        ax.text(x=_x, y=sample_silhouette_values_sorted[data_id_at_i],
-                s=str("s({:2.1f})dp({:2.1f})acc({:"+acc_ident+"})*").format(sil_v, data_p, 100*ac_at),
-                va='top', ha='right',
-                color="green", fontsize=str_size, rotation=str_deg)
-        ax.plot(np.asarray([_x, _x]), np.asarray([sample_silhouette_values_sorted[data_id_at_i], ac_at]), lw=3,
-                color='green', ls='-', zorder=0)
-    print("*-*-*")
-    for i in range(1, 9):
-        _dp = i * 0.1
-        data_id_at_i = int(len(pred_cumsum) * _dp)
-        sil_v = sample_silhouette_values_sorted[data_id_at_i]
-        ac_at = pred_cumsum[data_id_at_i]
-        if verbose > 0:
-            print("data_perc({:.1f}),at({:d}),acc({:6.4f})".format(_dp, data_id_at_i, 100*ac_at))
-        ax.text(x=data_id_at_i/len(pred_cumsum), y=ac_at,
-                s="dp({:2.1f})sv({:2.1f})acc({:6.4f})".format(_dp, sil_v, 100*ac_at),
-                va='bottom', ha='left',
-                color="blue", fontsize=str_size, rotation=str_deg)
-
-    fig.savefig(save_acc_silhouette_fig_file_name)
-
-    result_dict = {
-        "_confMat": _confMat,
-        "confMat_new": confMat_new,
-        "mapped_class_vec": mapped_class_vec,
-        "preds_sorted": preds_sorted,
-        "labels_sorted": labels_sorted,
-        "data_perc_vec": data_perc_vec,
-    }
-    return result_dict
+def cumsum_preds(labs, preds, idx):
+    pred_sorted = preds[idx]
+    labs_sorted = labs[idx]
+    all_ones = np.ones(preds.shape)
+    pred_cumsum = np.cumsum(pred_sorted == labs_sorted) / np.cumsum(all_ones)
+    return pred_cumsum
 
 def visualize_silhouette(X, n_clusters, sample_silhouette_values, silhouette_avg, cluster_labels, cluster_centers=None):
     # Create a subplot with 1 row and 2 columns
@@ -590,6 +453,7 @@ def removeConfMatUnnecessaryRows(_confMat):
 
 def getVariableByComputerName(variableName):
     curCompName = socket.gethostname()
+    retVal = None
     if variableName == 'base_dir':
         if curCompName == 'doga-MSISSD':
             base_dir = '/media/doga/SSD258/DataPath'  # for bogazici kasa
@@ -773,7 +637,7 @@ def getAccFromConf(labels, predictions):
             sess.run(optimizer)
         W = sess.run((W_softMax))
     W_discrete, kluster2Classes = discretizeW(W)
-    _confMat = inputConfMat @ W_discrete;
+    _confMat = inputConfMat @ W_discrete
     # print("Confusion Mat:\n",confMat)
     # for n in range(1,expectedClassCount+1):
     #   Kn = np.where(Kluster2Classes == n)[0]+1
@@ -1025,7 +889,7 @@ def calcConfusionStatistics(confMat, categoryNames=None, selectedCategories=None
     else:
         selectedCategories = np.arange(0, categoryCount)
 
-    categoryCount = len(selectedCategories);
+    categoryCount = len(selectedCategories)
 
     if verbose > 2:
         print('Columns of confusion mat is predictions, rows are ground truth.')

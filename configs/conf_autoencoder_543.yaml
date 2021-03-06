@@ -1,0 +1,67 @@
+# YAML
+DIR:
+  DATA: '/mnt/SSD_Data/DataPath' # '/mnt/SSD_Data/DataPath'
+  EXPERIMENT: '/mnt/SSD_Data/vaesae_experiments_cor'
+DATA:
+  IDENTIFIER: 'hgsk_256_11'
+  INPUT_INITIAL_RESIZE: None
+  LOAD_TR_AS_TEST: True
+EXPERIMENT:
+  ID: 541 # just to see also in the file
+  EXPLANATION: 'workstation - base Exp541 - batchsize 32-64, vae, 256, CORRESPONDANCE_PARAMS changed'
+  SAVE_MODEL_AT: 50
+  BATCH_SIZE: 64
+MODEL:
+  MODEL_CLASS: conv_ae
+  MODEL_NAME: conv_ae_simple
+  DATA_KEY: vector
+  INPUT_SIZE: 256
+  INPUT_CHANNEL_SIZE: 1
+  WEIGHT_DECAY: 0.0
+  LEARNING_RATE: 0.001
+  RECONSTRUCTION_ERROR_FUNCTION: 'BCE'
+  RECONSTRUCTION_ERROR_REDUCTION: 'mean'
+  SPARSE_PARAMS:
+    ERROR_FUNC: 'kl_divergence'
+    WEIGHT: 0.001
+    REDUCTION: 'sum'
+    APPLY_AFTER_EPOCH: 1
+    KL_DIV_PARAMS:
+      RHO_VALUE: 0.0001
+      RHO_ONE_MODE: False
+      RHO_ONE_MODE_PERC: None # '0.05/0.20'
+      APPLY_SIGMOID: True
+      APPLY_LOGSOFTMAX: True
+      APPLY_MEAN: False
+  CORRESPONDANCE_PARAMS:
+    TYPE: 'knear3' # 'shuffle' # 'centered' - self.CORRESPONDANCE_PARAMS["type"]
+    AT_EVERY: 5 #some integer - self.CORRESPONDANCE_PARAMS["at_every"]
+    APPLY_AFTER_EPOCH: 10 #some_integer - self.CORRESPONDANCE_PARAMS["apply_after_epoch"]
+  BOTTLENECK:
+    CHECK_ACTIVATION: True # bottleneck_act_apply
+    RUN_KMEANS: True # bottleneck_kmeans_apply
+    FIG_NAME_BASE: ''
+  OUTPUTS:
+    plot_variance: False
+    plot_histogram: False
+  LAYERS:
+    encoder:
+      l01_lin:    'type: Linear, in_features:256, out_features:500'
+      l01_act:    'type: ReLu'
+      l02_lin:    'type: Linear, in_features:500, out_features:500'
+      l02_act:    'type: ReLu'
+      l03_lin:    'type: Linear, in_features:500, out_features:2000'
+      l03_act:    'type: ReLu'
+      l04_lin:    'type: Linear, in_features:2000, out_features:512'
+      l04_act:    'type: ReLu'
+    vae:
+    decoder:
+      l04_lin_b:    'type: Linear, in_features:256, out_features:2000'
+      l04_act_b:    'type: ReLu'
+      l03_lin_b:    'type: Linear, in_features:2000, out_features:500'
+      l03_act_b:    'type: ReLu'
+      l02_lin_b:    'type: Linear, in_features:500, out_features:500'
+      l02_act_b:    'type: ReLu'
+      l01_lin_b:    'type: Linear, in_features:500, out_features:256'
+      l01_act_b:    'type: Sigmoid'
+
