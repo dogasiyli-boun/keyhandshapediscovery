@@ -23,6 +23,8 @@ import pandas as pd
 from datetime import datetime
 from collections import Counter
 
+from inspect import getframeinfo, stack
+
 import yaml
 from types import SimpleNamespace
 
@@ -91,6 +93,10 @@ class CustomConfigParser():
 
     def __getattr__(self, item):
         return self.parameters.__getattribute__(item)
+
+def print_debug_str(message):
+    caller = getframeinfo(stack()[1][0])
+    print("%s:%d - %s" % (caller.filename, caller.lineno, message))  # python3 syntax print
 
 # https://ozzmaker.com/add-colour-to-text-in-python/
 def color_to_intstr(col):

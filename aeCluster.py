@@ -9,6 +9,7 @@ import os
 import tensorflow as tf
 from keras.callbacks import CSVLogger, ModelCheckpoint
 from keras import backend as K
+from keras import __version__ as keras_version
 #%%
 import modelFuncs as funcM
 import helperFuncs as funcH
@@ -251,7 +252,9 @@ try:
     # Create a session with the above options specified.
     K.tensorflow_backend.set_session(tf.Session(config=config))
 except:
-    print("tensorflow version is not compatiple")
+    print("tensorflow = ", tf.version.VERSION)
+    print("Keras = ", keras_version)
+    funcH.print_debug_str("tensorflow version is not compatible with installed Keras")
 def main(argv):
     base_dir = funcH.getVariableByComputerName('base_dir')
     data_dir = funcH.getVariableByComputerName('data_dir')

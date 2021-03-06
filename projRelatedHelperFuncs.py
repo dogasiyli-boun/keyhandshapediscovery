@@ -8,7 +8,7 @@ from numpy.random import seed
 import tensorflow as tf
 import pandas as pd
 from pandas import DataFrame as pd_df
-import matplotlib as plt
+import matplotlib.pyplot as plt
 import time
 import datetime
 from sklearn.metrics import confusion_matrix
@@ -1716,5 +1716,8 @@ def calc_tup_sc(sil_vals, reconstruction_loss, cor_tup, lab_vec, ep_id=None, fig
         min_acc = "{:6.4f}".format(np.min(rec_sort_pred_cumsum))
         exp_fold = experiments_folder
         saveFileName = os.path.join(exp_fold, "plots", "compare{:03d}_{}.jpeg".format(ep_id, min_acc))
+        print("*-*-*Saving({:})".format(saveFileName))
         plt.savefig(saveFileName)
+    else:
+        print("*-*-*ep_id({:}, experiments_folder({:})".format(ep_id, experiments_folder))
     plt.show()
