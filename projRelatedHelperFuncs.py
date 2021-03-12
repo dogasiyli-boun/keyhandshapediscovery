@@ -1949,3 +1949,121 @@ def calc_tup_sc(sil_vals, reconstruction_loss, cor_tup, lab_vec, ep_id=None, fig
     else:
         print("*-*-*ep_id({:}, experiments_folder({:})".format(ep_id, experiments_folder))
     plt.show()
+
+#20210311
+def get_epoch(ep_str, sil_var):
+    print(sil_var[ep_str].keys())
+    silhouette_values = sil_var[ep_str]["silhouette_values"]
+    silhouette_avg = sil_var[ep_str]["silhouette_avg"]
+    reconstruction_loss = sil_var[ep_str]["reconstruction_loss"]
+    correspondance_weights = sil_var[ep_str]["correspondance_weights"]
+    sil_var[ep_str]["predictions"] = np.asarray(sil_var[ep_str]["predictions"],dtype=int)
+    labels = sil_var[ep_str]["labels"]
+    correspondance_tuple = sil_var[ep_str]["correspondance_tuple"]
+    kluster_centroids = sil_var[ep_str]["kluster_centroids"]
+    return sil_var[ep_str]
+
+def get_mapped_inds_list(vec_0_1, slice_cnt, verbose=1):
+    inds_list = {}
+    area_blocks = np.linspace(0.0, 1.0, slice_cnt+1)
+    for i in range(slice_cnt):
+        if verbose>0:
+            print("bigger equal({:3.2f}), less({:3.2f}), len({})".format(area_blocks[i], area_blocks[i+1], len(block_inds)))
+        block_inds = np.array([j for j, e in enumerate(vec_0_1) if (e>=area_blocks[i] and e<area_blocks[i+1])])
+        inds_list["{:02d}".format(i)] = {"block_inds":block_inds, "from":area_blocks[i], "to":area_blocks[i+1]}
+    return inds_list, area_blocks
+
+def get_mapped_inds_list_by_count(vec_0_1, slice_cnt, verbose=1):
+    inds_list = {}
+    vec_0_1_idx = np.argsort(vec_0_1)
+    n = len(vec_0_1_idx)
+    if verbose>0:
+        print(vec_0_1_idx)
+        print(vec_0_1[vec_0_1_idx])
+        print(n)
+    area_blocks = np.linspace(0.0, 1.0, slice_cnt+1)
+    fr = 0
+    for i in range(slice_cnt):
+        to = round(area_blocks[i+1]*n)
+        block_inds = np.array(vec_0_1_idx[fr:to])
+        if verbose > 0:
+            print(i, fr, to+1, '--', block_inds, len(block_inds))
+        inds_list["{:02d}".format(i)] = {"block_inds":block_inds, "from":area_blocks[i], "to":area_blocks[i+1]}
+        fr = to+1
+    return inds_list, area_blocks
+
+def get_tf_counts_v01(inds_list_a, inds_list_b, tf_vec):
+    cnt_mat_true = np.zeros((len(inds_list_a), len(inds_list_b)), dtype=int)
+    cnt_mat_fals = np.zeros((len(inds_list_a), len(inds_list_b)), dtype=int)
+    cnt_mat_prc  = np.zeros((len(inds_list_a), len(inds_list_b)), dtype=float)
+    _a=0
+    for _ka in inds_list_a.keys():
+        block_inds_a = inds_list_a[_ka]["block_inds"]
+        _b=0
+        for _kb in inds_list_b.keys():
+            block_inds_b = inds_list_b[_kb]["block_inds"]
+            block_inds = funcH.intersection(block_inds_a, block_inds_b)
+            cnt_mat_true[_a, _b] = 0 if len(block_inds)==0 else np.sum(tf_vec[block_inds]==1)
+            cnt_mat_fals[_a, _b] = 0 if len(block_inds)==0 else np.sum(tf_vec[block_inds]==0)
+            if cnt_mat_fals[_a, _b] > 0:
+                cnt_mat_prc[_a, _b] = cnt_mat_true[_a, _b]/cnt_mat_fals[_a, _b]
+            elif cnt_mat_true[_a, _b] > 0:
+                cnt_mat_prc[_a, _b] = float('NaN')
+            else:
+                cnt_mat_prc[_a, _b] = 0.0
+            _b += 1
+        _a += 1
+    #cnt_mat_prc[np.isnan(cnt_mat_prc)] = np.nanmean(cnt_mat_prc)
+    return cnt_mat_true, cnt_mat_fals, cnt_mat_prc
+
+def get_tf_counts_v02(inds_list, tf_vec, verbose=1):
+    v_true = []
+    v_false= []
+    for _k in inds_list.keys():
+        _cl = inds_list[_k]
+        block_inds = _cl["block_inds"]
+        _fr = _cl["from"]
+        _to = _cl["to"]
+        t_cnt = 0 if len(block_inds)==0 else np.sum(tf_vec[block_inds] == 1)
+        f_cnt = 0 if len(block_inds)==0 else np.sum(tf_vec[block_inds] == 0)
+        #print("*:", len(block_inds), _fr, _to, "t(",t_cnt, "), f(", f_cnt, ")")
+        v_true.append(t_cnt)
+        v_false.append(f_cnt)
+    if verbose > 0:
+        print("v_true:", v_true)
+        print("v_false:", v_false)
+    return v_true, v_false
+
+def plot_single_stacked_bar(v_true, v_false, area_blocks, x_label_str='', width = 0.40):
+    #block diagram of how many correct and how many incorrect samples fall in blocks of rec error
+    plt.close('all')
+    labels = ["{:3.2f}".format(v) for v in area_blocks[1:]]
+    fig, ax = plt.subplots()
+    ax.bar(labels, v_true, width, label='Tr')
+    ax.bar(labels, v_false, width, bottom = v_true, label='Fa')
+    ax.set_xlabel(x_label_str + ' normalized')
+    ax.set_ylabel('number of samples')
+    ax.legend()
+    plt.xticks(rotation=45)
+    plt.show()
+
+def plot_rec_silh_intersect_vals(conf_mat, title_str='', figsize=(24,24), cmap = plt.cm.Blues, _val_char='d', max_allowed=None):
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.grid(False)
+    if max_allowed is not None:
+        conf_mat[conf_mat>max_allowed] = max_allowed
+    matshow = ax.matshow(conf_mat, cmap=cmap)
+    fig.colorbar(matshow)
+    for i in range(conf_mat.shape[0]):
+        for j in range(conf_mat.shape[1]):
+            cell_text = ""
+            if conf_mat[i, j] > 0:
+                cell_text += format(conf_mat[i, j], _val_char)
+            text_color = "white" if conf_mat[i, j] > np.max(conf_mat) / 2 else "black"
+            ax.text(x=j, y=i,
+                    s=cell_text,
+                    va='center', ha='center',
+                    color=text_color, fontsize=20)
+    ax.set_xlabel('silhouette')
+    ax.set_ylabel('reconstruction')
+    plt.title(title_str)
